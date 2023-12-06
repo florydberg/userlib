@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+                <RegisterDescription
+                  ModelName="CallbackTestSuite_TestCallback09.xml"
+                  VendorName="GenApiTest"
+                  ToolTip="XML file extracted from test code"
+                  StandardNameSpace="GEV"
+                  SchemaMajorVersion="1"
+                  SchemaMinorVersion="1"
+                  SchemaSubMinorVersion="0"
+                  MajorVersion="3"
+                  MinorVersion="0"
+                  SubMinorVersion="0"
+                  ProductGuid="2D932CC6-EB68-40bd-B6CC-F03B55B7D653"
+                  VersionGuid="02A8C268-BEE8-463b-A6C0-53ED8256E3D8"
+                  xmlns="http://www.genicam.org/GenApi/Version_1_1"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+                         <StructReg Comment="Fancy Feature" >              <pIsAvailable>B</pIsAvailable>          <pAddress>B</pAddress>          <Length>4</Length>          <AccessMode>RW</AccessMode>          <pPort>MyPort</pPort>          <Endianess>LittleEndian</Endianess>            <!--  bool meaning Feature Available -->          <StructEntry Name="A">            <AccessMode>RO</AccessMode>            <Bit>0</Bit>          </StructEntry>            <!--  Value 1 -->          <StructEntry Name="C" >            <pIsAvailable>A</pIsAvailable>            <LSB>8</LSB>            <MSB>15</MSB>          </StructEntry>            <!--  Value 2 -->          <StructEntry Name="D" >            <pIsAvailable>A</pIsAvailable>            <LSB>16</LSB>            <MSB>23</MSB>          </StructEntry>            </StructReg>            <!--  Base-Address of Fancy -->        <SmartFeature Name="B">          <FeatureID>A014EDBC-6768-4bcb-B039-9070961F2843</FeatureID>          <Address>8</Address>          <pPort>MyPort</pPort>          <pIsAvailable>F</pIsAvailable>        </SmartFeature>            <!--  DCAM-like lock -->        <AdvFeatureLock Name="F">          <Address>0</Address>          <Length>8</Length>          <AccessMode>RW</AccessMode>          <pPort>MyPort</pPort>          <FeatureID>0x0030533B73C3</FeatureID>          <Timeout>0</Timeout>        </AdvFeatureLock>            <Port Name="MyPort" />    </RegisterDescription>

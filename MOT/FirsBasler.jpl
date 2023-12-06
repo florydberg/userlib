@@ -1,0 +1,16 @@
+# https://docs.baslerweb.com/triggered-image-acquisition#example-4-triggering-a-series-of-images
+
+
+import pylablib as pll
+pll.par["devices/dlls/basler_pylon"] = "path/to/dlls"
+from pylablib.devices import Basler
+
+
+
+print(Basler.list_cameras()) #Serial number:24799497
+
+# cam = Basler.BaslerPylonCamera()  
+# cam.close()
+
+# cam = Basler.BaslerPylonCamera(friendly_name="Emulation (0815-0000)")
+# cam.close()

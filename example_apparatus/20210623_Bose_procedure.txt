@@ -1,0 +1,83 @@
+INITIALIZE { SUB @0.000 length i 66 repetition i 1 sourcefile n d:\Ytterbium\Yb-control\routines\InitializeYbExperiment.sub  }
+ShutYbBeam { B1D3 @500.001 status i 1  }
+ShutYbBeam { B1D3 @0.001 status i 1  }
+ShutImagingMOT_Cell { B1D6 @0.001 status i 0 invert i 1  }
+ShutImagingGlass_Cell { B3D10 @0.001 status i 0 invert i 1  }
+ShutZeeman { B1D1 @0.001 status i 0 invert i 1  }
+Shut_Bragg { B4D16 @0.001 status i 0 invert i 1  }
+ShutMOT { B1D7 @0.001 status i 1  }
+ShutMOT_OP { B1D15 @0.001 status i 0  }
+Imaging_freq { B1AAC1 @0.001 polarity i 1 value f 365  }
+TTLMOT_OP { B3D8 @0.001 status i 1  }
+CompCoilZS { B1A1C2 @0.001 polarity i 0 value f 0.0  }
+CompCoilMOT_A { B1A7C1 @0.001 polarity i 1 value f 0.0  }
+CompCoilMOT_B { B1A7C2 @0.001 polarity i 1 value f 0.0  }
+CompCoilMOT_C { B1A8C1 @0.001 polarity i 1 value f 0.0  }
+ShutMOT_OP { B1D15 @0.001 status i 0  }
+CompCoilZS { B1A1C2 @0.001 polarity i 0 value f 0.0  }
+CoilZeeman { B1A4C2 @0.001 polarity i 0 value f 0.0  }
+CoilMOT { B1A4C1 @0.001 polarity i 1 value f 0.0  }
+CarrierMOT { B1A2C1 @0.001 polarity i 1 value f Carrier  }
+ZeemanLaserVolt { B1AAC2 @0.001 polarity i 1 value f 0.0  }
+AOMImaging { B1D2 @0.001 status i 1  }
+AOMImaging2 { B1D8 @0.001 status i 1  }
+
+
+
+MOT { SUB @0.000 length i 91 repetition i 1 sourcefile n d:\Ytterbium\Yb-control\routines\MOT.sub  }
+ShutYbBeam { B1D3 @1000. status i 1  }
+Shut_OP1 { B3D9 @0.001 status i 0 invert i 1  }
+ShutZeeman { B1D1 @0.001 status i 1 invert i 1  }
+ZeemanLaserVolt { B1AAC2 @10.001 polarity i 1 value f ZS_pow  }
+SchmittControl { B1A3C1 @0.001 polarity i 1 value f -4  }
+CompCoilMOT_A { B1A7C1 @0.001 polarity i 1 value f 0.0  }
+CompCoilMOT_B { B1A7C2 @0.001 polarity i 1 value f 0.0  }
+CompCoilMOT_C { B1A8C1 @0.001 polarity i 1 value f 0.0  }
+CompCoilZS { B1A1C2 @0.001 polarity i 0 value f 0.65  }
+TTLMOTmod { B3D16 @0.001 status i 1 invert i 1  }
+CoilZeeman { B1A4C2 @0.001 polarity i 0 value f ZS_Coil  }
+CoilMOT { B1A4C1 @0.001 polarity i 1 value f Imot  }
+CarrierMOT { B1A2C1 @0.001 polarity i 1 value f Carrier  }
+VCA3MOT_laser { B1A1C1 @0.001 polarity i 0 value f MOT_pow  }
+ShutYbBeam { B1D3 @t_mot status i 0  }
+ZeemanLaserVolt { B1AAC2 @200.001 polarity i 1 value f -6.00  }
+ShutZeeman { B1D1 @0.001 status i 0 invert i 1  }
+VCA3MOT_laser { B1A1C1 @0.001 polarity i 0 value f Int_idle  }
+ShutMOT { B1D7 @250.001 status i 0  }
+CoilMOT { B1A4C1 @0.001 polarity i 1 value f 0.0  }
+VCA3MOT_laser { B1A1C1 @0.001 polarity i 0 value f 0  }
+CoilMOT { B1A4C1 @0.001 polarity i 1 value f 0.0  }
+CompCoilMOT_A { B1A7C1 @0.001 polarity i 1 value f 0.0  }
+CompCoilMOT_B { B1A7C2 @0.001 polarity i 1 value f 0.0  }
+CompCoilMOT_C { B1A8C1 @0.001 polarity i 1 value f 0.0  }
+CompCoilZS { B1A1C2 @0.001 polarity i 0 value f 0.0  }
+CoilZeeman { B1A4C2 @0.001 polarity i 0 value f 0.0  }
+
+
+
+ImagingMOT { SUB @0.001 length i 25 repetition i 1 sourcefile n d:\Ytterbium\Yb-control\routines\ImagingMOT.sub  }
+ShutImagingGlass_Cell { B3D10 @-50.001 status i 1 invert i 1  }
+ShutImagingMOT_Cell { B1D6 @0.001 status i 1 invert i 1  }
+AOMImaging { B1D2 @0.001 status i 0  }
+AOMImaging2 { B1D8 @0.001 status i 0  }
+WAIT { WAIT @50.00  }
+TrigCCD { B3D1 @tof status i 1  }
+AOMImaging { B1D2 @0.010 status i 1  }
+AOMImaging2 { B1D8 @0.001 status i 1  }
+AOMImaging { B1D2 @time_blue status i 0  }
+AOMImaging2 { B1D8 @0.001 status i 0  }
+Dipolone_TTL { B3D13 @0.001 status i 0 invert i 1  }
+TrigCCD { B3D1 @0.001 status i 0  }
+TrigCCD { B3D1 @50 status i 1  }
+AOMImaging { B1D2 @0.010 status i 1  }
+AOMImaging2 { B1D8 @0.001 status i 1  }
+AOMImaging { B1D2 @time_blue status i 0  }
+AOMImaging2 { B1D8 @0.001 status i 0  }
+TrigCCD { B3D1 @0.001 status i 0  }
+TrigCCD { B3D1 @500 status i 1  }
+TrigCCD { B3D1 @0.001 status i 1  }
+AOMImaging { B1D2 @0.010 status i 0  }
+AOMImaging2 { B1D8 @0.001 status i 0  }
+TrigCCD { B3D1 @time_blue status i 0  }
+ShutImagingGlass_Cell { B3D10 @0.001 status i 0 invert i 1  }
+ShutImagingMOT_Cell { B1D6 @0.001 status i 0 invert i 1  }

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+                <RegisterDescription
+                  ModelName="SwissKnifeTestSuite_TestVariableExtensions.xml"
+                  VendorName="GenApiTest"
+                  ToolTip="XML file extracted from test code"
+                  StandardNameSpace="GEV"
+                  SchemaMajorVersion="1"
+                  SchemaMinorVersion="1"
+                  SchemaSubMinorVersion="0"
+                  MajorVersion="3"
+                  MinorVersion="0"
+                  SubMinorVersion="0"
+                  ProductGuid="2D932CC6-EB68-40bd-B6CC-F03B55B7D653"
+                  VersionGuid="02A8C268-BEE8-463b-A6C0-53ED8256E3D8"
+                  xmlns="http://www.genicam.org/GenApi/Version_1_1"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+                         <SwissKnife Name="Knife">            <pVariable Name="BLADE.Min">Blade</pVariable>            <Formula>10*BLADE.Min</Formula>        </SwissKnife>            <SwissKnife Name="BladeMin">            <pVariable Name="BLADE.Min">Blade</pVariable>            <Formula>BLADE.Min</Formula>        </SwissKnife>            <SwissKnife Name="BladeMax">            <pVariable Name="BLADE.Max">Blade</pVariable>            <Formula>BLADE.Max</Formula>        </SwissKnife>            <SwissKnife Name="BladeInc">            <pVariable Name="BLADE.Inc">Blade</pVariable>            <Formula>BLADE.Inc</Formula>        </SwissKnife>            <SwissKnife Name="BladeVal">            <pVariable Name="BLADE.Value">Blade</pVariable>            <Formula>BLADE.Value</Formula>        </SwissKnife>            <SwissKnife Name="BladeAccessMode">            <pVariable Name="BLADE.AccessMode">Blade</pVariable>            <Formula>BLADE.AccessMode</Formula>        </SwissKnife>            <SwissKnife Name="BladeVisibility">            <pVariable Name="BLADE.Visibility">Blade</pVariable>            <Formula>BLADE.Visibility</Formula>        </SwissKnife>            <SwissKnife Name="BladeCachingMode">            <pVariable Name="BLADE.CachingMode">Blade</pVariable>            <Formula>BLADE.CachingMode</Formula>        </SwissKnife>            <Float Name="Blade">            <Value>0.2</Value>            <Min>-1.0</Min>            <Max>1.0</Max>            <Inc>0.1</Inc>        </Float>            <SwissKnife Name="Dagger">            <pVariable Name="OPTSEL.Entry.Option1">OptionSelector</pVariable>            <pVariable Name="OPTSEL.Entry.Option2">OptionSelector</pVariable>            <Formula>OPTSEL.Entry.Option1 + OPTSEL.Entry.Option2</Formula>        </SwissKnife>            <Enumeration Name="OptionSelector">           <EnumEntry Name="Option1">              <Value>10</Value>              <NumericValue>1.5</NumericValue>           </EnumEntry>           <EnumEntry Name="Option2">              <Value>20</Value>           </EnumEntry>           <Value>10</Value>        </Enumeration>            <SwissKnife Name="DaggerNoEnum">            <pVariable Name="Blade.Entry.Foo">Blade</pVariable>            <Formula>Blade.Entry.Foo</Formula>        </SwissKnife>            <SwissKnife Name="DaggerNoEnumEntry">            <pVariable Name="OptionSelector.Entry.Foo">OptionSelector</pVariable>            <Formula>OptionSelector.Entry.Foo</Formula>        </SwissKnife>    </RegisterDescription>
