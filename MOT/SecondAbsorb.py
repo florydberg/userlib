@@ -24,7 +24,7 @@ if True: # Time Constants
     min=60*sec
 
 # PARAMETERS
-Beam_ImgDuration= 2*usec
+Beam_ImgDuration= 60*usec
 ImgDuration=50*usec
 Basler_cameradelay=150*msec
 twoD_delay=10*ms
@@ -72,7 +72,7 @@ if False:
     camera.TriggerMode.SetValue("Off")
 
 
-for i in range(0,9):
+for i in range(0,10): #range(0,10) means 10 loops
     
     #---------Turn components on----------------
     COILS_switch.go_high(t) # Coils
@@ -123,11 +123,8 @@ for i in range(0,9):
     t+=1*Basler_cameradelay # do not remove this otherwise you'll see MOT Light
 
     t+=dt
+t+=0.5*sec 
 
-
-
-
-t+=100*msec 
 
 # dueD_MOT_gate.go_high(t)#2D
 # treD_MOT_gate.go_high(t)#3D
