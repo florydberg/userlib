@@ -6,7 +6,7 @@ a=0 #AWG
 f=1 #FPGA
 se=0 #secondary FPGA
 mb=0 #MogLabsBlue
-mr=0 #MogLabsRed
+mr=1 #MogLabsRed
 ca=0 #Camera Andor
 cb=1 #Camera Basler
 ct=0 #Camera Thorlabs
@@ -63,8 +63,7 @@ if f:
     else:
         secondary = None
 
-
-if f: #output
+if f: #outputs
     #to control DigiOut in script:
     # name.go_high(t) or name.ho-low(t)
 
@@ -158,7 +157,7 @@ if mr:
     if p:
         MOGLabs_QRF(name='QRF_Red', parent_device=pb0_trg, addr='192.168.1.103', port=7802)
     elif f:
-        MOGLabs_QRF(name='QRF_Red', parent_device=QRF_trigger_1, addr='192.168.1.103', port=7802)
+        MOGLabs_QRF(name='QRF_Red', parent_device=QRF_trigger_2, addr='192.168.1.103', port=7802)
 
     QRF_DDS(name='BlueSpectr', parent_device=QRF_Red, connection='channel 0', 
             table_mode=False,                         digital_gate={'device':DO0, 'connection': 10})
@@ -168,8 +167,8 @@ if mr:
             table_mode=True, trigger_each_step=True, digital_gate={'device':DO0, 'connection': 12})
     QRF_DDS(name='Sisyphus', parent_device=QRF_Red, connection='channel 3', 
             table_mode=True, trigger_each_step=True, digital_gate={'device':DO0, 'connection': 13})
-    
- #to control moglabs in script in NSB (normale triggerable mode):
+
+#to control moglabs in script in NSB (normale triggerable mode):
     # dev.cmd('ARG', channel, new_valu)
     # where ARG can be FREQ, POW, PHASE
 
