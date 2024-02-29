@@ -79,7 +79,7 @@ for i in range(0,1):
 
     ImagingBeam_gate.go_high(t)
     ImagingBeam_gate.go_low(t+5*usec)
-    t=take_image(time=t+dt)#<----------------Imaging(Absorbition)
+    t=take_image(time=t+dt)
     
     i+=1
 

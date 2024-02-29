@@ -4,6 +4,7 @@ import_or_reload('labscriptlib.Sr.SUB_ROUTINES')
 from labscriptlib.Sr.SUB_ROUTINES import *
 
 ToF=TOF*usec
+beam_duration=ImgBeam_duration*usec
 
 start()
 
@@ -13,6 +14,6 @@ for i in range(0,n_loop):
 
     t+=ToF # wait for time of flight
 
-    t+=take_absorbImaging(t)
+    t+=take_absorbImaging(t, beam_duration)
 
 stop(t)

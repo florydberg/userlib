@@ -6,10 +6,9 @@ a=0 #AWG
 f=1 #FPGA
 se=0 #secondary FPGA
 mb=0 #MogLabsBlue
-mr=1 #MogLabsRed
-ca=0 #Camera Andor
+mr=0 #MogLabsRed
+ca=1 #Camera Andor
 cb=1 #Camera Basler
-ct=0 #Camera Thorlabs
 
 ############################################################################################################### PULSE
 if p:
@@ -51,20 +50,8 @@ if f:
                        trigger_device=parent,
                        worker_args={'inputs': {'start trigger'  : ('input 0', 'low level')},
                                     'outputs':{'output 0':('sync out','low level')}})
-
-    if se: # use secondary board
-        if p:
-            parent=pb0_trg
-        else:
-            parent=primary
-        secondary = FPGA_board(name='test_board', ip_address='192.168.1.11', ip_port=DEFAULT_PORT, bus_rate=1.0, num_racks=1, 
-                           trigger_device=parent,
-                           worker_args={'inputs': {'start trigger'  : ('input 0', 'low level')}}) 
-    else:
-        secondary = None
-
-if f: #outputs
-    #to control DigiOut in script:
+    
+        #to control DigiOut in script:
     # name.go_high(t) or name.ho-low(t)
 
     ########################                         DigiOut                               ########################
@@ -78,10 +65,10 @@ if f: #outputs
 
     DigitalOut(name='COILS_switch', parent_device=DO0, connection=str(5))   
     DigitalOut(name='Tweezer_gate', parent_device=DO0, connection=str(6))
-    # DigitalOut(name='CameraAndor_trg', parent_device=DO0, connection=str(7))
+    if not ca:
+        DigitalOut(name='Andor_Camera_trigger', parent_device=DO0, connection=str(7))    
     if not cb:
         DigitalOut(name='Basler_Camera_trigger', parent_device=DO0, connection=str(8))  
-
     if not mr:
         DigitalOut(name='QRFRed_trigger', parent_device=DO0, connection=str(9))
         DigitalOut(name='BlueSpectr_gate', parent_device=DO0, connection=str(10))
@@ -91,15 +78,6 @@ if f: #outputs
     DigitalOut(name='digimon15', parent_device=DO0, connection=14)
     Cam_trg=DigitalOut(name='CameraZelux_trg', parent_device=DO0, connection=15)
 
-    if False:
-        DigitalChannels(name='DO1', parent_device=primary, connection='0x05', rack=0, max_channels=16)
-        for i in range(16):
-            DigitalOut(name='digimon' + str(i+17), parent_device=DO1, connection=str(i))
-
-    if secondary: 
-        DigitalChannels(name='DO2'  , parent_device=test_board, connection='0x04', rack=0, max_channels = 16)
-        for i in range(16):
-            DigitalOut(name='pokemon'+str(i+1), parent_device=DO2, connection=str(i))
 
     ########################                         Floating                               ########################
     if False:
@@ -112,7 +90,25 @@ if f: #outputs
     AnalogOut     (name='COILScomp_current1', parent_device=AO0, connection='0x09')
     AnalogOut     (name='COILScomp_current2', parent_device=AO0, connection='0x0A')
     AnalogOut     (name='COILScomp_current3', parent_device=AO0, connection='0x0B')
-    if secondary:
+
+    if False:
+        DigitalChannels(name='DO1', parent_device=primary, connection='0x05', rack=0, max_channels=16)
+        for i in range(16):
+            DigitalOut(name='digimon' + str(i+17), parent_device=DO1, connection=str(i))
+
+    if se: # use secondary board
+        if p:
+            parent=pb0_trg
+        else:
+            parent=primary
+        secondary = FPGA_board(name='test_board', ip_address='192.168.1.11', ip_port=DEFAULT_PORT, bus_rate=1.0, num_racks=1, 
+                           trigger_device=parent,
+                           worker_args={'inputs': {'start trigger'  : ('input 0', 'low level')}}) 
+
+        DigitalChannels(name='DO2'  , parent_device=test_board, connection='0x04', rack=0, max_channels = 16)
+        for i in range(16):
+            DigitalOut(name='pokemon'+str(i+1), parent_device=DO2, connection=str(i))
+
         AnalogChannels(name='AO2'   , parent_device=test_board, rack=0, max_channels = 4)
         AnalogOut     (name='Goku', parent_device=AO2, connection='0x08')
         AnalogOut     (name='Vegeta', parent_device=AO2, connection='0x09')
@@ -130,8 +126,10 @@ if f: #outputs
         AnalogOut     (name='Gigen', parent_device=AO4, connection='0x21')
         AnalogOut     (name='Gemon', parent_device=AO4, connection='0x22')
         AnalogOut     (name='Zenigata', parent_device=AO4, connection='0x23')
-############################################################################################################### MogLabs-QRFs
 
+    else:
+        secondary = None
+############################################################################################################### MogLabs-QRFs
 if mb:
     from user_devices.MOGLabs_QRF import MOGLabs_QRF, QRF_DDS
     QRF_trigger_1=DigitalOut(name='QRFBlue_trigger', parent_device=DO0, connection=0)
@@ -168,16 +166,82 @@ if mr:
     QRF_DDS(name='Sisyphus', parent_device=QRF_Red, connection='channel 3', 
             table_mode=True, trigger_each_step=True, digital_gate={'device':DO0, 'connection': 13})
 
-#to control moglabs in script in NSB (normale triggerable mode):
+ #to control moglabs in script in NSB (normale triggerable mode):
     # dev.cmd('ARG', channel, new_valu)
     # where ARG can be FREQ, POW, PHASE
-
 ############################################################################################################### CAMERAS
 if ca:
     from labscript_devices.AndorSolis.labscript_devices import AndorSolis
 
-    Andor_Camera = AndorSolis('Andor_Camera',parent_device=DO0, parentless=True, connection=7,
-        serial_number=str(10430))
+    Andor_Camera = AndorSolis('Andor_Camera',
+            parent_device=DO0,
+            serial_number=10430, 
+            connection=7,
+            exception_on_failed_shot=False,
+            trigger_duration=0.050,
+            orientation='Andor_Camera',
+            camera_attributes = {
+                'acquisition': 'kinetic_series',
+                'emccd': False,
+                'emccd_gain': 50,
+                'preamp': False,
+                'preamp_gain': 1.0,
+                'exposure_time': 0.2, #s
+                'shutter_output': 'low',
+                'int_shutter_mode': 'auto',
+                'ext_shutter_mode': 'auto',
+                'shutter_t_open': 100,
+                'shutter_t_close': 100,
+                'readout': 'full_image',
+                'crop': False,
+                'trigger': 'internal',
+                'trigger_edge': 'rising',
+                'number_accumulations': 1,
+                'accumulation_period': 0.003,
+                'number_kinetics': 1,
+                'kinetics_period': 0.03,
+                'xbin': 1,
+                'ybin': 1,
+                'center_row': None,
+                'height': 1024,
+                'width': 1024,
+                'left_start': 1,
+                'bottom_start': 1,
+                'v_offset': 0,
+                'acquisition_timeout': 5000.0,
+                'cooldown': True,
+                'water_cooling': False,
+                'temperature': -65},
+            # manual_mode_camera_attributes = {
+            #     'acquisition': 'kinetic_series',
+            #     'emccd': False,
+            #     'emccd_gain': 0,
+            #     'preamp': False,
+            #     'preamp_gain': 1.0,
+            #     'exposure_time': 0.3,
+            #     'shutter_output': 'low',
+            #     'int_shutter_mode': 'perm_open',
+            #     'ext_shutter_mode': 'auto',
+            #     'shutter_t_open': 100,
+            #     'shutter_t_close': 100,
+            #     'readout': 'full_image',
+            #     'crop': False,
+            #     'trigger': 'internal',
+            #     'trigger_edge': 'rising',
+            #     'number_accumulations': 1,
+            #     'accumulation_period': 0.003,
+            #     'number_kinetics': 1,
+            #     'kinetics_period': 0.030,
+            #     'xbin': 1,
+            #     'ybin': 1,
+            #     'center_row': None,
+            #     'height': 1024,
+            #     'width': 1024,
+            #     'left_start': 1,
+            #     'bottom_start': 1,
+            #     'v_offset': 0,
+            #     'acquisition_timeout': 5000.0}
+            )
 
 if cb:
     from labscript_devices.PylonCamera.labscript_devices import PylonCamera
@@ -231,9 +295,7 @@ if cb:
             },
 
             )   
-    
-if ct:
-    from user_devices.CamControl.labscript_devices import ThorCam
+  
 #################################################################################
  # ATTENTION: start() and stop(1) cannot be missing! time for stop must be >0. #
 #################################################################################

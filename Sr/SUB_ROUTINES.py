@@ -15,17 +15,7 @@ if True: # Time Constants
     s=sec
     min=60*sec
 
-# def take_image_andor(time):
-#     tt=time
-#     ANDOR.constant(tt, 5)
-#     tt+=ImgDuration
-#     ANDOR.constant(tt, 0)
-#     tt+=dt
-#     return tt 
-
 if True: # PARAMETERS
-    Beam_ImgDuration= 60*usec #TODO:  change into global
-    ImgDuration=50*usec #TODO:  change into global
     Basler_cameradelay=150*msec #TODO:  change into fixed by device
     twoD_delay=10*ms
     loadingMOT_time=150*msec # time it takes for the atoms to load into the MOT
@@ -49,17 +39,17 @@ def BlueMot(tt,duration_on,duration_off, duration_wait):
     tt+=BlueMot_off(tt+duration_wait, duration_off)
     return tt
 
-def take_absorbImaging(tt):
+def take_absorbImaging(tt, beam_duration):
     ImagingBeam_gate.go_high(tt+5*usec)
     tt+=Basler_Camera.expose(tt-100*usec,'Atoms', frametype='tiff')
-    tt+=Beam_ImgDuration # Duration of image? AOM stays on for this duration
+    tt+=beam_duration 
     ImagingBeam_gate.go_low(tt+5*usec)
 
     tt+=1*sec # loading camera time
 
     ImagingBeam_gate.go_high(tt+5*usec)
     tt+=Basler_Camera.expose(tt-100*usec,'Probe', frametype='tiff')
-    tt+=Beam_ImgDuration # Duration of image? AOM stays on for this duration
+    tt+=beam_duration 
     ImagingBeam_gate.go_low(tt+5*usec)
 
     tt+=1*sec # loading camera time
@@ -81,3 +71,15 @@ def BlueMogLabs_On(): # Connect to device
     dev.cmd('ON,%i,ALL' % (4))  
     dev.cmd(f'MODE,{4},NSB') 
     dev.cmd('ON,%i,ALL' % (4))  
+
+def do_Tweezer(tt, Tweezer_duration):
+    Tweezer_gate.go_high(tt)
+    tt+Tweezer_duration
+    Tweezer_gate.go_low(tt)
+    return tt
+    
+def take_fluoImagig(tt):
+    # ImagingBeam_gate.go_high(tt+10*usec)
+    tt+=Andor_Camera.expose(tt, 'Tweezer', frametype='tiff') 
+    # ImagingBeam_gate.go_low(tt)
+    return tt
