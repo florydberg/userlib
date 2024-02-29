@@ -343,7 +343,7 @@ if __name__ == '__main__':
         dev.cmd('POW, 3, 29.0')
 
         dev.cmd('MODE,4,  NSB')
-        dev.cmd('FREQ,1, 80.0')
-        dev.cmd('POW, 1, 29.1')
+        dev.cmd('FREQ,4, 80.0')
+        dev.cmd('POW, 4, 29.1')
 
     stop(t+dt)
