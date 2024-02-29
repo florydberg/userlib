@@ -213,34 +213,37 @@ if ca:
                 'water_cooling': False,
                 'temperature': -65},
             # manual_mode_camera_attributes = {
-            #     'acquisition': 'kinetic_series',
-            #     'emccd': False,
-            #     'emccd_gain': 0,
-            #     'preamp': False,
-            #     'preamp_gain': 1.0,
-            #     'exposure_time': 0.3,
-            #     'shutter_output': 'low',
-            #     'int_shutter_mode': 'perm_open',
-            #     'ext_shutter_mode': 'auto',
-            #     'shutter_t_open': 100,
-            #     'shutter_t_close': 100,
-            #     'readout': 'full_image',
-            #     'crop': False,
-            #     'trigger': 'internal',
-            #     'trigger_edge': 'rising',
-            #     'number_accumulations': 1,
-            #     'accumulation_period': 0.003,
-            #     'number_kinetics': 1,
-            #     'kinetics_period': 0.030,
-            #     'xbin': 1,
-            #     'ybin': 1,
-            #     'center_row': None,
-            #     'height': 1024,
-            #     'width': 1024,
-            #     'left_start': 1,
-            #     'bottom_start': 1,
-            #     'v_offset': 0,
-            #     'acquisition_timeout': 5000.0}
+                # 'acquisition': 'kinetic_series',
+                # 'emccd': False,
+                # 'emccd_gain': 0,
+                # 'preamp': False,
+                # 'preamp_gain': 1.0,
+                # 'exposure_time': 0.3,
+                # 'shutter_output': 'low',
+                # 'int_shutter_mode': 'perm_open',
+                # 'ext_shutter_mode': 'auto',
+                # 'shutter_t_open': 100,
+                # 'shutter_t_close': 100,
+                # 'readout': 'full_image',
+                # 'crop': False,
+                # 'trigger': 'internal',
+                # 'trigger_edge': 'rising',
+                # 'number_accumulations': 1,
+                # 'accumulation_period': 0.003,
+                # 'number_kinetics': 1,
+                # 'kinetics_period': 0.030,
+                # 'xbin': 1,
+                # 'ybin': 1,
+                # 'center_row': None,
+                # 'height': 1024,
+                # 'width': 1024,
+                # 'left_start': 1,
+                # 'bottom_start': 1,
+                # 'v_offset': 0,
+                # 'acquisition_timeout': 5000.0,
+            #     'cooldown': True,
+            #     'water_cooling': False,
+            #     'temperature': -65}
             )
 
 if cb:
@@ -322,8 +325,8 @@ if __name__ == '__main__':
         dev.cmd('POW, 3, 26.0')
 
         dev.cmd('MODE,4,  NSB')
-        dev.cmd('FREQ,1,114.0')
-        dev.cmd('POW, 1, 26.0')
+        dev.cmd('FREQ,4,114.0')
+        dev.cmd('POW, 4, 26.0')
 
     if mr:
         from user_devices.mogdevice import MOGDevice  #Red MOGLABS QRF

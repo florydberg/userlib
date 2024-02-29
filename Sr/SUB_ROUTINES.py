@@ -79,7 +79,7 @@ def do_Tweezer(tt, Tweezer_duration):
     return tt
     
 def take_fluoImagig(tt):
-    # ImagingBeam_gate.go_high(tt+10*usec)
+    ImagingBeam_gate.go_high(tt+10*usec)
     tt+=Andor_Camera.expose(tt, 'Tweezer', frametype='tiff') 
-    # ImagingBeam_gate.go_low(tt)
+    ImagingBeam_gate.go_low(tt)
     return tt

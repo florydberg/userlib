@@ -20,7 +20,7 @@ for i in range(0,n_loop):
 
     t+=take_absorbImaging(t, beam_duration)
 
-    # ------------------------------------------------------------#
+   # ------------------------------------------------------------#
 
     t+=BlueMot(t, loadingMOT_time, twoD_delay, MOT_time)
 
@@ -28,4 +28,4 @@ for i in range(0,n_loop):
 
     t+=take_fluoImagig(t)
 
-stop(t+5*sec)
+stop(t+1*sec)
