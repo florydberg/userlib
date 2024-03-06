@@ -5,42 +5,45 @@ from labscriptlib.Sr.connection_table import *
 from user_devices.mogdevice import MOGDevice
 from user_devices.mogdevice import MOGDevice  #Red MOGLABS QRF
 import runmanager.remote
-if True: # Time Constants
-    t=0
-    dt=main_board.time_step # 1 us
-    usec=dt
-    us=usec
-    msec=1000*dt
-    ms=msec
-    sec=1000000*dt
-    s=sec
-    min=60*sec
 import h5py
 from lyse import path, data
-data_frame = data()
-path=data_frame['filepath'].iloc[-1] #lastvalue in dataframe
-units={}
-for globals_group  in runmanager.get_grouplist(path):
-    for global_name in runmanager.get_globalslist(path, globals_group):
-        with h5py.File(path,'r') as shot_h5py: global_units =  shot_h5py["globals"][globals_group]["units"].attrs[global_name]
-        if global_units=='us': #base unit for time
-            g_unit=usec
-        elif global_units=='ms':
-            g_unit=msec
-        elif global_units=='s':
-            g_unit=sec
-        elif global_units=='Hz':#base unit for frequency
-            g_unit=1
-        elif global_units=='kHz':
-            e_unit=1e3
-        elif global_units=='MHz':
-            g_unit=1e6
-        else:
-            g_unit=1
-        units[str(global_name)]=g_unit
-GLOBALS={}
-for i in runmanager.remote.get_globals():
-    GLOBALS[str(i)]=eval(i)*units[str(i)]
+if True: #init of globals and times
+    if True: # Time Constants
+        t=0
+        dt=main_board.time_step # 1 us
+        usec=dt
+        us=usec
+        msec=1000*dt
+        ms=msec
+        sec=1000000*dt
+        s=sec
+        min=60*sec
+    # data_frame = data()
+    # path=data_frame['filepath'].iloc[-1] #lastvalue in dataframe
+    path='F:\\Experiments\\Sr\\SrParameters.h5'
+    units={}
+    for globals_group  in runmanager.get_grouplist(path):
+        for global_name in runmanager.get_globalslist(path, globals_group):
+            with h5py.File(path,'r') as shot_h5py: global_units =  shot_h5py["globals"][globals_group]["units"].attrs[global_name]
+            if global_units=='us': #base unit for time
+                g_unit=usec
+            elif global_units=='ms':
+                g_unit=msec
+            elif global_units=='s':
+                g_unit=sec
+            elif global_units=='Hz':#base unit for frequency
+                g_unit=1
+            elif global_units=='kHz':
+                e_unit=1e3
+            elif global_units=='MHz':
+                g_unit=1e6
+            else:
+                g_unit=1
+            units[str(global_name)]=g_unit
+    print(units)
+    GLOBALS={}
+    for i in runmanager.remote.get_globals():
+        GLOBALS[str(i)]=eval(i)*units[str(i)]
 
 def BlueMot_load(tt, load_time):
     COILS_switch.go_high(tt) # Coils
@@ -97,33 +100,11 @@ def take_fluoImagig(tt):
     ImagingBeam_gate.go_low(tt)
     return tt
 
-def MogLabs_newvalue(name, channel, value, newvalue, tt):
-    IT=tt
-    if tt==IT:
-        if name == 'blue': dev = MOGDevice('192.168.1.102')
-        elif name=='red': dev = MOGDevice('192.168.1.103')
-
-        if value in ['FREQ', 'POW']:
-            command=value+', '+str(channel)+', '+str(newvalue)
-            dev.cmd(command)
-
-def ImgPulse_update(FRQ):
-    dev = MOGDevice('192.168.1.102') #connection to BlueMogLabs
-    command=str('FREQ,4,'+str(FRQ))
-    dev.cmd(command)
-
-    dev.cmd('MODE,1,  NSB')
-    dev.cmd('FREQ,1,200.0')
-    dev.cmd('POW, 1, 29.1')
-
-    dev.cmd('MODE,2,  NSB')
-    dev.cmd('FREQ,2,180.0')
-    dev.cmd('POW, 2, 29.1')
-
-    dev.cmd('MODE,3,  NSB')
-    dev.cmd('FREQ,3,114.0')
-    dev.cmd('POW, 3, 26.0')
-
-    dev.cmd('MODE,4,  NSB')
-    dev.cmd(command)
-    dev.cmd('POW, 4, 26.0')
+def MogLabs_newvalue(name, channel, value, newvalue):
+    if name == 'blue': dev = MOGDevice('192.168.1.102')
+    elif name=='red': dev = MOGDevice('192.168.1.103')
+    else: raise Exception('NO OTHER DEVICES than blue and red, choose one')
+    if value in ['FREQ', 'POW']:
+        command=value+', '+str(channel)+', '+str(newvalue)
+        dev.cmd(command)
+    else: raise Exception('NO ACCEPTABLE VALUE: or FREQ or POW, choose one')
