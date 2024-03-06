@@ -2,18 +2,23 @@ from labscript import start, stop
 from labscript_utils import import_or_reload
 import_or_reload('labscriptlib.Sr.SUB_ROUTINES')
 from labscriptlib.Sr.SUB_ROUTINES import *
+############################################################################################
 
-ToF=TOF*usec
-beam_duration=ImgBeam_duration*usec
+CALIBRATION=0     #1 yes, 0 no             #################################################
+
+############################################################################################
+if CALIBRATION: G_Imaging_Frq=GLOBALS['CAL_Imaging_Frq']/1e6
+else:G_Imaging_Frq=GLOBALS['Imaging_Frq']/1e6
+ImgPulse_update(G_Imaging_Frq)
 
 start()
 
-for i in range(0,n_loop):    
+for i in range(0,GLOBALS['n_loop']): 
 
-    t+=BlueMot(t, loadingMOT_time, twoD_delay, MOT_duration*usec)
+    t+=BlueMot(t, GLOBALS['loadTime_BlueMOT'], GLOBALS['MOT_duration'])
 
-    t+=ToF # wait for time of flight
+    t+=GLOBALS['TOF'] # wait for time of flight
 
-    t+=take_absorbImaging(t, beam_duration)
+    t+=take_absorbImaging(t, GLOBALS['AbsImgPulse_duration'])
 
-stop(t)
+stop(t+1*sec)

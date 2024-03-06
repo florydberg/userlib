@@ -1,7 +1,7 @@
 from labscript import start, stop
 from generate_samples import generate_digital_samples, generate_analog_samples, test_word
 from labscript_utils import import_or_reload
-import_or_reload('labscriptlib.MOT.connection_table')
+import_or_reload('labscriptlib.Sr.connection_table')
 
 from labscriptlib.MOT.connection_table import *
 from user_devices.mogdevice import MOGDevice
@@ -14,7 +14,7 @@ from pylablib.devices import Basler
 
 if True: # Time Constants
     t=0
-    dt=board0.time_step # 1 us
+    dt=main_board.time_step # 1 us
     usec=dt
     us=usec
     msec=1000*dt
@@ -46,9 +46,9 @@ def take_image_andor(time):
     
 def take_image_basler(time): # trigger pulse
     tt=time
-    Basler_trg.go_high(tt) # trigger on
+    Basler_Camera_trigger.go_high(tt) # trigger on
     tt+=ImgDuration # time of imaging duration
-    Basler_trg.go_low(tt) # trigger off 
+    Basler_Camera_trigger.go_low(tt) # trigger off 
     tt+=dt
     return tt 
 

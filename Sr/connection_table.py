@@ -5,7 +5,7 @@ p=0 #Pulseblaster
 a=0 #AWG
 f=1 #FPGA
 se=0 #secondary FPGA
-mb=0 #MogLabsBlue
+mb=1 #MogLabsBlue
 mr=0 #MogLabsRed
 ca=1 #Camera Andor
 cb=1 #Camera Basler
@@ -194,7 +194,7 @@ if ca:
                 'shutter_t_close': 100,
                 'readout': 'full_image',
                 'crop': False,
-                'trigger': 'internal',
+                'trigger': 'external',
                 'trigger_edge': 'rising',
                 'number_accumulations': 1,
                 'accumulation_period': 0.003,
@@ -208,11 +208,11 @@ if ca:
                 'left_start': 1,
                 'bottom_start': 1,
                 'v_offset': 0,
-                'acquisition_timeout': 5000.0,
-                'cooldown': True,
+                'acquisition_timeout': 50000.0,
+                'cooldown': False,
                 'water_cooling': False,
-                'temperature': -65},
-            # manual_mode_camera_attributes = {
+                'temperature': -60},
+            manual_mode_camera_attributes = {
                 # 'acquisition': 'kinetic_series',
                 # 'emccd': False,
                 # 'emccd_gain': 0,
@@ -226,7 +226,7 @@ if ca:
                 # 'shutter_t_close': 100,
                 # 'readout': 'full_image',
                 # 'crop': False,
-                # 'trigger': 'internal',
+                'trigger': 'internal',
                 # 'trigger_edge': 'rising',
                 # 'number_accumulations': 1,
                 # 'accumulation_period': 0.003,
@@ -241,9 +241,9 @@ if ca:
                 # 'bottom_start': 1,
                 # 'v_offset': 0,
                 # 'acquisition_timeout': 5000.0,
-            #     'cooldown': True,
+                'cooldown': True,
             #     'water_cooling': False,
-            #     'temperature': -65}
+                'temperature': -60}
             )
 
 if cb:
@@ -258,7 +258,7 @@ if cb:
             exception_on_failed_shot=False,
             camera_attributes = {
                 'ExposureMode': 'Timed',
-                'ExposureTime':  500000, #in us  >432
+                'ExposureTime':  500, #in us  >432
                 'AutoExposureTimeUpperLimit':10000000,
                 'AcquisitionFrameRate':29,
 
@@ -312,19 +312,19 @@ if __name__ == '__main__':
         dev = MOGDevice('192.168.1.102')
         print('Device info:', dev.ask('info'))
 
-        dev.cmd('MODE,1,  NSB')
+        dev.cmd('MODE,1,  NSB') #2D MOT
         dev.cmd('FREQ,1,200.0')
         dev.cmd('POW, 1, 29.1')
 
-        dev.cmd('MODE,2,  NSB')
+        dev.cmd('MODE,2,  NSB') #3D MOT
         dev.cmd('FREQ,2,180.0')
         dev.cmd('POW, 2, 29.1')
 
-        dev.cmd('MODE,3,  NSB')
+        dev.cmd('MODE,3,  NSB') #TwezImaging
         dev.cmd('FREQ,3,114.0')
         dev.cmd('POW, 3, 26.0')
 
-        dev.cmd('MODE,4,  NSB')
+        dev.cmd('MODE,4,  NSB') #Imaging
         dev.cmd('FREQ,4,114.0')
         dev.cmd('POW, 4, 26.0')
 
