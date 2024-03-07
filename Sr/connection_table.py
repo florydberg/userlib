@@ -7,7 +7,7 @@ f=1 #FPGA
 se=0 #secondary FPGA
 mb=1 #MogLabsBlue
 mr=0 #MogLabsRed
-ca=1 #Camera Andor
+ca=0 #Camera Andor
 cb=1 #Camera Basler
 
 ############################################################################################################### PULSE
@@ -39,11 +39,10 @@ if a:
 
 ############################################################################################################### FPGA  
 if f:
-    if p:
-        from user_devices.FPGA_device import FPGA_board, DigitalChannels, AnalogChannels, DEFAULT_PORT
+    from user_devices.FPGA_device import FPGA_board, DigitalChannels, AnalogChannels, DEFAULT_PORT
+    if p: 
         parent=pb0_trg
     else:
-        from user_devices.FPGA_device_Alone import FPGA_board, DigitalChannels, AnalogChannels, DEFAULT_PORT
         parent=None
 
     primary   = FPGA_board(name='main_board',  ip_address='192.168.1.10', ip_port=DEFAULT_PORT, bus_rate=1.0, num_racks=1,
@@ -135,7 +134,7 @@ if mb:
     QRF_trigger_1=DigitalOut(name='QRFBlue_trigger', parent_device=DO0, connection=0)
 
     if p:
-        MOGLabs_QRF(name='QRF_Blue', parent_device=pb0_trg, addr='192.168.1.102', port=7802)
+        QRF_Blue=MOGLabs_QRF(name='QRF_Blue', parent_device=pb0_trg, addr='192.168.1.102', port=7802)
     elif f:
         MOGLabs_QRF(name='QRF_Blue', parent_device=QRF_trigger_1, addr='192.168.1.102', port=7802)
 
@@ -143,7 +142,7 @@ if mb:
             table_mode=False,                         digital_gate={'device':DO0, 'connection': 1})
     QRF_DDS(name='treD_MOT', parent_device=QRF_Blue, connection='channel 1', 
             table_mode=True, trigger_each_step=False, digital_gate={'device':DO0, 'connection': 2})
-    QRF_DDS(name='ImagingBeam', parent_device=QRF_Blue, connection='channel 2', 
+    ImagingBeam=QRF_DDS(name='ImagingBeam', parent_device=QRF_Blue, connection='channel 2', 
             table_mode=True, trigger_each_step=True, digital_gate={'device':DO0, 'connection': 3})
     QRF_DDS(name='ImagingTweezBeam', parent_device=QRF_Blue, connection='channel 3', 
             table_mode=True, trigger_each_step=True, digital_gate={'device':DO0, 'connection': 4})

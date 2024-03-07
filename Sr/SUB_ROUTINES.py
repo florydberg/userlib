@@ -1,12 +1,14 @@
-#SUB ROUTINES
+########## SUB ROUTINES #######################
+# by Andrea Fantini for Sr FloRydberg Group   #
+# register of actions for Labscript Ruotines  #
+###############################################
 from labscript_utils import import_or_reload
+import labscript
 import_or_reload('labscriptlib.Sr.connection_table')
 from labscriptlib.Sr.connection_table import *
 from user_devices.mogdevice import MOGDevice
-from user_devices.mogdevice import MOGDevice  #Red MOGLABS QRF
 import runmanager.remote
 import h5py
-from lyse import path, data
 if True: #init of globals and times
     if True: # Time Constants
         t=0
@@ -18,13 +20,11 @@ if True: #init of globals and times
         sec=1000000*dt
         s=sec
         min=60*sec
-    # data_frame = data()
-    # path=data_frame['filepath'].iloc[-1] #lastvalue in dataframe
-    path='F:\\Experiments\\Sr\\SrParameters.h5'
+    settings_path='F:\\Experiments\\Sr\\SrParameters.h5'
     units={}
-    for globals_group  in runmanager.get_grouplist(path):
-        for global_name in runmanager.get_globalslist(path, globals_group):
-            with h5py.File(path,'r') as shot_h5py: global_units =  shot_h5py["globals"][globals_group]["units"].attrs[global_name]
+    for globals_group  in runmanager.get_grouplist(settings_path):
+        for global_name in runmanager.get_globalslist(settings_path, globals_group):
+            with h5py.File(settings_path,'r') as shot_h5py: global_units =  shot_h5py["globals"][globals_group]["units"].attrs[global_name]
             if global_units=='us': #base unit for time
                 g_unit=usec
             elif global_units=='ms':
@@ -40,7 +40,6 @@ if True: #init of globals and times
             else:
                 g_unit=1
             units[str(global_name)]=g_unit
-    print(units)
     GLOBALS={}
     for i in runmanager.remote.get_globals():
         GLOBALS[str(i)]=eval(i)*units[str(i)]
@@ -59,9 +58,9 @@ def BlueMot_off(tt):
     COILS_switch.go_low(tt) # Coils
     return tt
 
-def BlueMot(tt, load_time, duration_wait):
-    tt+=BlueMot_load(tt, load_time)
-    tt+=BlueMot_off(tt+duration_wait)
+def BlueMot(tt, loading_time, duration_wait):
+    tt=BlueMot_load(tt, loading_time)
+    BlueMot_off(tt+duration_wait)
     return tt
 
 def take_absorbImaging(tt, beam_duration):
@@ -101,10 +100,11 @@ def take_fluoImagig(tt):
     return tt
 
 def MogLabs_newvalue(name, channel, value, newvalue):
+    
     if name == 'blue': dev = MOGDevice('192.168.1.102')
     elif name=='red': dev = MOGDevice('192.168.1.103')
     else: raise Exception('NO OTHER DEVICES than blue and red, choose one')
-    if value in ['FREQ', 'POW']:
+    if value in ['FREQ', 'POW']:   
         command=value+', '+str(channel)+', '+str(newvalue)
         dev.cmd(command)
     else: raise Exception('NO ACCEPTABLE VALUE: or FREQ or POW, choose one')
