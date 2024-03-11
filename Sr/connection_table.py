@@ -313,19 +313,19 @@ if __name__ == '__main__':
 
         dev.cmd('MODE,1,  NSB') #2D MOT
         dev.cmd('FREQ,1,200.0')
-        dev.cmd('POW, 1, 29.1')
+        dev.cmd('POW, 1, 27.9')
 
         dev.cmd('MODE,2,  NSB') #3D MOT
         dev.cmd('FREQ,2,180.0')
-        dev.cmd('POW, 2, 29.1')
+        dev.cmd('POW, 2, 26.67')
 
         dev.cmd('MODE,3,  NSB') #TwezImaging
         dev.cmd('FREQ,3,114.0')
-        dev.cmd('POW, 3, 26.0')
+        dev.cmd('POW, 3, 26.86')
 
         dev.cmd('MODE,4,  NSB') #Imaging
         dev.cmd('FREQ,4,114.0')
-        dev.cmd('POW, 4, 26.0')
+        dev.cmd('POW, 4, 26.72')
 
     if mr:
         from user_devices.mogdevice import MOGDevice  #Red MOGLABS QRF
