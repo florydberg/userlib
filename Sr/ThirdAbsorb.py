@@ -9,7 +9,6 @@ t+=dt
 
 # set_MOGLABS_ready(t)
 
-# COILS_current1.constant(t, 2)
 
 for i in range(0,GLOBALS['n_loop']):
 
@@ -20,5 +19,4 @@ for i in range(0,GLOBALS['n_loop']):
     t=take_absorbImaging(t, GLOBALS['AbsImgPulse_duration'])
     t+=5*sec
 
-# COILS_current1.constant(t, 0)
 stop(t+1*sec) #to cool coils down
