@@ -140,11 +140,11 @@ if mb:
 
     dueD_MOT=QRF_DDS(name='dueD_MOT', parent_device=QRF_Blue, connection='channel 0', 
             table_mode=False,                         digital_gate={'device':DO0, 'connection': 1})
-    QRF_DDS(name='treD_MOT', parent_device=QRF_Blue, connection='channel 1', 
+    treD_MOT=QRF_DDS(name='treD_MOT', parent_device=QRF_Blue, connection='channel 1', 
             table_mode=True, trigger_each_step=False, digital_gate={'device':DO0, 'connection': 2})
-    ImagingBeam=QRF_DDS(name='ImagingBeam', parent_device=QRF_Blue, connection='channel 2', 
+    ImagingBeam=QRF_DDS(name='ImagingBeam', parent_device=QRF_Blue, connection='channel 3', 
             table_mode=True, trigger_each_step=True, digital_gate={'device':DO0, 'connection': 3})
-    QRF_DDS(name='ImagingTweezBeam', parent_device=QRF_Blue, connection='channel 3', 
+    QRF_DDS(name='ImagingTweezBeam', parent_device=QRF_Blue, connection='channel 2', 
             table_mode=True, trigger_each_step=True, digital_gate={'device':DO0, 'connection': 4})
 
 if mr:

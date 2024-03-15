@@ -1,14 +1,15 @@
 ########## SUB ROUTINES #######################
 # by Andrea Fantini for Sr FloRydberg Group   #
 # register of actions for Labscript Ruotines  #
+# last edited 15/03/2024                      # 
 ###############################################
-from labscript_utils import import_or_reload
-import labscript
-import_or_reload('labscriptlib.Sr.connection_table')
 from labscriptlib.Sr.connection_table import *
 from user_devices.mogdevice import MOGDevice
 import runmanager.remote
 import h5py
+from labscript_utils import import_or_reload
+import labscript
+import_or_reload('labscriptlib.Sr.connection_table')
 
 if True: #init of globals and times
     if True: # Time Constants
@@ -46,7 +47,7 @@ if True: #init of globals and times
         GLOBALS[str(i)]=eval(i)*units[str(i)]
 
 def BlueMot_load(tt, load_time):
-    # COILS_current1.constant(tt, 2)
+    COILS_current1.constant(tt, 2)
     tt+=5*msec
     COILS_switch.go_high(tt) # Coils
     dueD_MOT_gate.go_high(tt) # 2D MOT
@@ -59,7 +60,7 @@ def BlueMot_off(tt):
     dueD_MOT_gate.go_low(tt-GLOBALS['TwoD_DELAY']) #  need advance for the 2D MOT to turn off
     treD_MOT_gate.go_low(tt) # 3D
     COILS_switch.go_low(tt) # Coils
-    # COILS_current1.constant(tt+dt, 0)
+    COILS_current1.constant(tt+5*msec, 0)
     return tt
 
 def BlueMot(tt, loading_time, duration_wait):
@@ -126,3 +127,9 @@ if True: #communication to MogLabs:
 
     G_BlueSpectroscopy=GLOBALS['BlueSpectroscopy']/1e6
     MogLabs_newvalue('red', 1, 'FREQ',G_BlueSpectroscopy)
+
+def set_MOGLABS_ready(tt):
+    ImagingBeam.DDS.setfreq(tt, G_Imaging_Frq)
+    dueD_MOT.DDS.setfreq(tt, G_dueD_MOT_Frq)
+    treD_MOT.DDS.setfreq(tt, G_treD_MOT_Frq)
+    # BlueSpectr.DDS.setfreq(tt,G_BlueSpectroscopy)
