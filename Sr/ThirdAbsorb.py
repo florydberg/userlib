@@ -6,9 +6,7 @@ from labscriptlib.Sr.SUB_ROUTINES import * #                                    
 
 start()
 t+=dt
-
 # set_MOGLABS_ready(t)
-
 
 for i in range(0,GLOBALS['n_loop']):
 
