@@ -7,12 +7,13 @@ from labscriptlib.Sr.SUB_ROUTINES import * #                                    
 
 start()
 t+=dt
-if GLOBALS['CALIBRATION']: G_Imaging_Frq=GLOBALS['CAL_Imaging_Frq']/1e6
-else:G_Imaging_Frq=GLOBALS['Imaging_Frq']/1e6
-print(G_Imaging_Frq)
 ImagingBeam.DDS.setfreq(t, G_Imaging_Frq)
-ImagingBeam.DDS.frequency.add_instruction(t, G_Imaging_Frq)
-MogLabs_newvalue('blue', 4, 'FREQ',G_Imaging_Frq)
+
+dueD_MOT.DDS.setfreq(t, G_dueD_MOT_Frq)
+
+COILS_current1.constant(t, 2)
+
+t+=5*msec
 
 for i in range(0,GLOBALS['n_loop']):
 
@@ -21,5 +22,7 @@ for i in range(0,GLOBALS['n_loop']):
     t+=GLOBALS['TOF'] # wait for time of fligh
 
     t=take_absorbImaging(t, GLOBALS['AbsImgPulse_duration'])
-
-stop(t+1*sec)
+    t+=5*sec
+    
+COILS_current1.constant(t, 0)
+stop(t+1*sec) #to cool coils down

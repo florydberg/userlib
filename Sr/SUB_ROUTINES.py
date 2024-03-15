@@ -9,6 +9,7 @@ from labscriptlib.Sr.connection_table import *
 from user_devices.mogdevice import MOGDevice
 import runmanager.remote
 import h5py
+
 if True: #init of globals and times
     if True: # Time Constants
         t=0
@@ -45,6 +46,8 @@ if True: #init of globals and times
         GLOBALS[str(i)]=eval(i)*units[str(i)]
 
 def BlueMot_load(tt, load_time):
+    # COILS_current1.constant(tt, 2)
+    tt+=5*msec
     COILS_switch.go_high(tt) # Coils
     dueD_MOT_gate.go_high(tt) # 2D MOT
     treD_MOT_gate.go_high(tt) # 3D MOT
@@ -56,6 +59,7 @@ def BlueMot_off(tt):
     dueD_MOT_gate.go_low(tt-GLOBALS['TwoD_DELAY']) #  need advance for the 2D MOT to turn off
     treD_MOT_gate.go_low(tt) # 3D
     COILS_switch.go_low(tt) # Coils
+    # COILS_current1.constant(tt+dt, 0)
     return tt
 
 def BlueMot(tt, loading_time, duration_wait):
@@ -64,20 +68,20 @@ def BlueMot(tt, loading_time, duration_wait):
     return tt
 
 def take_absorbImaging(tt, beam_duration):
-    trigger_delay=105*usec #100 for camera activation + 5 as safety buffer
-    Basler_Camera_readout=1200*msec
+    trigger_delay=100*usec+5*usec #100 for camera activation + 5 as safety buffer
+    Basler_Camera_readout=120*msec
 
     ImagingBeam_gate.go_high(tt)
+    ImagingBeam_gate.go_low(tt+beam_duration)
     tt+=Basler_Camera.expose(tt-trigger_delay,'Atoms', frametype='tiff')
-    tt+=beam_duration
-    ImagingBeam_gate.go_low(tt)
+    
 
     tt+=Basler_Camera_readout 
 
     ImagingBeam_gate.go_high(tt)
+    ImagingBeam_gate.go_low(tt+beam_duration)
     tt+=Basler_Camera.expose(tt-trigger_delay,'Probe', frametype='tiff')
-    tt+=beam_duration
-    ImagingBeam_gate.go_low(tt)
+
 
     tt+=Basler_Camera_readout
 
@@ -108,3 +112,17 @@ def MogLabs_newvalue(name, channel, value, newvalue):
         command=value+', '+str(channel)+', '+str(newvalue)
         dev.cmd(command)
     else: raise Exception('NO ACCEPTABLE VALUE: or FREQ or POW, choose one')
+
+if True: #communication to MogLabs:
+    if GLOBALS['CALIBRATION']: G_Imaging_Frq=GLOBALS['CAL_Imaging_Frq']/1e6
+    else:G_Imaging_Frq=GLOBALS['Imaging_Frq']/1e6
+    MogLabs_newvalue('blue', 4, 'FREQ',G_Imaging_Frq)
+
+    G_dueD_MOT_Frq=GLOBALS['dueD_MOT_Frq']/1e6
+    MogLabs_newvalue('blue', 1, 'FREQ',G_dueD_MOT_Frq)
+
+    G_treD_MOT_Frq=GLOBALS['treD_MOT_Frq']/1e6
+    MogLabs_newvalue('blue', 2, 'FREQ',G_treD_MOT_Frq)
+
+    G_BlueSpectroscopy=GLOBALS['BlueSpectroscopy']/1e6
+    MogLabs_newvalue('red', 1, 'FREQ',G_BlueSpectroscopy)

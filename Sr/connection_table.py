@@ -138,7 +138,7 @@ if mb:
     elif f:
         MOGLabs_QRF(name='QRF_Blue', parent_device=QRF_trigger_1, addr='192.168.1.102', port=7802)
 
-    QRF_DDS(name='dueD_MOT', parent_device=QRF_Blue, connection='channel 0', 
+    dueD_MOT=QRF_DDS(name='dueD_MOT', parent_device=QRF_Blue, connection='channel 0', 
             table_mode=False,                         digital_gate={'device':DO0, 'connection': 1})
     QRF_DDS(name='treD_MOT', parent_device=QRF_Blue, connection='channel 1', 
             table_mode=True, trigger_each_step=False, digital_gate={'device':DO0, 'connection': 2})
@@ -152,9 +152,9 @@ if mr:
     QRF_trigger_2=DigitalOut(name='QRFRed_trigger', parent_device=DO0, connection=9)
 
     if p:
-        MOGLabs_QRF(name='QRF_Red', parent_device=pb0_trg, addr='192.168.1.103', port=7802)
+        QRF_Red=MOGLabs_QRF(name='QRF_Red', parent_device=pb0_trg, addr='192.168.1.103', port=7802)
     elif f:
-        MOGLabs_QRF(name='QRF_Red', parent_device=QRF_trigger_2, addr='192.168.1.103', port=7802)
+        QRF_Red=MOGLabs_QRF(name='QRF_Red', parent_device=QRF_trigger_2, addr='192.168.1.103', port=7802)
 
     QRF_DDS(name='BlueSpectr', parent_device=QRF_Red, connection='channel 0', 
             table_mode=False,                         digital_gate={'device':DO0, 'connection': 10})
@@ -327,7 +327,7 @@ if __name__ == '__main__':
         dev.cmd('FREQ,4,114.0')
         dev.cmd('POW, 4, 26.72')
 
-    if mr:
+    if False:#mr:
         from user_devices.mogdevice import MOGDevice  #Red MOGLABS QRF
         dev = MOGDevice('192.168.1.103')
         print('Device info:', dev.ask('info'))
