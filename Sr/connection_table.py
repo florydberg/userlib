@@ -8,7 +8,7 @@ se=0 #secondary FPGA
 mb=1 #MogLabsBlue
 mr=0 #MogLabsRed
 ca=0 #Camera Andor
-cb=1 #Camera Basler
+cb=0 #Camera Basler
 
 ############################################################################################################### PULSE
 if p:
@@ -27,16 +27,6 @@ if p:
     #Digital Ouput
     DigitalOut('digiout_1',pulseblaster_0.direct_outputs, 'flag 1')
     DigitalOut('digiout_2',pulseblaster_0.direct_outputs, 'flag 2')
-
-############################################################################################################### AWG
-if a:
-    from user_devices.SpectrumAWG import SpectrumAWG
-    import lascar
-
-    # Create the AWG device
-    # awg_connection = lascar.awg.Connect()
-    awg = SpectrumAWG('awg', parent_device=awg_trigger, connection='trigger')
-
 ############################################################################################################### FPGA  
 if f:
     from user_devices.FPGA_device import FPGA_board, DigitalChannels, AnalogChannels, DEFAULT_PORT
@@ -297,7 +287,14 @@ if cb:
             },
 
             )   
-  
+############################################################################################################### AWG
+if a:
+    from user_devices.SpectrumAWG import SpectrumAWG
+    import lascar
+
+    # Create the AWG device
+    awg_connection = lascar.awg.Connect()
+    awg = SpectrumAWG('awg', parent_device=None, connection='trigger')
 #################################################################################
  # ATTENTION: start() and stop(1) cannot be missing! time for stop must be >0. #
 #################################################################################

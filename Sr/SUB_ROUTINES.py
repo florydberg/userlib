@@ -3,13 +3,12 @@
 # register of actions for Labscript Ruotines  #
 # last edited 15/03/2024                      # 
 ###############################################
-from labscriptlib.Sr.connection_table import *
 from user_devices.mogdevice import MOGDevice
 import runmanager.remote
 import h5py
 from labscript_utils import import_or_reload
-import labscript
 import_or_reload('labscriptlib.Sr.connection_table')
+from labscriptlib.Sr.connection_table import *
 
 if True: #init of globals and times
     if True: # Time Constants
