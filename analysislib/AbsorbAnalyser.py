@@ -157,45 +157,33 @@ if True: #functions definition
         ax[2].plot(intx, 'b')
         ax[2].plot(gaux, 'r')
 
-        # sigma_z=sigma_y  # empirically to be checked
-
-        # AmpNpeak=amplitude*sigma_0
         sigma_x=sigma_x*pix
         sigma_y=sigma_y*pix
         sigma_z=sigma_y
 
         n_3D=fitN_of_atoms/(sigma_x*sigma_y*sigma_z*(2*np.pi)**(3/2))*1e-6 #in cm^3
         n_3D2=Npeak/(sqrt(2*np.pi)*sigma_z*pixArea)*1e-6 #in cm^3
-        print(sigma_x)
-        print(sigma_y)
-        print(fitN_of_atoms)
-        print(n_3D)
-        print(n_3D2)
-
-        # AmpNpeak=n_3D*sqrt(2*np.pi)*sigma_z*pixArea
-        # Ntot_fit=AmpNpeak/((sigma_x)*(sigma_y)*2*np.pi)
-        # # print("{:.2e}".format(Ntot_fit))
-        # print("this")
-        # print(np.sum(Ntot_fit))
-
-        # n_3D=amplitude/(sqrt(2*np.pi)*sigma_z*pixArea)
-
+        # print(sigma_x)
+        # print(sigma_y)
+        # print(fitN_of_atoms)
+        # print(n_3D)
+        # print(n_3D2)
 
         name = str('Fitted number of atoms = %s ' % ("{:.2e}".format(fitN_of_atoms)))
         plt.title(name)
         picname = "FitAtoms@" + str(value) + unity + scan_parameter
-        plt.xlabel(str('3D peak density: %s in cm$^3$ pi \n sigma_x, sigma_y:(%s um, %s um)\n Center=(%s, %s) \n %s\n theta=%s' %
+        plt.xlabel(str('3D peak density: %s in cm$^3$  \n sigma_x, sigma_y:(%s um, %s um)\n Center=(%s, %s) \n %s\n theta=%s pi' %
                     ("{:.2e}".format(n_3D2), "{:.0e}".format(sigma_x*1e6), "{:.2e}".format(sigma_y*1e6),
                         round(xo * 100) / 100, round((RY - yo) * 100) / 100, str(picname), round(theta * 100) / 100)))
         ax[3].imshow(fitdata, cmap='viridis', vmin=0, vmax=amplitude, extent=(x.min(), x.max(), y.min(), y.max()))
-
+        # plt.colorbar()
         plt.savefig(picname + ".png")
         main_waist = sigma_x
 
         plt.show()
 
         shot.save_result('number_of_atoms', fitN_of_atoms)
-        shot.save_result('peak_density', density)
+        shot.save_result('peak_density', n_3D)
         shot.save_result('main_waist', main_waist)
         print('fitted results saved')
 
@@ -299,7 +287,7 @@ if True: #functions definition
 scan_parameter='treD_MOT_Frq'
 unity='MHz'
 
-plotting=True #extra images
+plotting=False #extra images
 gauss_fit=True
 ######################
 

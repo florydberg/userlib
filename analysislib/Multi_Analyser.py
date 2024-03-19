@@ -27,7 +27,7 @@ number_of_atoms=tuple(AbAnalyser['number_of_atoms'])
 peak_density=tuple(AbAnalyser['peak_density'])
 main_waist=tuple(AbAnalyser['main_waist'])
 
-parameter_name =AbAnalyser['calibration'].iloc[-1]
+parameter_name ='treD_MOT_Frq' #AbAnalyser['scan_parameter'].iloc[-1]
 
 print('optimization parameter =', parameter_name)
 parameter=np.array(df[parameter_name])
