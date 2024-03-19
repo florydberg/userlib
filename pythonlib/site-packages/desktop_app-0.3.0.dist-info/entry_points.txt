@@ -1,0 +1,2 @@
+[console_scripts]
+desktop-app = desktop_app.__main__:main

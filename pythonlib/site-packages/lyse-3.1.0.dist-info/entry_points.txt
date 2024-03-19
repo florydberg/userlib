@@ -1,0 +1,6 @@
+[console_scripts]
+lyse = desktop_app:entry_point
+
+[gui_scripts]
+lyse-gui = desktop_app:entry_point
+

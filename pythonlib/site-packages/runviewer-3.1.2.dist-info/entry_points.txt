@@ -1,0 +1,6 @@
+[console_scripts]
+runviewer = desktop_app:entry_point
+
+[gui_scripts]
+runviewer-gui = desktop_app:entry_point
+

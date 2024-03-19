@@ -1,0 +1,6 @@
+[console_scripts]
+runmanager = desktop_app:entry_point
+
+[gui_scripts]
+runmanager-gui = desktop_app:entry_point
+

@@ -1,0 +1,3 @@
+[console_scripts]
+labscript-profile-create = labscript_profile.create:create_profile
+
