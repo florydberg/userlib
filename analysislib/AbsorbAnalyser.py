@@ -36,16 +36,14 @@ if True: #functions definition
 
         print('sigma = '+ str(sigma))
 
-    def calculate_optical_density_fft(up, down):
-        # Calculate optical density
-        optical_density = -1 *np.log((up/down))
+    def image_fft(image):
 
         # Compute the 2D Fourier Transform
-        fft_result = np.fft.fft2(optical_density)
+        fft_result = np.fft.fft2(image)
         fft_result_shifted = np.fft.fftshift(fft_result)
 
         # Get the dimensions of the image
-        rows, cols = optical_density.shape
+        rows, cols = image.shape
         crow, ccol = rows // 2, cols // 2  # Center of the image
 
         # Define a low-pass filter radius
@@ -62,7 +60,7 @@ if True: #functions definition
         plt.figure(figsize=(15, 10))
 
         plt.subplot(221)
-        im1 = plt.imshow(optical_density, cmap='viridis', vmin=0, vmax=0.2)
+        im1 = plt.imshow(image, cmap='viridis', vmin=0, vmax=0.2)
         plt.title('Original Image')
         plt.colorbar(im1, ax=plt.gca())
 
@@ -71,20 +69,20 @@ if True: #functions definition
         plt.title('2D Fourier Transform')
 
         # Apply the inverse process
-        optical_density_FFT = np.fft.ifft2(np.fft.ifftshift(fft_result_lowpass)).real
+        image_fft = np.fft.ifft2(np.fft.ifftshift(fft_result_lowpass)).real
 
         plt.subplot(223)
         plt.imshow(np.log(1 + np.abs(fft_result_lowpass)), cmap='gray')
         plt.title('Low-pass Filtered Fourier Transform')
 
         plt.subplot(224)
-        im2 = plt.imshow(optical_density_FFT, cmap='viridis', vmin=0, vmax=0.2)
+        im2 = plt.imshow(image_fft, cmap='viridis', vmin=0, vmax=0.2)
         plt.title('Image after Inverse Fourier Transform')
         plt.colorbar(im2, ax=plt.gca())
 
         plt.show()
 
-        return optical_density, optical_density_FFT
+        return image_fft
 
     def fit_gaussian(shot, value, RX, RY, data, scan_parameter, unity, n_2D):
         # Define a 2D Gaussian function
@@ -325,7 +323,8 @@ with Run(path).open('r+') as shot:
 
     if plotting: plot_up_down(up, down, data_frame[scan_parameter], scan_parameter, unity, P0, RX, RY)
 
-    optical_density, optical_density_FFT = calculate_optical_density_fft(up, down)
+    optical_density = -1 *np.log((up/down))
+    optical_density_FFT = image_fft(optical_density)
     # optical_density = -1 *np.log((up/down)/intensity_correction)
     OD = optical_density_FFT[np.ix_(range(DY[0],DY[1]),range(DX[0],DX[1]))]
 
