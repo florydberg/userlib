@@ -84,7 +84,7 @@ if True: #functions definition
 
         return image_fft
 
-    def fit_gaussian(shot, value, RX, RY, data, scan_parameter, unity, n_2D):
+    def fit_gaussian(shot, value, RX, RY, data, scan_parameter, unity):
         # Define a 2D Gaussian function
         def gaussian_2d(xy, amplitude, xo, yo, sigma_x, sigma_y, theta):
             theta = theta * np.pi
@@ -162,18 +162,18 @@ if True: #functions definition
         n_3D=fitN_of_atoms/(sigma_x*sigma_y*sigma_z*(2*np.pi)**(3/2))*1e-6 #in cm^3
         n_3D2=Npeak/(sqrt(2*np.pi)*sigma_z*pixArea)*1e-6 #in cm^3
         # print(sigma_x)
-        # print(sigma_y)
         # print(fitN_of_atoms)
+        # print(sigma_y)
         # print(n_3D)
         # print(n_3D2)
 
-        name = str('Fitted number of atoms = %s ' % ("{:.2e}".format(fitN_of_atoms)))
-        plt.title(name)
+        ax[3].imshow(fitdata, cmap='viridis', vmin=0, vmax=amplitude, extent=(x.min(), x.max(), y.min(), y.max()))        
+        plt.title('Fitted number of atoms = {}'.format("{:.2e}".format(fitN_of_atoms)))
         picname = "FitAtoms@" + str(value) + unity + scan_parameter
         plt.xlabel(str('3D peak density: %s in cm$^3$  \n sigma_x, sigma_y:(%s um, %s um)\n Center=(%s, %s) \n %s\n theta=%s pi' %
                     ("{:.2e}".format(n_3D2), "{:.0e}".format(sigma_x*1e6), "{:.2e}".format(sigma_y*1e6),
                         round(xo * 100) / 100, round((RY - yo) * 100) / 100, str(picname), round(theta * 100) / 100)))
-        ax[3].imshow(fitdata, cmap='viridis', vmin=0, vmax=amplitude, extent=(x.min(), x.max(), y.min(), y.max()))
+
         # plt.colorbar()
         plt.savefig(picname + ".png")
         main_waist = sigma_x
@@ -282,7 +282,7 @@ if True: #functions definition
         ray=200       
 ######################
 
-scan_parameter='treD_MOT_Frq'
+scan_parameter='Red_MOT_Frq'
 unity='MHz'
 
 plotting=False #extra images
@@ -325,7 +325,6 @@ with Run(path).open('r+') as shot:
 
     optical_density = -1 *np.log((up/down))
     optical_density_FFT = image_fft(optical_density)
-    # optical_density = -1 *np.log((up/down)/intensity_correction)
     OD = optical_density_FFT[np.ix_(range(DY[0],DY[1]),range(DX[0],DX[1]))]
 
     if plotting:
@@ -341,9 +340,10 @@ with Run(path).open('r+') as shot:
     Ntot_sum = np.sum(N_2D) # Total number of atoms in the cloud from images
 
     print('atoms', Ntot_sum )
-    print(f"First-guessed number of atoms in the cloud: {Ntot_sum:.2e}")
+    print(f"First-guess number of atoms in the cloud: {Ntot_sum:.2e}")
     shot.save_result('number_of_atoms', Ntot_sum)
 
-    if gauss_fit: fit_gaussian(shot, data_frame[scan_parameter], RX, RY, OD, scan_parameter, unity, sum(n_2D))
+    if gauss_fit: fit_gaussian(shot, data_frame[scan_parameter], RX, RY, OD, scan_parameter, unity)
+    shot.save_result('scan_parameter', scan_parameter)
 
 saving_script(path)
