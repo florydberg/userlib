@@ -7,9 +7,18 @@ import matplotlib.patches as patches
 import matplotlib.gridspec as gridspec
 from labscript.labscript import *
 import analysislib
-from scipy.optimize import curve_fit
+from scipy.optimize import curve_fit, least_squares
+import time # for testing speed of program
+def bin_data(data, bin_size):
+    shape = data.shape
+    new_shape = (shape[0] // bin_size, bin_size, shape[1] // bin_size, bin_size)
+    binned_data = data.reshape(new_shape).sum(axis=(1, 3)) / (bin_size**2)
+    return binned_data
+
 if True: #functions definition
     if True:  # Constants and Image Analysis  
+        V_MAX=0.15
+
         Imag_beam_Power=440e-6 #W   #TODO: update this value with the measure we have to take
         waist_0=6.667e-3 #m
         I=2*Imag_beam_Power/(np.pi*waist_0**2)
@@ -33,7 +42,7 @@ if True: #functions definition
         Gam=32e6
         sigma_0=3*lambda_laser**2/(2*np.pi)  #  previous calculation was 9.7e-14 
         sigma=sigma_0/(1+(2*delta/Gam)**2 + I/I_sat)
-
+        print('sigma = '+ str(I_sat))
         print('sigma = '+ str(sigma))
 
     def image_fft(image):
@@ -80,11 +89,11 @@ if True: #functions definition
         plt.title('Image after Inverse Fourier Transform')
         plt.colorbar(im2, ax=plt.gca())
 
-        plt.show()
+        # plt.show()
+
 
         return image_fft
-
-    def fit_gaussian(shot, value, RX, RY, data, scan_parameter, unity):
+    def fit_gaussian(shot, value, RX, RY, data, scan_parameter, scan_unit):
         # Define a 2D Gaussian function
         def gaussian_2d(xy, amplitude, xo, yo, sigma_x, sigma_y, theta):
             theta = theta * np.pi
@@ -102,8 +111,10 @@ if True: #functions definition
         X = xx.ravel(order='F')
         Y = yy.ravel(order='F')
 
+        inty = np.sum(data, axis=1)
+
         # Fit the 2D Gaussian to the image
-        initial_guess = (100, 100, 100, 15, 15, 0.01)  # Initial guess for amplitude, xo, yo, sigma_x, sigma_y, theta
+        initial_guess = (max(inty), 150, 150, 15, 15, 0.01)  # Initial guess for amplitude, xo, yo, sigma_x, sigma_y, theta
         low = [0, 0, 0, 5, 5, 0]
         upper = [float('inf'), float('inf'), float('inf'), RX, RY, 0.25]
         bounds = [low, upper]
@@ -143,12 +154,12 @@ if True: #functions definition
         ax = [plt.subplot(gs[3]), plt.subplot(gs[4]), plt.subplot(gs[7]), plt.subplot(gs[5])]
         bounds = [x.min(), x.max(), y.min(), y.max()]
 
-        ax[1].imshow(data, cmap='viridis', vmin=0, vmax=amplitude, extent=(x.min(), x.max(), y.min(), y.max()))
+        ax[1].imshow(data, cmap='viridis', vmin=0, vmax=V_MAX, extent=(x.min(), x.max(), y.min(), y.max()))
 
         inty = np.sum(data, axis=1)
         gauy = np.sum(fitdata, axis=1)
-        ax[0].plot(inty[::-1], np.linspace(1, inty.shape, 250), 'b')
-        ax[0].plot(gauy[::-1], np.linspace(1, inty.shape, 250), 'r')
+        ax[0].plot(inty[::-1], np.linspace(1, inty.shape, RX), 'b') 
+        ax[0].plot(gauy[::-1], np.linspace(1, inty.shape, RX), 'r')
 
         intx = np.sum(data, axis=0)
         gaux = np.sum(fitdata, axis=0)
@@ -167,12 +178,12 @@ if True: #functions definition
         # print(n_3D)
         # print(n_3D2)
 
-        ax[3].imshow(fitdata, cmap='viridis', vmin=0, vmax=amplitude, extent=(x.min(), x.max(), y.min(), y.max()))        
+        ax[3].imshow(fitdata, cmap='viridis', vmin=0, vmax=V_MAX, extent=(x.min(), x.max(), y.min(), y.max())) 
         plt.title('Fitted number of atoms = {}'.format("{:.2e}".format(fitN_of_atoms)))
-        picname = "FitAtoms@" + str(value) + unity + scan_parameter
-        plt.xlabel(str('3D peak density: %s in cm$^3$  \n sigma_x, sigma_y:(%s um, %s um)\n Center=(%s, %s) \n %s\n theta=%s pi' %
+        picname = " @ " + str(value) +' '+ scan_unit +' of '+ scan_parameter
+        plt.xlabel(str('3D peak density: %s in cm$^3$  \n sig_x, sig_y:(%s um, %s um)\n Center=(%s, %s)\n theta=%s pi \n %s' %
                     ("{:.2e}".format(n_3D2), "{:.0e}".format(sigma_x*1e6), "{:.2e}".format(sigma_y*1e6),
-                        round(xo * 100) / 100, round((RY - yo) * 100) / 100, str(picname), round(theta * 100) / 100)))
+                        round(xo * 100) / 100, round((RY - yo) * 100) / 100, round(theta * 100) / 100, str(picname))))
 
         # plt.colorbar()
         plt.savefig(picname + ".png")
@@ -181,7 +192,7 @@ if True: #functions definition
         plt.show()
 
         shot.save_result('number_of_atoms', fitN_of_atoms)
-        shot.save_result('peak_density', n_3D)
+        shot.save_result('peak_density', n_3D2)
         shot.save_result('main_waist', main_waist)
         print('fitted results saved')
 
@@ -253,43 +264,44 @@ if True: #functions definition
         Ib=np.sum(down[np.ix_(range(dY[0],dY[1]),range(dX[0],dX[1]))])
         return Ia/Ib
 
-    def plot_up_down(up, down, value, scan_parameter, unity, P0, RX, RY):  
+    def plot_up_down(up, down, value, scan_parameter, scan_unit, P0, RX, RY):  
         plt.figure()
         MOT1=patches.Rectangle(P0, RX, RY, linewidth=1, edgecolor='r', facecolor='none')    
         plt.imshow(up-down, cmap='viridis')
         plt.gca().add_patch(MOT1)
         plt.colorbar()
         plt.legend(['Atoms'], loc ="lower right")
-        plt.title('Up-Down @'+str(value)+unity+scan_parameter)
+        plt.title('Up-Down @'+str(value)+scan_unit+scan_parameter)
         plt.show()  
 
-    if True:# ROI Selection
-        P0=(150,180)   # Starting point for the atoms ROI
-        RX=250
-        RY=250
+if True:# ROI Selection
+    P0=(250,250)   # Starting point for the atoms ROI
+    RX=600
+    RY=600
 
-        DX=(P0[0], P0[0]+RX)
-        DY=(P0[1], P0[1]+RY)
+    DX=(P0[0], P0[0]+RX)
+    DY=(P0[1], P0[1]+RY)
 
-        p0=(100,100)   # Starting point for the correction area 
-        rX=200
-        rY=100
+    p0=(300,820)   # Starting point for the correction area 
+    rX=200
+    rY=80
 
-        dX=(p0[0], p0[0]+rX)
-        dY=(p0[1], p0[1]+rY)
+    dX=(p0[0], p0[0]+rX)
+    dY=(p0[1], p0[1]+rY)
 
-        b0=(250,300)    # Starting point for the Probe area
-        ray=200       
+    b0=(500,400)    # Starting point for the Probe area
+    ray=400       
 ######################
 
 scan_parameter='Red_MOT_Frq'
-unity='MHz'
+scan_unit='MHz'
 
-plotting=False #extra images
+plotting=True #extra images
 gauss_fit=True
 ######################
 
 with Run(path).open('r+') as shot:
+    start_time = time.time()
     data_frame=data(path)
     j=0
     img={}
@@ -321,11 +333,13 @@ with Run(path).open('r+') as shot:
     print('intensity correction', i_c)
     down=down*i_c
 
-    if plotting: plot_up_down(up, down, data_frame[scan_parameter], scan_parameter, unity, P0, RX, RY)
+    if plotting: plot_up_down(up, down, data_frame[scan_parameter], scan_parameter, scan_unit, P0, RX, RY)
 
     optical_density = -1 *np.log((up/down))
     optical_density_FFT = image_fft(optical_density)
-    OD = optical_density_FFT[np.ix_(range(DY[0],DY[1]),range(DX[0],DX[1]))]
+    #OD = optical_density[np.ix_(range(DY[0],DY[1]),range(DX[0],DX[1]))
+    OD = optical_density[np.ix_(range(DY[0],DY[1]),range(DX[0],DX[1]))]
+
 
     if plotting:
         plt.figure()
@@ -336,14 +350,21 @@ with Run(path).open('r+') as shot:
 
     n_2D = OD/sigma
     N_2D= pixArea*n_2D
-    # N_2D[N_2D<0]=0
+    N_2D[N_2D<0]=0
     Ntot_sum = np.sum(N_2D) # Total number of atoms in the cloud from images
 
     print('atoms', Ntot_sum )
     print(f"First-guess number of atoms in the cloud: {Ntot_sum:.2e}")
-    shot.save_result('number_of_atoms', Ntot_sum)
+    shot.save_result('sum_of_atoms', Ntot_sum)
 
-    if gauss_fit: fit_gaussian(shot, data_frame[scan_parameter], RX, RY, OD, scan_parameter, unity)
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    print(f"Elapsed time: {elapsed_time:.6f} seconds")
+
+    if gauss_fit: fit_gaussian(shot, data_frame[scan_parameter], RX, RY, OD, scan_parameter, scan_unit)
+
     shot.save_result('scan_parameter', scan_parameter)
+    shot.save_result('scan_unit', scan_unit)
 
 saving_script(path)
+
