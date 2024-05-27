@@ -111,6 +111,7 @@ if True: #functions definition
         xx, yy = np.meshgrid(x, y)
         X = xx.ravel(order='F')
         Y = yy.ravel(order='F')
+        xy = (X, Y)
 
         inty = np.sum(data, axis=1)
         intx = np.sum(data, axis=0)
@@ -124,16 +125,23 @@ if True: #functions definition
         bounds = [low, upper]
         print("dfsdgfsdgsdgds ",initial_guess)
 
-        def residuals(xy, data, params):
-            return gaussian_2d(xy, params) - data
-        #result = least_squares(residuals, initial_guess, bounds=bounds, args=((X, Y),data.ravel(order='F'),initial_guess), method='trf')
-        #popt = result.x
-        popt, _ = curve_fit(gaussian_2d, (X, Y), data.ravel(order='F'), p0=initial_guess, bounds=bounds)
+        def residuals(params, xy, data):
+            return gaussian_2d(xy, *params) - data
+
+        #popt, _ = curve_fit(gaussian_2d, (X, Y), data.ravel(order='F'), p0=initial_guess, bounds=bounds)
 
         # Extract the parameters
+        data_ravel = data.ravel(order='F')
+        result = least_squares(residuals, initial_guess, bounds=bounds, args=(xy, data_ravel), method='trf')
+        popt = result.x
+
+        # Extract parameter
+
+
         amplitude, xo, yo, sigma_x, sigma_y, theta = popt
 
-        Npeak=amplitude*pixArea*binfactor**2/sigma
+        Npeak = amplitude * pixArea * binfactor**2 / sigma
+
         # Print the fitted parameters
         print("Npeak:", Npeak)
         print("Center (x, y):", xo, RY - yo)
