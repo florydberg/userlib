@@ -28,14 +28,14 @@ register_classes(
     #runviewer_parser=runviewer_parser,
 )
 
-register_classes(
-    'SpectrumAWG',
-    BLACS_tab='user_devices.SpectrumAWG.SpectrumAWG_Tab',
-    #runviewer_parser=runviewer_parser,
-)
+# register_classes(
+#     'SpectrumAWG',
+#     BLACS_tab='user_devices.SpectrumAWG.SpectrumAWG_Tab',
+#     #runviewer_parser=runviewer_parser,
+# )
 
-register_classes(
-    'MOG_QRF',
-    BLACS_tab='user_devices.MOG_QRF.MOG_QRF_Tab',
-    #runviewer_parser=runviewer_parser,
-)
+# register_classes(
+#     'MOG_QRF',
+#     BLACS_tab='user_devices.MOG_QRF.MOG_QRF_Tab',
+#     #runviewer_parser=runviewer_parser,
+# )

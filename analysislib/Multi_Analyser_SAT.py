@@ -23,10 +23,10 @@ df = data()
 paths=df['filepath']
 
 AbAnalyser= df['AbsorbAnalyser']
-# number_of_atoms=tuple(AbAnalyser['number_of_atoms'])
+number_of_atoms=tuple(AbAnalyser['number_of_atoms'])
 sum_of_atoms=tuple(AbAnalyser['sum_of_atoms'])
-# peak_density=tuple(AbAnalyser['peak_density'])
-# main_waist=tuple(AbAnalyser['main_waist'])
+peak_density=tuple(AbAnalyser['peak_density'])
+main_waist=tuple(AbAnalyser['main_waist'])
 
 parameter_name =AbAnalyser['scan_parameter'].iloc[-1]
 scan_unit=AbAnalyser['scan_unit'].iloc[-1]
@@ -37,29 +37,28 @@ parameter=np.array(df[parameter_name])
 ###############################################################################################
 # Let's plot them against each other:
 
-# figure()
-# x, y, stdev =data_mean(parameter, peak_density)
-# plt.ylabel('Peak Density')
+figure()
+x, y, stdev =data_mean(parameter, peak_density)
+plt.ylabel('Peak Density')
 
-# plt.title('Optimization Profile')
-# plt.xlabel(str(parameter_name)+' ('+str(scan_unit)+')')
-# plt.errorbar(x, y, stdev, fmt='-ro', ecolor='gray',capsize=5)
+plt.title('Optimization Profile')
+plt.xlabel('saturation')
+# plt.errorbar((0.002,0.003,0.004,0.006,0.008,0.011,0.013), y, stdev, fmt='-ro', ecolor='gray',capsize=5)
 
-
-# best_value=max(y)
-# optimum=x[y.index(max(y))]
-# optimum=optimum
+best_value=max(y)
+optimum=x[y.index(max(y))]
+optimum=optimum
 
 figure()
-# x, y, stdev =data_mean(parameter, number_of_atoms)
+x, y, stdev =data_mean(parameter, number_of_atoms)
 xs, ys, stdevs =data_mean(parameter, sum_of_atoms)
 plt.ylabel('Number Of Atoms')
 
 plt.title('Optimization Profile')
-plt.xlabel(str(parameter_name)+' ('+str(scan_unit)+')')
-# plt.errorbar(x, y, stdev, fmt='-bo', ecolor='k',capsize=5)
-plt.errorbar(xs, ys, stdevs, fmt='-co', ecolor='c',capsize=5)
-plt.legend(['Raw'])
+plt.xlabel('saturation')
+plt.errorbar((0.002,0.003,0.004,0.006,0.008,0.011,0.013), y, stdev, fmt='-bo', ecolor='k',capsize=5)
+# plt.errorbar(xs, ys, stdev, fmt='-co', ecolor='c',capsize=5)
+plt.legend(['Fitted', 'Raw'])
 
 # figure()
 # x, y, stdev =data_mean(parameter, main_waist)
@@ -72,14 +71,14 @@ plt.legend(['Raw'])
 
 ##################################################################################
 print('\n-----------------------------------\n')
-# print('best value is ', optimum, 'for', parameter_name)
+print('best value is ', optimum, 'for', parameter_name)
 print('\n-----------------------------------')
 
 #To save this result to the output hdf5 file, we have to instantiate a
 #Sequence object:
 for i in paths:
     seq = Sequence(i, df)
-    # seq.save_results('optimum',optimum, 'number_of_atoms', best_value)
+    seq.save_results('optimum',optimum, 'number_of_atoms', best_value)
 
 main_path=r'F:\Calibrations'
 
@@ -94,7 +93,7 @@ with open(calibration_file, 'a', newline='') as csv_file:
     if control:
         writer.writerow([str(parameter_name), 'NumberOfAtoms', 'RunTime', 'Routine'])
 
-    # writer.writerow([optimum,str(best_value), df['sequence'].iloc[-1], str(df['labscript'].iloc[-1])])
+    writer.writerow([optimum,str(best_value), df['sequence'].iloc[-1], str(df['labscript'].iloc[-1])])
 
 if False: #switch to automatic updating of optimization parameter
     runmanager.remote.set_globals({opt_parameter: optimum})

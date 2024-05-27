@@ -93,7 +93,8 @@ if True: #functions definition
 
 
         return image_fft
-    def fit_gaussian(shot, value, RX, RY, data, scan_parameter, scan_unit):
+    
+    def fit_gaussian(shot, value, RX, RY, data, scan_parameter, scan_unit, binfactor):
         # Define a 2D Gaussian function
         def gaussian_2d(xy, amplitude, xo, yo, sigma_x, sigma_y, theta):
             theta = theta * np.pi
@@ -112,18 +113,27 @@ if True: #functions definition
         Y = yy.ravel(order='F')
 
         inty = np.sum(data, axis=1)
-
+        intx = np.sum(data, axis=0)
+        ampguess=10# min([np.max(data),np.max(intx)/(2*np.pi)**(1/2),np.max(inty)/(2*np.pi)**(1/2)])
+        
         # Fit the 2D Gaussian to the image
-        initial_guess = (max(inty), 150, 150, 15, 15, 0.01)  # Initial guess for amplitude, xo, yo, sigma_x, sigma_y, theta
+        
+        initial_guess = (ampguess, RX/2, RY/2, 85, 85, 0.01)  # Initial guess for amplitude, xo, yo, sigma_x, sigma_y, theta
         low = [0, 0, 0, 5, 5, 0]
-        upper = [float('inf'), float('inf'), float('inf'), RX, RY, 0.25]
+        upper = [1e10, RX, RY, RX, RY, 0.25]
         bounds = [low, upper]
+        print("dfsdgfsdgsdgds ",initial_guess)
+
+        def residuals(xy, data, params):
+            return gaussian_2d(xy, params) - data
+        #result = least_squares(residuals, initial_guess, bounds=bounds, args=((X, Y),data.ravel(order='F'),initial_guess), method='trf')
+        #popt = result.x
         popt, _ = curve_fit(gaussian_2d, (X, Y), data.ravel(order='F'), p0=initial_guess, bounds=bounds)
 
         # Extract the parameters
         amplitude, xo, yo, sigma_x, sigma_y, theta = popt
 
-        Npeak=amplitude*pixArea/sigma
+        Npeak=amplitude*pixArea*binfactor**2/sigma
         # Print the fitted parameters
         print("Npeak:", Npeak)
         print("Center (x, y):", xo, RY - yo)
@@ -135,11 +145,9 @@ if True: #functions definition
         fit_data = gaussian_2d((X, Y), *popt)
         fitdata = fit_data.reshape((RY, RX), order='F')
 
-        fitN_of_atoms = np.sum(fitdata*pixArea/sigma)
+        fitN_of_atoms = np.sum(fitdata*pixArea*binfactor**2/sigma)
         print('\n----------------------------------------\n\n Gauss-Fit-Summed Number of atoms = %s 10^6' % (round(fitN_of_atoms / 10000) / 100))
         print('\n----------------------------------------\n')
-
-        density = amplitude / pixArea * 1e-8  # in cm^2
 
         #########################  Plot the original data and the fitted Gaussian  ####################
         figure()
@@ -166,34 +174,33 @@ if True: #functions definition
         ax[2].plot(intx, 'b')
         ax[2].plot(gaux, 'r')
 
-        sigma_x=sigma_x*pix
-        sigma_y=sigma_y*pix
+        sigma_x=sigma_x*pix*binfactor
+        sigma_y=sigma_y*pix*binfactor
         sigma_z=sigma_y
 
-        n_3D=fitN_of_atoms/(sigma_x*sigma_y*sigma_z*(2*np.pi)**(3/2))*1e-6 #in cm^3
-        n_3D2=Npeak/(sqrt(2*np.pi)*sigma_z*pixArea)*1e-6 #in cm^3
+        #n_3D=fitN_of_atoms/(sigma_x*sigma_y*sigma_z*(2*np.pi)**(3/2))*1e-6 #in cm^3
+        n_3D=Npeak/(sqrt(2*np.pi)*sigma_z*pixArea*binfactor**2)*1e-6 #in cm^3
         # print(sigma_x)
         # print(fitN_of_atoms)
         # print(sigma_y)
         # print(n_3D)
-        # print(n_3D2)
 
         ax[3].imshow(fitdata, cmap='viridis', vmin=0, vmax=V_MAX, extent=(x.min(), x.max(), y.min(), y.max())) 
         plt.title('Fitted number of atoms = {}'.format("{:.2e}".format(fitN_of_atoms)))
         picname = " @ " + str(value) +' '+ scan_unit +' of '+ scan_parameter
         plt.xlabel(str('3D peak density: %s in cm$^3$  \n sig_x, sig_y:(%s um, %s um)\n Center=(%s, %s)\n theta=%s pi \n %s' %
-                    ("{:.2e}".format(n_3D2), "{:.0e}".format(sigma_x*1e6), "{:.2e}".format(sigma_y*1e6),
+                    ("{:.2e}".format(n_3D), "{:.0e}".format(sigma_x*1e6), "{:.2e}".format(sigma_y*1e6),
                         round(xo * 100) / 100, round((RY - yo) * 100) / 100, round(theta * 100) / 100, str(picname))))
 
         # plt.colorbar()
         plt.savefig(picname + ".png")
-        main_waist = sigma_x
+        avg_waist = (sigma_x+sigma_y)/2
 
         plt.show()
 
         shot.save_result('number_of_atoms', fitN_of_atoms)
-        shot.save_result('peak_density', n_3D2)
-        shot.save_result('main_waist', main_waist)
+        shot.save_result('peak_density', n_3D)
+        shot.save_result('avg_waist', avg_waist)
         print('fitted results saved')
 
         print()
@@ -296,8 +303,10 @@ if True:# ROI Selection
 scan_parameter='Red_MOT_Frq'
 scan_unit='MHz'
 
-plotting=True #extra images
-gauss_fit=True
+op_plotting = False #extra images
+op_FFTfilter = False
+op_binning = True
+op_gauss_fit = True
 ######################
 
 with Run(path).open('r+') as shot:
@@ -315,7 +324,7 @@ with Run(path).open('r+') as shot:
         if int(data_frame['n_loop'])>1: img[str(i)] = np.average(shot_image.astype(np.float32),axis=0)
         else: img[str(i)]=shot_image.astype(np.float32)
 
-        if plotting: plot_single_image(MOT, corr, BEAM, img, i)
+        if op_plotting: plot_single_image(MOT, corr, BEAM, img, i)
       
     figure()
     display_absorb_trio(img)
@@ -333,15 +342,16 @@ with Run(path).open('r+') as shot:
     print('intensity correction', i_c)
     down=down*i_c
 
-    if plotting: plot_up_down(up, down, data_frame[scan_parameter], scan_parameter, scan_unit, P0, RX, RY)
+    if op_plotting: plot_up_down(up, down, data_frame[scan_parameter], scan_parameter, scan_unit, P0, RX, RY)
 
     optical_density = -1 *np.log((up/down))
-    optical_density_FFT = image_fft(optical_density)
+    if op_FFTfilter:
+        optical_density = image_fft(optical_density)
     #OD = optical_density[np.ix_(range(DY[0],DY[1]),range(DX[0],DX[1]))
     OD = optical_density[np.ix_(range(DY[0],DY[1]),range(DX[0],DX[1]))]
 
 
-    if plotting:
+    if op_plotting:
         plt.figure()
         plt.imshow(OD, cmap='viridis', vmin=0, vmax=0.2 )
         plt.colorbar()
@@ -349,9 +359,10 @@ with Run(path).open('r+') as shot:
         plt.show()
 
     n_2D = OD/sigma
-    N_2D= pixArea*n_2D
-    N_2D[N_2D<0]=0
-    Ntot_sum = np.sum(N_2D) # Total number of atoms in the cloud from images
+    N_2D = n_2D*pixArea
+    NN_2D=N_2D
+    NN_2D[NN_2D<0]=0
+    Ntot_sum = np.sum(NN_2D) # Total number of atoms in the cloud from images
 
     print('atoms', Ntot_sum )
     print(f"First-guess number of atoms in the cloud: {Ntot_sum:.2e}")
@@ -361,7 +372,18 @@ with Run(path).open('r+') as shot:
     elapsed_time = end_time - start_time
     print(f"Elapsed time: {elapsed_time:.6f} seconds")
 
-    if gauss_fit: fit_gaussian(shot, data_frame[scan_parameter], RX, RY, OD, scan_parameter, scan_unit)
+    if op_gauss_fit:
+        if op_binning:
+            binfactor=4
+            datafit= bin_data(OD, binfactor)
+            RXfit=int(RX/binfactor)
+            RYfit=int(RY/binfactor)
+        else:
+            datafit=OD
+            binfactor=1
+            RXfit=RX
+            RYfit=RY
+        fit_gaussian(shot, data_frame[scan_parameter], RXfit, RYfit, datafit, scan_parameter, scan_unit, binfactor)
 
     shot.save_result('scan_parameter', scan_parameter)
     shot.save_result('scan_unit', scan_unit)
