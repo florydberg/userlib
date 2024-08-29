@@ -1,0 +1,10 @@
+# How to use:
+# exclude everything
+#somefolder/*
+
+# exception to the rule
+#!somefolder/.gitkeep
+
+**/__pycache__/*
+**/.ipynb_checkpoints/*
+Sr/__pycache__/*.pyc

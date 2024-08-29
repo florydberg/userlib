@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+                <RegisterDescription
+                  ModelName="SwissKnifeTestSuite_TestVariableDelegates.xml"
+                  VendorName="GenApiTest"
+                  ToolTip="XML file extracted from test code"
+                  StandardNameSpace="GEV"
+                  SchemaMajorVersion="1"
+                  SchemaMinorVersion="1"
+                  SchemaSubMinorVersion="0"
+                  MajorVersion="3"
+                  MinorVersion="0"
+                  SubMinorVersion="0"
+                  ProductGuid="2D932CC6-EB68-40bd-B6CC-F03B55B7D653"
+                  VersionGuid="02A8C268-BEE8-463b-A6C0-53ED8256E3D8"
+                  xmlns="http://www.genicam.org/GenApi/Version_1_1"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+                     <Boolean Name ="FalseNode">          <Value>false</Value>        </Boolean>            <Float Name="Float0">          <Value>4</Value>        </Float>        <Float Name="Float1">          <Value>2</Value>        </Float>        <SwissKnife Name="SwsAdd">          <pVariable Name="V0">Float0</pVariable>          <pVariable Name="V1">Float1</pVariable>          <Formula>V0+V1</Formula>          <Representation>Linear</Representation>        </SwissKnife>            <Float Name="FloatNotAvailable">          <pIsAvailable>FalseNode</pIsAvailable>          <Value>3</Value>        </Float>        <SwissKnife Name="SwsAddNA">          <pVariable Name="V0">Float0</pVariable>          <pVariable Name="V1">FloatNotAvailable</pVariable>          <Formula>V0+V1</Formula>        </SwissKnife>            <Float Name="FloatNotImplemented">          <pIsImplemented>FalseNode</pIsImplemented>          <Value>3</Value>        </Float>        <SwissKnife Name="SwsAddNI">          <pVariable Name="V0">Float0</pVariable>          <pVariable Name="V1">FloatNotImplemented</pVariable>          <Formula>V0+V1</Formula>        </SwissKnife>            <Float Name="FloatReadOnly">          <ImposedAccessMode>RO</ImposedAccessMode>          <Value>3</Value>        </Float>        <SwissKnife Name="SwsAddRO">          <pVariable Name="V0">Float0</pVariable>          <pVariable Name="V1">FloatReadOnly</pVariable>          <Formula>V0+V1</Formula>        </SwissKnife>            <SwissKnife Name="SwsBadFormula">          <pVariable Name="V0">Float0</pVariable>          <pVariable Name="V1">Float1</pVariable>          <Formula>ITALY2GERMANY0</Formula>        </SwissKnife>    </RegisterDescription>

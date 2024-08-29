@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+                <RegisterDescription
+                  ModelName="PropertiesTestSuite_TestPropertyAccess.xml"
+                  VendorName="GenApiTest"
+                  ToolTip="XML file extracted from test code"
+                  StandardNameSpace="GEV"
+                  SchemaMajorVersion="1"
+                  SchemaMinorVersion="1"
+                  SchemaSubMinorVersion="0"
+                  MajorVersion="3"
+                  MinorVersion="0"
+                  SubMinorVersion="0"
+                  ProductGuid="2D932CC6-EB68-40bd-B6CC-F03B55B7D653"
+                  VersionGuid="02A8C268-BEE8-463b-A6C0-53ED8256E3D8"
+                  xmlns="http://www.genicam.org/GenApi/Version_1_1"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+                         <Category Name="Root">            <pFeature>Register</pFeature>            <pFeature>RegisterWithpLength</pFeature>        </Category>            <IntReg Name="Register">            <pIsImplemented>Implemented</pIsImplemented>            <pAddress>BaseAddress</pAddress>            <pAddress>AddressOffset</pAddress>            <Address>0x0100</Address>            <Address>0x0e00</Address>            <IntSwissKnife Name="Dummy">                <pVariable Name="I">Index</pVariable>                <Formula>0x0080 * I</Formula>            </IntSwissKnife>            <pIndex>Index</pIndex>            <pIndex Offset="0x0080">Index</pIndex>            <pIndex pOffset="IndexOffset">Index</pIndex>            <Length>4</Length>            <AccessMode>RW</AccessMode>            <pPort>Port</pPort>            <Cachable>WriteThrough</Cachable>            <pInvalidator>Invalidated</pInvalidator>            <Sign>Unsigned</Sign>            <Endianess>LittleEndian</Endianess>            <pSelected>Changer</pSelected>        </IntReg>            <IntReg Name="RegisterWithpLength">          <Address>0x0100</Address>          <pLength>RegisterLength</pLength>          <AccessMode>RW</AccessMode>          <pPort>Port</pPort>          <Endianess>LittleEndian</Endianess>        </IntReg>            <Integer Name="BaseAddress">            <Value>0x2000</Value>        </Integer>            <Integer Name="AddressOffset">            <Value>0xd000</Value>        </Integer>            <Integer Name="Index">            <Value>0</Value>        </Integer>            <Integer Name="IndexOffset">          <Value>0</Value>        </Integer>            <Integer Name="Changer">            <Value>0</Value>        </Integer>            <Integer Name="Selector">            <Value>0</Value>            <pSelected>Register</pSelected>        </Integer>            <Integer Name="Implemented">            <Value>1</Value>        </Integer>            <Integer Name="Invalidated">            <Value>1</Value>        </Integer>              <Integer Name="RegisterLength">            <Value>1</Value>        </Integer>            <Port Name="Port"/>    </RegisterDescription>
