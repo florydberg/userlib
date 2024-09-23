@@ -10,6 +10,7 @@ mr=1 #MogLabsRed
 ca=0 #Camera Andor
 cb_abs=1 #Camera Basler for Absorption
 cb_fluo=0 #Camera Basler for Fluorescence
+co=0 #Camera Orca
 
 ############################################################################################################### PULSE
 if p:
@@ -362,6 +363,8 @@ if cb_fluo:
 
             )   
 
+# if co:
+    
 ############################################################################################################### AWG
 if a:
     from user_devices.SpectrumAWG.labscript_devices import SpectrumAWG, AWGOutput
