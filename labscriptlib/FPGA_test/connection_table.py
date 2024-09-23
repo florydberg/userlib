@@ -11,8 +11,8 @@
 #from user_devices.FPGA_device import *
 
 from labscript import AnalogOut, DigitalOut
-from user_devices.FPGA_device import FPGA_board, DigitalChannels, AnalogChannels, DEFAULT_PORT
-
+# from user_devices.FPGA_device import FPGA_board, DigitalChannels, AnalogChannels, DEFAULT_PORT
+from user_devices.FPGA_device_Alone import FPGA_board, DigitalChannels, AnalogChannels, DEFAULT_PORT
 
 # FPGA device (pseudoclock device)   
 #       name = name string.
@@ -22,15 +22,16 @@ from user_devices.FPGA_device import FPGA_board, DigitalChannels, AnalogChannels
 #       num_racks = number of connected racks. must be 1 or 2. keep cable as short as possible, otherwise use several boards!
 # each board can drive max. 2 nearby racks with independent device addresses and strobe (96bits per sample).
 # if need more racks or more than few Meter distance use several boards with one as primary board, others are connected as secondary boards.
-
-primary   = FPGA_board(name='board0', ip_address='192.168.1.10', ip_port=DEFAULT_PORT, bus_rate=1.0, num_racks=1,
-                       worker_args={'inputs': {'NOP bit' : ('data bits 28-31', 'offset bit 3'),
-                                               'STRB bit': ('data bits 20-23', 'offset bit 3')}})
+parent=None
+primary   = FPGA_board(name='board0',  ip_address='192.168.1.10', ip_port=DEFAULT_PORT, bus_rate=1.0, num_racks=1,
+                       trigger_device=parent,
+                       worker_args={'inputs': {'start trigger'  : ('input 0', 'low level')},
+                                    'outputs':{'output 0':('sync out','low level')}})
 if True: # use secondary board
-    secondary = FPGA_board(name='board1', ip_address='192.168.1.11', ip_port=DEFAULT_PORT, bus_rate=1.0, num_racks=1, trigger_device=board0,
-                           worker_args={'inputs': {'NOP bit'        : ('data bits 28-31','offset bit 3'),
-                                                   'STRB bit'       : ('data bits 20-23','offset bit 3'),
-                                                   'start trigger'  : ('input 0', 'falling edge')}}) 
+    parent=primary
+    secondary = FPGA_board(name='board1', ip_address='192.168.1.11', ip_port=DEFAULT_PORT, bus_rate=1.0, num_racks=1, 
+                           trigger_device=parent,
+                           worker_args={'inputs': {'start trigger'  : ('input 0', 'low level')}}) 
 # else:
 #     secondary = None
 #########################################################################################################

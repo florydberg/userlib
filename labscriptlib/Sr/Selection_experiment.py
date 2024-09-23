@@ -165,19 +165,21 @@ for i in range(0,GLOBALS['n_loop']):
             # Test to use the two basler cameras for detecting the fluorescence
             # Basler_Camera_fluo_trigger.go_high(t-100*usec-5*usec)           
             # Basler_Camera_fluo_trigger.go_low(t+1*msec)
-            # t=take_absorbImaging(t, GLOBALS['FluoImgPulse_duration'])
+            #t=take_absorbImaging(t, GLOBALS['FluoImgPulse_duration'])
             t+=GLOBALS['FluoImgPulse_duration'] + Andor_Camera_fluo_readout
         elif sel_camera_fluo=='orca':
             orca_trigger_delay=7.2*usec*(4+1) + 4*usec # (4+1)*7us is in the manual as the longest delay + jitter pg. 49/82; we add 4us as an additonal buffer (total 40us)
             Orca_Camera_fluo_readout=(2304/2)*7.2*usec + (1/17.6)*sec # For USB, rolling shutter timing + inverse max frame rate (fps) at 4096x2304 pixels the readout time is 1/17.6 (for the whole image to be readout) pg. 60/82 of manual
             Andor_Camera_trigger.go_high(t-orca_trigger_delay) # Same channel as the Andor triggers also Orca now
-            Andor_Camera_trigger.go_low(t-orca_trigger_delay+100*usec)
+            Andor_Camera_trigger.go_low(t-orca_trigger_delay+100*usec)            
+            # Basler_Camera_abs_trigger.go_high(t-400*usec-5*usec)
+            # Basler_Camera_abs_trigger.go_low(t+100*usec)
             t=take_absorbImaging(t, GLOBALS['AbsImgPulse_duration'])
             t+=GLOBALS['FluoImgPulse_duration'] + Orca_Camera_fluo_readout
         elif sel_camera_fluo=='basler_abs':
             Basler_Camera_abs_trigger.go_high(t-100*usec-5*usec)
             Basler_Camera_abs_trigger.go_low(t+1*msec)
-            Basler_Camera_abs.expose(t-100*usec+5*usec,'Fluo', frametype='tiff')
+            # Basler_Camera_abs.expose(t-100*usec+5*usec,'Fluo', frametype='tiff')
         elif sel_camera_fluo=='basler_fluo':
             Basler_Camera_fluo_trigger.go_high(t-100*usec-5*usec)
             Basler_Camera_fluo_trigger.go_low(t+1*msec)
