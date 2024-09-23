@@ -1,6 +1,5 @@
 from labscript import *
-#######################
-
+######################
 p=0 #Pulseblaster
 a=0 #AWG
 f=1 #FPGA
