@@ -904,27 +904,19 @@ def take_absorbImaging(tt, beam_duration):
     trigger_delay=100*usec+5*usec #100 for camera activation + 5 as safety buffer
     Basler_Camera_abs_readout=4*120*msec # was at 120ms with small ROI, when enlarged changed to 200ms, still had issues capturing, changed to 480 and no issue
 
-    pokemon16.go_high(tt-trigger_delay-10*usec)
-    pokemon16.go_low(tt-trigger_delay-10*usec+1*ms)
     BlueImaging_AOM_TTL(tt, True)
     BlueImaging_AOM_TTL(tt+beam_duration, False)
     tt+=Basler_Camera_abs.expose(tt-trigger_delay,'Atoms', frametype='tiff')
-    # Basler_Camera_abs_trigger.go_high(tt-trigger_delay-5*usec)
-    # Basler_Camera_abs_trigger.go_low(tt-trigger_delay+1*msec)
     
     tt+=Basler_Camera_abs_readout 
 
     BlueImaging_AOM_TTL(tt, True)
     BlueImaging_AOM_TTL(tt+beam_duration, False)
     tt+=Basler_Camera_abs.expose(tt-trigger_delay,'Probe', frametype='tiff')
-    # Basler_Camera_abs_trigger.go_high(tt-trigger_delay-5*usec)
-    # Basler_Camera_abs_trigger.go_low(tt-trigger_delay+1*msec)
 
     tt+=Basler_Camera_abs_readout 
 
     Basler_Camera_abs.expose(tt-trigger_delay,'Background', frametype='tiff')
-    # Basler_Camera_abs_trigger.go_high(tt-trigger_delay-5*usec)
-    # Basler_Camera_abs_trigger.go_low(tt-trigger_delay+1*msec)
 
     tt+=Basler_Camera_abs_readout 
 
