@@ -112,8 +112,8 @@ for i in range(0,GLOBALS['n_loop']):
             t+=3*dt
             MOT_Red3D_singleFrq_TTL(t, True)
             t+=dt    
-            Andor_Camera_trigger.go_high(t) # Same channel as the Andor triggers also Orca now
-            Andor_Camera_trigger.go_low(t+100*usec)  
+            # Andor_Camera_trigger.go_high(t) # Same channel as the Andor triggers also Orca now
+            # Andor_Camera_trigger.go_low(t+100*usec)  
             t+=dt   
             t+=GLOBALS['MOT_RED_SF_duration']
             MOT_Red3D_Switch_TTL(t, False)       
@@ -134,7 +134,7 @@ for i in range(0,GLOBALS['n_loop']):
             t+=GLOBALS['Tweezer_duration']
 
             t+=GLOBALS['FluoImgPulse_duration'] # tweezer stays on during fluo imaging
-            t+=100*ms  #"TOF" Only to see the atoms in tweezers and the atoms in the red mot expand, this is a variable to be adjusted, minimum was 6ms to see minimal atoms, 10ms was a good value
+            t+=50*ms  #"TOF" Only to see the atoms in tweezers and the atoms in the red mot expand, this is a variable to be adjusted, minimum was 6ms to see minimal atoms, 10ms was a good value
             Twizzi_Switch_TTL(t, False)
             t+=dt
 
@@ -160,8 +160,8 @@ for i in range(0,GLOBALS['n_loop']):
             # Andor camera is controlled by Andor Solis
             andor_trigger_delay=20*us # it was originally at 100us but below under 'sel_abs_image' it is 20us so we (Vlad and Shawn) set it here to 20us
             Andor_Camera_fluo_readout=(1024*1024/1e6*sec+1024*2.2*usec)+100*msec # Horizontal readout + vertical shift times + buffer
-            Andor_Camera_trigger.go_high(t-andor_trigger_delay)
-            Andor_Camera_trigger.go_low(t-andor_trigger_delay+100*usec)
+            Orca_Camera_trigger.go_high(t-andor_trigger_delay)
+            Orca_Camera_trigger.go_low(t-andor_trigger_delay+100*usec)
             # Test to use the two basler cameras for detecting the fluorescence
             # Basler_Camera_fluo_trigger.go_high(t-100*usec-5*usec)           
             # Basler_Camera_fluo_trigger.go_low(t+1*msec)
@@ -170,19 +170,23 @@ for i in range(0,GLOBALS['n_loop']):
         elif sel_camera_fluo=='orca':
             orca_trigger_delay=7.2*usec*(4+1) + 4*usec # (4+1)*7us is in the manual as the longest delay + jitter pg. 49/82; we add 4us as an additonal buffer (total 40us)
             Orca_Camera_fluo_readout=(2304/2)*7.2*usec + (1/17.6)*sec # For USB, rolling shutter timing + inverse max frame rate (fps) at 4096x2304 pixels the readout time is 1/17.6 (for the whole image to be readout) pg. 60/82 of manual
-            Andor_Camera_trigger.go_high(t-orca_trigger_delay) # Same channel as the Andor triggers also Orca now
-            Andor_Camera_trigger.go_low(t-orca_trigger_delay+100*usec)            
+            Orca_Camera_trigger.go_high(t-orca_trigger_delay) # Same channel as the Andor triggers also Orca now
+            Orca_Camera_trigger.go_low(t-orca_trigger_delay+100*usec)            
             # Basler_Camera_abs_trigger.go_high(t-400*usec-5*usec)
             # Basler_Camera_abs_trigger.go_low(t+100*usec)
-            t=take_absorbImaging(t, GLOBALS['AbsImgPulse_duration'])
+            Basler_Camera_extra_trigger.go_high(t-400*usec-5*usec)
+            Basler_Camera_extra_trigger.go_low(t+100*usec)            
+            #t=take_absorbImaging(t, GLOBALS['AbsImgPulse_duration'])
             t+=GLOBALS['FluoImgPulse_duration'] + Orca_Camera_fluo_readout
         elif sel_camera_fluo=='basler_abs':
             Basler_Camera_abs_trigger.go_high(t-100*usec-5*usec)
             Basler_Camera_abs_trigger.go_low(t+1*msec)
             # Basler_Camera_abs.expose(t-100*usec+5*usec,'Fluo', frametype='tiff')
         elif sel_camera_fluo=='basler_fluo':
-            Basler_Camera_fluo_trigger.go_high(t-100*usec-5*usec)
-            Basler_Camera_fluo_trigger.go_low(t+1*msec)
+            # Basler_Camera_fluo_trigger.go_high(t-100*usec-5*usec)
+            # Basler_Camera_fluo_trigger.go_low(t+1*msec)
+            Basler_Camera_extra_trigger.go_high(t-400*usec-5*usec)
+            Basler_Camera_extra_trigger.go_low(t+100*usec) 
             # Basler camera for fluorescence is controlled by Pylon Viewer
             # Basler_Camera_fluo.expose(t-100*usec+5*usec,'Fluo', frametype='tiff')
         t+=t_ahead_fluoimag ############### TIME MACHINE  ############################
@@ -195,8 +199,8 @@ for i in range(0,GLOBALS['n_loop']):
             Andor_Camera_abs_readout=(1024*1024/30e6*sec+1024*2.2*usec)+30*msec # Horizontal readout + vertical shift times + buffer
             beam_duration = 500*usec
 
-            Andor_Camera_trigger.go_high(t-andor_trigger_delay)
-            Andor_Camera_trigger.go_low(t-andor_trigger_delay+100*usec)
+            Orca_Camera_trigger.go_high(t-andor_trigger_delay)
+            Orca_Camera_trigger.go_low(t-andor_trigger_delay+100*usec)
             t+=dt
             # basler_trigger_delay=100*usec+5*usec #100 for camera activation + 5 as safety buffer
             # Basler_Camera_fluo_trigger.go_high(t-basler_trigger_delay)
@@ -205,13 +209,13 @@ for i in range(0,GLOBALS['n_loop']):
             BlueImagingTweez_AOM_TTL(t, True)
             BlueImagingTweez_AOM_TTL(t+beam_duration, False)
             t+=beam_duration+Andor_Camera_abs_readout
-            Andor_Camera_trigger.go_high(t-andor_trigger_delay)
-            Andor_Camera_trigger.go_low(t-andor_trigger_delay+100*usec)
+            Orca_Camera_trigger.go_high(t-andor_trigger_delay)
+            Orca_Camera_trigger.go_low(t-andor_trigger_delay+100*usec)
             BlueImagingTweez_AOM_TTL(t, True)
             BlueImagingTweez_AOM_TTL(t+beam_duration, False)
             t+=beam_duration+Andor_Camera_abs_readout
-            Andor_Camera_trigger.go_high(t-andor_trigger_delay)
-            Andor_Camera_trigger.go_low(t-andor_trigger_delay+100*usec)
+            Orca_Camera_trigger.go_high(t-andor_trigger_delay)
+            Orca_Camera_trigger.go_low(t-andor_trigger_delay+100*usec)
             t+=beam_duration+Andor_Camera_abs_readout
         elif sel_camera_abs =='basler_abs':
             t=take_absorbImaging(t, GLOBALS['AbsImgPulse_duration'])

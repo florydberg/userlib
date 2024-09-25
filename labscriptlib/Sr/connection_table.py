@@ -9,6 +9,7 @@ mr=1 #MogLabsRed
 ca=0 #Camera Andor
 cb_abs=1 #Camera Basler for Absorption
 cb_fluo=0 #Camera Basler for Fluorescence
+cb_extra=0 #extra basler on the objective
 co=0 #Camera Orca
 
 ############################################################################################################### PULSE
@@ -55,8 +56,8 @@ if f:
 
     DigitalOut(name='coilsMosfet', parent_device=DO0, connection=str(5))   
     DigitalOut(name='Tweezer_gate', parent_device=DO0, connection=str(6))
-    if not ca:
-        DigitalOut(name='Andor_Camera_trigger', parent_device=DO0, connection=str(7))    
+    if not co:
+        DigitalOut(name='Orca_Camera_trigger', parent_device=DO0, connection=str(7))    
     if not cb_abs:
         DigitalOut(name='Basler_Camera_abs_trigger', parent_device=DO0, connection=str(8))  
     if not mr:
@@ -79,9 +80,10 @@ if f:
 
     if not cb_fluo:
         DigitalOut(name='Basler_Camera_fluo_trigger', parent_device=DO2, connection=str(4))
-    
-    for i in range(5,16):
-        DigitalOut(name='pokemon'+str(i+1), parent_device=DO2, connection=str(i))
+    if not cb_extra:
+        DigitalOut(name='Basler_Camera_extra_trigger', parent_device=DO2, connection=str(9))    
+    # for i in range(5,16):
+    #     DigitalOut(name='pokemon'+str(i+1), parent_device=DO2, connection=str(i))
 
     ########################                         Floating                               ########################
     if False:
