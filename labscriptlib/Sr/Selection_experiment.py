@@ -24,6 +24,8 @@ if True: ## Selects ##
     sel_camera_abs = GLOBALS['camera_abs'] #'basler_abs', 'andor', 'basler_fluo'
     sel_table_red=GLOBALS['table_red']
 
+Orca_Camera.camera_attributes['EXPOSURE TIME']=0.05
+
 start()
 TABLE_MODE_ON('RedMOT', t)
 t+=dt
@@ -114,8 +116,8 @@ for i in range(0,GLOBALS['n_loop']):
             t+=dt    
             # Orca_Camera_trigger.go_high(t) # Same channel as the Andor triggers also Orca now
             # Orca_Camera_trigger.go_low(t+100*usec)  
-            orca_trigger_delay=7.2*usec*(4+1) + 4*usec
-            # t+=Orca_Camera.expose(t,'cleaning-shot', trigger_duration=100, saving=False)
+            Orca_Labscript_delay= 8.3*msec
+            t+=Orca_Camera.expose(t-Orca_Labscript_delay,'cleaning-shot', trigger_duration=100, saving=False)+Orca_Labscript_delay
 
             t+=dt   
             t+=GLOBALS['MOT_RED_SF_duration']
@@ -165,22 +167,18 @@ for i in range(0,GLOBALS['n_loop']):
             Andor_Camera_fluo_readout=(1024*1024/1e6*sec+1024*2.2*usec)+100*msec # Horizontal readout + vertical shift times + buffer
             Orca_Camera_trigger.go_high(t-andor_trigger_delay)
             Orca_Camera_trigger.go_low(t-andor_trigger_delay+100*usec)
-            # Test to use the two basler cameras for detecting the fluorescence
-            # Basler_Camera_fluo_trigger.go_high(t-100*usec-5*usec)           
-            # Basler_Camera_fluo_trigger.go_low(t+1*msec)
-            # t=take_absorbImaging(t, GLOBALS['FluoImgPulse_duration'])
+
             t+=GLOBALS['FluoImgPulse_duration'] + Andor_Camera_fluo_readout
 
         elif sel_camera_fluo=='orca':
             orca_trigger_delay=7.2*usec*(4+1) + 4*usec # (4+1)*7us is in the manual as the longest delay + jitter pg. 49/82; we add 4us as an additonal buffer (total 40us)
             Orca_Camera_fluo_readout=(2304/2)*7.2*usec + (1/17.6)*sec # For USB, rolling shutter timing + inverse max frame rate (fps) at 4096x2304 pixels the readout time is 1/17.6 (for the whole image to be readout) pg. 60/82 of manual
-            
-            Orca_Camera_trigger.go_high(t-orca_trigger_delay) 
-            Orca_Camera_trigger.go_low(t-orca_trigger_delay+100*usec)     
-            # t+=Orca_Camera.expose(t-orca_trigger_delay,'fluo', trigger_duration=0.1, saving=True)
+            Orca_Labscript_delay= 8.3*msec
 
-            # Basler_Camera_abs_trigger.go_high(t-400*usec-5*usec)
-            # Basler_Camera_abs_trigger.go_low(t+100*usec)
+            # Orca_Camera_trigger.go_high(t-orca_trigger_delay) 
+            # Orca_Camera_trigger.go_low(t-orca_trigger_delay+100*usec) 
+                
+            t+=Orca_Camera.expose(t-orca_trigger_delay-Orca_Labscript_delay,'TweezFluo', trigger_duration=10, saving=True)+orca_trigger_delay+Orca_Labscript_delay
 
             Basler_Camera_extra_trigger.go_high(t-400*usec-5*usec)
             Basler_Camera_extra_trigger.go_low(t+10*usec)
@@ -203,6 +201,7 @@ for i in range(0,GLOBALS['n_loop']):
             Basler_Camera_extra_trigger.go_low(t+100*usec) 
             # Basler camera for fluorescence is controlled by Pylon Viewer
             # Basler_Camera_fluo.expose(t-100*usec+5*usec,'Fluo', frametype='tiff')
+       
         t+=t_ahead_fluoimag ############### TIME MACHINE  ############################
 
     t+=GLOBALS['TOF']# wait for time of flight
@@ -231,6 +230,7 @@ for i in range(0,GLOBALS['n_loop']):
             # Orca_Camera_trigger.go_high(t-andor_trigger_delay)
             # Orca_Camera_trigger.go_low(t-andor_trigger_delay+100*usec)
             t+=beam_duration+Andor_Camera_abs_readout
+
         elif sel_camera_abs =='basler_abs':
             t=take_absorbImaging(t, GLOBALS['AbsImgPulse_duration'])
 
@@ -238,10 +238,7 @@ for i in range(0,GLOBALS['n_loop']):
     Twizzi_Switch_TTL(t, False)
     t+=dt
     COILScomp_SwitchON_TTL(t, False)
-    setoff_CompCoils(t)
+    # setoff_CompCoils(t)
     t+=10*us
-
-
-
 
 stop(t+GLOBALS['stop_buffering_time'])
