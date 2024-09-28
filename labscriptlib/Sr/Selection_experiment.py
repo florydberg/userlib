@@ -183,10 +183,6 @@ for i in range(0,GLOBALS['n_loop']):
             Basler_Camera_extra_trigger.go_high(t-400*usec-5*usec)
             Basler_Camera_extra_trigger.go_low(t+10*usec)
 
-            t+=10*usec     
-
-            t=take_absorbImaging(t-400*usec-5*usec, GLOBALS['AbsImgPulse_duration'])
-
             t+=GLOBALS['FluoImgPulse_duration'] + Orca_Camera_fluo_readout
 
         elif sel_camera_fluo=='basler_abs':
