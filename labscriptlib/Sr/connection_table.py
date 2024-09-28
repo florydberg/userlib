@@ -81,7 +81,7 @@ if f:
     if not cb_fluo:
         DigitalOut(name='Basler_Camera_fluo_trigger', parent_device=DO2, connection=str(4))
     if not cb_extra:
-        DigitalOut(name='Basler_Camera_extra_trigger', parent_device=DO2, connection=str(9))    
+        DigitalOut(name='Basler_Camera_extra_trigger', parent_device=DO2, connection=str(8))    
     # for i in range(5,16):
     #     DigitalOut(name='pokemon'+str(i+1), parent_device=DO2, connection=str(i))
 
@@ -266,7 +266,7 @@ if cb_abs:
             serial_number=24799497,
             minimum_recovery_time=36e-3,
             trigger_duration=10,
-            stop_acquisition_timeout='inf',
+            stop_acquisition_timeout=10,
             exception_on_failed_shot=False,
             camera_attributes = {
                 'ExposureMode': 'Timed',
@@ -364,8 +364,88 @@ if cb_fluo:
 
             )   
 
-# if co:
-    
+if co:
+    from user_devices.DCAMCamera.labscript_devices  import DCAMCamera
+
+    Orca_Camera= DCAMCamera('Orca_Camera', parent_device=DO0, #needs t=+250*ms after start before arming the trigger
+                            connection=7,
+                            serial_number='000548',
+                            parentless=False,
+                            camera_attributes = {
+                                'TRIGGER GLOBAL EXPOSURE': 2.0,                                
+                                'EXPOSURE TIME':0.012, # 0.0082944, #sec
+                                'SENSOR MODE': 1.0,
+                                'READOUT SPEED': 2.0,
+                                'READOUT DIRECTION': 1.0,
+                                'COLORTYPE': 1.0,
+                                'BIT PER CHANNEL': 16.0,
+
+                                'TRIGGER SOURCE': 2, #1 internal, 2 external
+                                'TRIGGER MODE': 2.0,
+                                'TRIGGER ACTIVE': 1.0,
+
+                                'TRIGGER POLARITY': 2.0,
+                                'TRIGGER CONNECTOR': 1.0,
+                                'TRIGGER TIMES': 1.0,
+                                'TRIGGER DELAY': 0.0,
+
+                                'SENSOR TEMPERATURE': -20.0,
+                                'SENSOR COOLER STATUS': 2.0,
+
+                                'DEFECT CORRECT MODE': 2.0,
+                                'HOT PIXEL CORRECT LEVEL': 1.0,
+                                'BINNING': 1.0,
+
+                                'IMAGE WIDTH': 4096.0,
+                                'IMAGE HEIGHT': 2304.0,
+                                'IMAGE ROWBYTES': 8192.0,
+                                'IMAGE FRAMEBYTES': 18874368.0,
+                                'IMAGE TOP OFFSET BYTES': 0.0,
+                                'IMAGE PIXEL TYPE': 2.0,
+                                'IMAGE CAMERA STAMP': 0.0,
+
+                                'OUTPUT TRIGGER SOURCE[0]': 4.0,
+                                'OUTPUT TRIGGER POLARITY[0]': 2.0,
+                                'OUTPUT TRIGGER ACTIVE[0]': 1.0,
+                                'OUTPUT TRIGGER DELAY[0]': 0.0,
+                                'OUTPUT TRIGGER PERIOD[0]': 0.0009999999999999998,
+                                'OUTPUT TRIGGER KIND[0]': 2.0,
+                                
+                                'OUTPUT TRIGGER PRE HSYNC COUNT': 0.0,
+
+                                # 'SUBARRAY HPOS': 0.0,
+                                # 'SUBARRAY HSIZE': 4096.0,
+                                # 'SUBARRAY VPOS': 0.0,
+                                # 'SUBARRAY VSIZE': 2304.0,
+                                # 'SUBARRAY MODE': 1.0,
+
+                                'CAPTURE MODE': 1.0, #must stay 1
+                                'INTENSITY LUT MODE': 1.0,
+                                'INTENSITY LUT PAGE': 1.0,
+
+                                # 'INTERNAL LINE SPEED': 0.638888888888889,
+                                # 'INTERNAL LINE INTERVAL': 7.2e-06,
+
+                                # 'RECORD FIXED BYTES PER FILE': 256.0,
+                                # 'RECORD FIXED BYTES PER SESSION': 916.0,
+                                # 'RECORD FIXED BYTES PER FRAME': 18874416.0,
+
+                                # 'MASTER PULSE MODE': 1.0,
+                                # 'MASTER PULSE TRIGGER SOURCE': 1.0,
+                                # 'MASTER PULSE INTERVAL': 0.1,
+                                # 'MASTER PULSE BURST TIMES': 1.0,
+
+                                # 'SYSTEM ALIVE': 2.0,
+                                # 'CONVERSION FACTOR COEFF': 0.11,
+                                # 'CONVERSION FACTOR OFFSET': 200.0,
+                            },
+                            
+                            manual_mode_camera_attributes = {
+                                'TRIGGER SOURCE': 1, #1 internal, 2 external
+                                # 'TRIGGER MODE': 2.0,
+                            },
+                            ) # ref file:///C:/Users/florydberg01/Documents/Orca-settings/propC15550-20UP_en.html
+       
 ############################################################################################################### AWG
 if a:
     from user_devices.SpectrumAWG.labscript_devices import SpectrumAWG, AWGOutput
