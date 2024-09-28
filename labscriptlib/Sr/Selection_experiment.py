@@ -23,9 +23,7 @@ if True: ## Selects ##
     sel_camera_fluo = GLOBALS['camera_fluo'] #'andor', 'orca', 'basler_abs', 'basler_fluo'
     sel_camera_abs = GLOBALS['camera_abs'] #'basler_abs', 'andor', 'basler_fluo'
     sel_table_red=GLOBALS['table_red']
-
-Orca_Camera.camera_attributes['EXPOSURE TIME']=0.05
-
+    
 start()
 TABLE_MODE_ON('RedMOT', t)
 t+=dt
