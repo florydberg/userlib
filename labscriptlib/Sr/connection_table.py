@@ -8,9 +8,9 @@ mb=1 #MogLabsBlue
 mr=1 #MogLabsRed
 ca=0 #Camera Andor
 cb_abs=1 #Camera Basler for Absorption
-cb_fluo=0 #Camera Basler for Fluorescence
+cb_fluo=1 #Camera Basler for Fluorescence
 cb_extra=0 #extra basler on the objective
-co=0 #Camera Orca
+co=1 #Camera Orca
 
 ############################################################################################################### PULSE
 if p:

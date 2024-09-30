@@ -114,8 +114,6 @@ for i in range(0,GLOBALS['n_loop']):
             t+=3*dt
             MOT_Red3D_singleFrq_TTL(t, True)
             t+=dt    
-            # Orca_Camera_trigger.go_high(t) # Same channel as the Andor triggers also Orca now
-            # Orca_Camera_trigger.go_low(t+100*usec)  
             Orca_Labscript_delay= 8.3*msec
             t+=Orca_Camera.expose(t-Orca_Labscript_delay,'cleaning-shot', trigger_duration=100, saving=False)+Orca_Labscript_delay
 
@@ -175,9 +173,6 @@ for i in range(0,GLOBALS['n_loop']):
             Orca_Camera_fluo_readout=(2304/2)*7.2*usec + (1/17.6)*sec # For USB, rolling shutter timing + inverse max frame rate (fps) at 4096x2304 pixels the readout time is 1/17.6 (for the whole image to be readout) pg. 60/82 of manual
             Orca_Labscript_delay= 8.3*msec
 
-            # Orca_Camera_trigger.go_high(t-orca_trigger_delay) 
-            # Orca_Camera_trigger.go_low(t-orca_trigger_delay+100*usec) 
-                
             t+=Orca_Camera.expose(t-orca_trigger_delay-Orca_Labscript_delay,'TweezFluo', trigger_duration=10, saving=True)+orca_trigger_delay+Orca_Labscript_delay
 
             Basler_Camera_extra_trigger.go_high(t-400*usec-5*usec)
