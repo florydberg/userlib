@@ -114,8 +114,8 @@ for i in range(0,GLOBALS['n_loop']):
             t+=dt    
             Orca_Labscript_delay= 8.3*msec
             if not co:
-                # Orca_Camera_trigger.go_high(t-orca_trigger_delay) 
-                # Orca_Camera_trigger.go_low(t-orca_trigger_delay+100*usec) 
+                Orca_Camera_trigger.go_high(t-orca_trigger_delay) 
+                Orca_Camera_trigger.go_low(t-orca_trigger_delay+100*usec) 
                 aa=0
             else:    
                 t+=Orca_Camera.expose(t-orca_trigger_delay-Orca_Labscript_delay,'cleaning-shot', trigger_duration=10, saving=False)+orca_trigger_delay+Orca_Labscript_delay
