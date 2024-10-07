@@ -277,7 +277,7 @@ if cb_abs:
                 'Width': 1000,
                 'Height': 1000,
                 'OffsetX': 1800,
-                'OffsetY': 1000,
+                'OffsetY': 800,
                 'CenterX': False,
                 'CenterY': False,
                 'PixelFormat': 'Mono12',

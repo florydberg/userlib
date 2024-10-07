@@ -25,7 +25,8 @@ if True: ## Selects ##
     sel_table_red=GLOBALS['table_red']
 
 start()
-TABLE_MODE_ON('RedMOT', t)
+if sel_table_red:
+    TABLE_MODE_ON('RedMOT', t)
 t+=dt
 set_MOGLABS_ready(t)
 t+=dt
@@ -114,8 +115,8 @@ for i in range(0,GLOBALS['n_loop']):
             t+=dt    
             Orca_Labscript_delay= 8.3*msec
             if not co:
-                Orca_Camera_trigger.go_high(t-orca_trigger_delay) 
-                Orca_Camera_trigger.go_low(t-orca_trigger_delay+100*usec) 
+                Orca_Camera_trigger.go_high(t) 
+                Orca_Camera_trigger.go_low(t+100*usec) 
                 aa=0
             else:    
                 t+=Orca_Camera.expose(t-orca_trigger_delay-Orca_Labscript_delay,'cleaning-shot', trigger_duration=10, saving=False)+orca_trigger_delay+Orca_Labscript_delay

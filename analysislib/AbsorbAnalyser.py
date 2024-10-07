@@ -291,10 +291,10 @@ if True: #functions definition
             plt.figure()
             plt.imshow(data, cmap='viridis', vmin=0, vmax=0.2)
             plt.colorbar()
-            plt.xticks(ticks=x_ticks, labels=x_values)
-            plt.yticks(ticks=y_ticks, labels=y_values)
-            plt.xlabel('mm')
-            plt.ylabel('mm')
+            # plt.xticks(ticks=x_ticks, labels=x_values)
+            # plt.yticks(ticks=y_ticks, labels=y_values)
+            # plt.xlabel('mm')
+            # plt.ylabel('mm')
             plt.show() 
 
 
@@ -402,9 +402,10 @@ if True:# ROI Selection
     # RY=1000
 
    
-    P0=(50,0)   # Starting point for the atoms ROI
+    P0=(250,300) # Starting point for the atoms ROI
     RX=700
     RY=700
+
     # P0=(190,150)   # Starting point for the atoms ROI
     # RX=500
     # RY=500  
@@ -423,8 +424,8 @@ if True:# ROI Selection
     ray=400       
 ######################
 
-scan_parameter='Imaging_Frq'
-scan_unit='MHz'
+scan_parameter='Red_MOT_Pow'
+scan_unit='dBm'
 
 op_plotting = False #extra images
 op_save_absorb_trio_raw = False
