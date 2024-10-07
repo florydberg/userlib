@@ -10,10 +10,7 @@ from labscript.labscript import *
 import analysislib
 from scipy.optimize import curve_fit, least_squares
 import time # for testing speed of program
-import datetime, time
-ts=time.time()
-datetime.datetime.now()
-dt=datetime.datetime.now().date()
+
 
 def bin_data(data, binfactor):
     # Get original shape
@@ -118,6 +115,7 @@ if True: #functions definition
     
     def fit_gaussian(shot, value, RX, RY, data, scan_parameter, scan_unit, binfactor, N_2D, binning):
         
+
         # Define a 2D Gaussian function
         def gaussian_2d(xy, amplitude, xo, yo, sigma_x, sigma_y, theta, offset):
             theta = theta * np.pi
@@ -256,8 +254,7 @@ if True: #functions definition
                         round(xo * 100) / 100, round((RY - yo) * 100) / 100, str(picname))))
 
         # plt.colorbar()
-        # plt.savefig(picname + ".png")
-        save_imag(plt, "abs_imaging")
+        plt.savefig(picname + ".png")
         sigma_awg = (sigma_x+sigma_y)/2
 
         plt.show()
@@ -320,8 +317,6 @@ if True: #functions definition
                             hdf5_file.create_dataset(save_path, data=open(file_path).read()) #TODO: fix the recreation of group in dataframe
 
             _vcs_cache_rlock = threading.RLock()
-
-            
             def _file_watcher_callback(name, info, event):
                 with _vcs_cache_rlock:
                     _vcs_cache[name] = _run_vcs_commands(name)
@@ -353,20 +348,26 @@ if True: #functions definition
         
         ax3.imshow(img['Background'], cmap='viridis', vmin=0, vmax=np.amax(img['Atoms']))
 
-        save_imag(plt, "Atoms_Probe_Back")
-
         plt.show()
 
-    def save_absorb_trio(img, value,scan_parameter, scan_unit):
-        im = Image.fromarray(img['Atoms'])
-        picname = 'raw_1_Atoms'
-        im.save(picname + ".tiff")
-        im = Image.fromarray(img['Probe'])
-        picname = 'raw_1_Probe'
-        im.save(picname + ".tiff")
-        im = Image.fromarray(img['Background'])
-        picname = 'raw_1_Background'
-        im.save(picname + ".tiff")
+    def save_image(img,  path):
+        print(path)
+        with Run(path).open('r+') as shot:
+            data_frame = data()
+            # path=data_frame['filepath'].iloc[-1]
+            file_path = os.path.realpath(__file__)
+            prefix = os.path.dirname(analysislib.__file__)
+            save_path = 'analysislib/' + file_path.replace(prefix, '').replace('\\', '/').replace('//', '/')
+            with h5py.File(path, 'r') as hdf5_file:
+                        if save_path not in hdf5_file:
+                            # Don't try to save the same module script twice! (seems to at least
+                            # double count __init__.py when you import an entire module as in
+                            # from labscriptlib.stages import * where stages is a folder with an
+                            # __init__.py file. Doesn't seem to want to double count files if
+                            # you just import the contents of a file within a module
+                            hdf5_file.create_dataset(save_path, data=open(file_path).read()) #TODO: fix the recreation of group in dataframe
+
+            _vcs_cache_rlock = threading.RLock()
 
     def plot_single_image(MOT, corr, BEAM, img, i):
         plt.figure()
@@ -394,23 +395,7 @@ if True: #functions definition
         plt.title('Up-Down @'+str(value)+scan_unit+scan_parameter)
         plt.show()  
 
-    def save_imag(plt, name):
-        picname = name
-        img_name=str(dt) + '_' + str(datetime.datetime.now().hour) + str(datetime.datetime.now().minute) + str(datetime.datetime.now().second)
-        print(path)
-        one_level_up = os.path.dirname(path)
-        plt.savefig(one_level_up + '/' + img_name +  '_' + picname + ".png")
-        print(picname + ' saved')
-
-if True:# ROI Selection
-    # P0=(70,10)   # Starting point for the atoms ROI
-    # RX=920
-    # RY=920
-    # P0=(0,0)   # Starting point for the atoms ROI
-    # RX=1000
-    # RY=1000
-
-   
+if True:# ROI Selection   
     P0=(50,0)   # Starting point for the atoms ROI
     RX=700
     RY=700
@@ -430,13 +415,18 @@ if True:# ROI Selection
 
     b0=(500,400)    # Starting point for the Probe area
     ray=400       
+
+    #FluoArea
+    F0=[1500,500]
+    FX=1000
+    FY=500
+
 ######################
 
 scan_parameter='Imaging_Frq'
 scan_unit='MHz'
 
 op_plotting = False #extra images
-
 op_FFTfilter = False
 op_binning = True
 binfactor=2
@@ -449,90 +439,57 @@ BlaserAbs_for_Fluo=False
 with Run(path).open('r+') as shot:
     start_time = time.time()
     data_frame=data(path)
-
-    j=0
     img={}
-    for i in ['Atoms', 'Probe', 'Background']:
 
-        MOT=patches.Rectangle(P0, RX, RY, linewidth=1, edgecolor='r', facecolor='none') 
-        corr=patches.Rectangle(p0, rX, rY, linewidth=1, edgecolor='b', facecolor='none')
-        BEAM=patches.Circle(b0, ray, linewidth=1, edgecolor='y', facecolor='none')
-    
-        shot_image=shot.get_image('Basler_Camera_abs',str(i),'tiff')  # Obtaining multiple images and averaging them:
+
+    for i in ['TweezFluo']:    
+        shot_image=shot.get_image('Orca_Camera',str(i),'frame')  # Obtaining multiple images and averaging them:
         if int(data_frame['n_loop'])>1: img[str(i)] = np.average(shot_image.astype(np.float32),axis=0)
         else: img[str(i)]=shot_image.astype(np.float32)
 
-        if op_plotting: plot_single_image(MOT, corr, BEAM, img, i)
-      
-    figure()
-    display_absorb_trio(img)
+    T0=[2600,900]
+    Tray=100
 
-    up=(img['Atoms']-img['Background'])
-    print('Image dimensions = '+ str(up.shape))
-    down=(img['Probe']-img['Background'])
-
-    # TODO optional place to put Fourier filtering on up and down
-
-    down[down<=1] = 1 
-    up[up<=1] = 1
-
-    i_c=intensity_correction(up, down, dX, dY)
-    print('intensity correction', i_c)
-    down=down*i_c
-
-    if op_plotting: plot_up_down(up, down, data_frame[scan_parameter], scan_parameter, scan_unit, P0, RX, RY)
-
-    optical_density = -1 *np.log((up/down))
-    if op_FFTfilter:
-        optical_density = image_fft(optical_density)
-    #OD = optical_density[np.ix_(range(DY[0],DY[1]),range(DX[0],DX[1]))
-    OD = optical_density[np.ix_(range(DY[0],DY[1]),range(DX[0],DX[1]))]
-
-
-    if op_plotting:
-        plt.figure()
-        plt.imshow(OD, cmap='viridis', vmin=0, vmax=0.5 )
-        plt.colorbar()
-        plt.title('Optical Density w/o Fringes')
-        plt.show()
-
-    end_time = time.time()
-    elapsed_time = end_time - start_time
-    print(f"Elapsed time: {elapsed_time:.6f} seconds")
-
-
-    n_2D = OD/sigma
-    N_2D = n_2D*pixArea
-    
-    if op_binning:
-        
-        datafit= bin_data(OD, binfactor)
-        RXfit=int(RX/binfactor)
-        RYfit=int(RY/binfactor)
+    cntrL_ROI=0
+    if not cntrL_ROI:
+        FluoImag=img['TweezFluo']
+        TweezArea=patches.Circle(T0, Tray, linewidth=1, edgecolor='r', facecolor='none')
     else:
-        datafit=OD
-        binfactor=1
-        RXfit=RX
-        RYfit=RY
+        FluoImag=img['TweezFluo'][F0[1]:F0[1]+FY, F0[0]:F0[0]+FX]
+        TweezArea=patches.Circle([T0[0]-F0[0],T0[1]-F0[1]], Tray, linewidth=1, edgecolor='r', facecolor='none')
+    # TweezerSpot=img['TweezFluo'][round(T0[1]-Tray/2):round(T0[1]+Tray/2), round(T0[0]+Tray/2):round(T0[0]+Tray/2)]
 
-    nn_2D = datafit/sigma
-    NN_2D = nn_2D*pixArea*binfactor**2
-    NN_2D[NN_2D<0]=0
-    Ntot_sum = np.sum(NN_2D) # Total number of atoms in the cloud from images
-
-    print('atoms', Ntot_sum )
-    print(f"First-guess number of atoms in the cloud: {Ntot_sum:.2e}")
-    shot.save_result('sum_of_atoms', Ntot_sum)
+    TweezerSpot=img['TweezFluo'][T0[1]-Tray:T0[1]+Tray, T0[0]-Tray:T0[0]+Tray]
+    totphotons=np.sum(TweezerSpot)
     
-    if op_gauss_fit:
-        fit_gaussian(shot, data_frame[scan_parameter], RXfit, RYfit, datafit, scan_parameter, scan_unit, binfactor, N_2D, binfactor)
+    plt.figure()
+    plt.title('TweezFluo')
+    plt.gca().add_patch(TweezArea)
+    plt.imshow(FluoImag, cmap='viridis' )
+    plt.colorbar()
+    plt.legend(['Tweezer Integration Area'], loc ="lower right")
+    plt.xlabel('Integrated Signal='+str(totphotons))
+    plt.show() 
 
-    if BlaserAbs_for_Fluo:
-        shot_image=shot.get_image('Basler_Camera_abs','Fluo','tiff')
-        figure()
-        plt.imshow(shot_image.astype(np.float32), cmap='viridis', vmin=0, vmax=np.amax(img['Atoms']))
+    save_image(img,  path)
 
-    shot.save_result('scan_parameter', scan_parameter)
-    shot.save_result('scan_unit', scan_unit)
+
+    plt.figure(figsize=(10, 10))
+    # 2d image plot with profiles
+    h, w = TweezerSpot.shape 
+    h = h * 2
+    w = w * 2
+
+    gs = gridspec.GridSpec(2, 2, width_ratios=[w * .2, w], height_ratios=[ h, h * .2])
+    ax = [plt.subplot(gs[3]), plt.subplot(gs[0]), plt.subplot(gs[1])]
+    inty = np.sum(TweezerSpot, axis=1)
+    ax[1].plot(inty[::-1], np.linspace(1, inty.shape, Tray*2), 'b') 
+    intx = np.sum(TweezerSpot, axis=0)
+    ax[0].plot(intx, 'b')       
+    plt.title('TweezSpot')
+    ax[2].imshow(TweezerSpot, cmap='viridis',vmin=np.amin(TweezerSpot) , vmax=np.amax(TweezerSpot) ) 
+    plt.xlabel('Integrated Signal='+str(totphotons))
+    plt.show() 
+
 
 saving_script(path)

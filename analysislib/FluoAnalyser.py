@@ -10,17 +10,36 @@ from labscript.labscript import *
 import analysislib
 from scipy.optimize import curve_fit, least_squares
 import time # for testing speed of program
+import datetime, time
+ts=time.time()
+datetime.datetime.now()
+dt=datetime.datetime.now().date()
 
-def bin_data(data, bin_size):
-    shape = data.shape
-    new_shape = (shape[0] // bin_size, bin_size, shape[1] // bin_size, bin_size)
-    binned_data = data.reshape(new_shape).sum(axis=(1, 3)) / (bin_size**2)
+def bin_data(data, binfactor):
+    # Get original shape
+    original_shape = np.array(data.shape)
+
+    # Check if the dimensions are divisible by binfactor
+    if np.any(original_shape % binfactor != 0):
+        # If not, crop the array to the nearest size that is divisible by binfactor
+        new_shape = original_shape - (original_shape % binfactor)
+        data = data[:new_shape[0], :new_shape[1]]
+    
+    # Calculate new shape
+    new_shape = (data.shape[0] // binfactor, binfactor,
+                 data.shape[1] // binfactor, binfactor)
+    
+    # Perform binning
+    binned_data = data.reshape(new_shape).sum(axis=(1, 3)) / (binfactor**2)
+    
     return binned_data
 
-treshold=300
+
+threshold_min=5
+threshold_max=100
 if True: #functions definition
     if True:  # Constants and Image Analysis  
-        V_MAX=0.10
+        V_MAX=0.15 #.15 for blue .40 for red
 
         Imag_beam_Power=440e-6 #W   #TODO: update this value with the measure we have to take
         waist_0=6.667e-3 #m
@@ -45,7 +64,7 @@ if True: #functions definition
         Gam=32e6
         sigma_0=3*lambda_laser**2/(2*np.pi)  #  previous calculation was 9.7e-14 
         sigma=sigma_0/(1+(2*delta/Gam)**2 + I/I_sat)
-        print('Isat = '+ str(I_sat))
+        print('sigma = '+ str(I_sat))
         print('sigma = '+ str(sigma))
 
     def image_fft(image):
@@ -98,7 +117,7 @@ if True: #functions definition
         return image_fft
     
     def fit_gaussian(shot, value, RX, RY, data, scan_parameter, scan_unit, binfactor, N_2D, binning):
-        op_gauss_fit_internal = True
+        
 
         # Define a 2D Gaussian function
         def gaussian_2d(xy, amplitude, xo, yo, sigma_x, sigma_y, theta, offset):
@@ -127,23 +146,34 @@ if True: #functions definition
 
         inty = np.sum(data, axis=1)
         intx = np.sum(data, axis=0)
-        ampguess=10# min([np.max(data),np.max(intx)/(2*np.pi)**(1/2),np.max(inty)/(2*np.pi)**(1/2)])
+        ampguess=min([np.max(data),np.max(intx)/(2*np.pi)**(1/2),np.max(inty)/(2*np.pi)**(1/2)]) #0.45
         
-        # Fit the 2D Gaussian to the image
-        
-        initial_guess = (ampguess, RX/2, RY/2, RX/6, RY/6, 0.01, 0)  # Initial guess for amplitude, xo, yo, sigma_x, sigma_y, theta, offset
-        low = [0, RX/30, RY/30, 3, 3, 0, -10]
-        upper = [1e10, RX-RX/30, RY-RY/30, RX/3, RY/3, 0.25, 10]
+        # First Guess of Center
+        edge=100
+        x_0 = next(i for i in range(edge,len(intx)-edge) if intx[i] == max(intx[edge:len(intx)-edge]))
+        y_0 = next(i for i in range(edge,len(inty)-edge) if inty[i] == max(inty[edge:len(inty)-edge]))
+
+        print((x_0, len(inty)-y_0))
+
+
+        initial_guess = (ampguess, x_0, y_0, 10, 10, 0.01, 0.01)  # Initial guess for amplitude, xo, yo, sigma_x, sigma_y, theta, offset
+        low = [0, 0, 0, 0, 0, 0, -10]
+        upper = [1e10, RX-RX/10, RY-RY/10, 2*RX, 2*RY, 0.25, 10]
         bounds = [low, upper]
 
         def residuals(params, xy, data):
             return gaussian_2d(xy, *params) - data
+
         if op_gauss_fit_internal:
-            popt, _ = curve_fit(gaussian_2d, (X, Y), data.ravel(order='F'), p0=initial_guess, bounds=bounds)
+            try:
+                popt, _ = curve_fit(gaussian_2d, (X, Y), data.ravel(order='F'), p0=initial_guess, bounds=bounds)
+            except:
+                popt = [0, 1, 1, 1, 1, 0, 0]
             
             # Extract the parameters
+
             # data_ravel = data.ravel(order='F')
-            # result = least_squares(residuals, initial_guess, bounds=bounds, args=(xy, data_ravel), method='trf')
+            # result = least_squares(residuals, initial_guess, bounds=bounds, args=((X, Y), data_ravel), method='trf')
             # popt = result.x
         else:
             popt = [0, 1, 1, 1, 1, 0, 0]
@@ -153,8 +183,10 @@ if True: #functions definition
         popt_s=amplitude, xo, yo, sigma_x, sigma_y, theta, 0
         Npeak = (amplitude)* pixArea * binfactor**2 / sigma
         
-        if Npeak<treshold:
-            amplitude=0       
+        if not (threshold_min<sigma_x<threshold_max and threshold_min<sigma_y<threshold_max) :
+            amplitude=0  
+            Npeak=0  
+            offset=0   
             xo=0
             yo=RY
         popt=amplitude, xo, yo, sigma_x, sigma_y, theta, offset  
@@ -242,6 +274,35 @@ if True: #functions definition
 
         print()
 
+        # x_values=np.round(linspace(0,(700-5)*pixel_size*1000, 6),2)
+        x_values=np.array([0,0.21,0.42,0.63,0.84,1.05])
+        x_ticks=np.arange(0, data.shape[1],60)
+
+        # y_values=np.round(linspace(0,(700-5)*pixel_size*1000, 6),2)
+        # y_values=np.array([0,0.26,0.52,0.77,1.03,1.28])
+        y_values=np.array([0,0.21,0.42,0.63,0.84,1.05])
+        y_ticks=np.arange(0, data.shape[1],60)
+
+
+        if True:
+            plt.figure()
+            plt.imshow(data, cmap='viridis', vmin=0, vmax=0.2)
+            plt.colorbar()
+            plt.xticks(ticks=x_ticks, labels=x_values)
+            plt.yticks(ticks=y_ticks, labels=y_values)
+            plt.xlabel('mm')
+            plt.ylabel('mm')
+            plt.show() 
+
+
+
+
+        #plt.figure()
+        #plt.imshow(data, cmap='viridis' )
+        #plt.colorbar()
+        #plt.yticks(ticks=y_ticks, labels=y_values)
+        #plt.show() 
+        
     def saving_script(path):
         with Run(path).open('r+') as shot:
             data_frame = data()
@@ -292,16 +353,24 @@ if True: #functions definition
 
         plt.show()
 
-    def save_absorb_trio(img, value,scan_parameter, scan_unit):
-        im = Image.fromarray(img['Atoms'])
-        picname = 'raw_1_Atoms'
-        im.save(picname + ".tiff")
-        im = Image.fromarray(img['Probe'])
-        picname = 'raw_1_Probe'
-        im.save(picname + ".tiff")
-        im = Image.fromarray(img['Background'])
-        picname = 'raw_1_Background'
-        im.save(picname + ".tiff")
+    def save_image(img,  path):
+        print(path)
+        with Run(path).open('r+') as shot:
+            data_frame = data()
+            # path=data_frame['filepath'].iloc[-1]
+            file_path = os.path.realpath(__file__)
+            prefix = os.path.dirname(analysislib.__file__)
+            save_path = 'analysislib/' + file_path.replace(prefix, '').replace('\\', '/').replace('//', '/')
+            with h5py.File(path, 'r') as hdf5_file:
+                        if save_path not in hdf5_file:
+                            # Don't try to save the same module script twice! (seems to at least
+                            # double count __init__.py when you import an entire module as in
+                            # from labscriptlib.stages import * where stages is a folder with an
+                            # __init__.py file. Doesn't seem to want to double count files if
+                            # you just import the contents of a file within a module
+                            hdf5_file.create_dataset(save_path, data=open(file_path).read()) #TODO: fix the recreation of group in dataframe
+
+            _vcs_cache_rlock = threading.RLock()
 
     def plot_single_image(MOT, corr, BEAM, img, i):
         plt.figure()
@@ -329,17 +398,21 @@ if True: #functions definition
         plt.title('Up-Down @'+str(value)+scan_unit+scan_parameter)
         plt.show()  
 
-if True:# ROI Selection
-    # P0=(70,10)   # Starting point for the atoms ROI
-    # RX=920
-    # RY=920
-    # P0=(0,0)   # Starting point for the atoms ROI
-    # RX=1000
-    # RY=1000
-   
-    P0=(250,200)   # Starting point for the atoms ROI
-    RX=600
-    RY=600
+    def save_imag(plt, name):
+        picname = name
+        img_name=str(dt) + '_' + str(datetime.datetime.now().hour) + str(datetime.datetime.now().minute) + str(datetime.datetime.now().second)
+        print(path)
+        one_level_up = os.path.dirname(path)
+        plt.savefig(one_level_up + '/' + img_name +  '_' + picname + ".png")
+        print(picname + ' saved')
+
+if True:# ROI Selection   
+    P0=(50,0)   # Starting point for the atoms ROI
+    RX=700
+    RY=700
+    # P0=(190,150)   # Starting point for the atoms ROI
+    # RX=500
+    # RY=500  
 
     DX=(P0[0], P0[0]+RX)
     DY=(P0[1], P0[1]+RY)
@@ -353,38 +426,81 @@ if True:# ROI Selection
 
     b0=(500,400)    # Starting point for the Probe area
     ray=400       
-######################
 
-scan_parameter='ImagingTweez_Frq'
+    #FluoArea
+    F0=[1500,500]
+    FX=1000
+    FY=500
+
+######################
+scan_parameter='Imaging_Frq'
 scan_unit='MHz'
 
-second_scan_parameter='ImagingTweez_Pow'
-second_scan_unit='dBm'
-
 op_plotting = False #extra images
-op_save_absorb_trio_raw = False
 op_FFTfilter = False
-op_binning = False
-op_gauss_fit = False
+op_binning = True
+binfactor=2
+op_gauss_fit = True
+op_gauss_fit_internal = 1
+BlaserAbs_for_Fluo=False
+
 ######################
 
 with Run(path).open('r+') as shot:
     start_time = time.time()
     data_frame=data(path)
-    j=0
 
-    img_fluo={}
-    for i in ['Fluo0']:
-        shot_image_fluo=shot.get_image('Andor_Camera',str(i),'tiff')  # Obtaining multiple images and averaging them:
-        if int(data_frame['n_loop'])>1: img_fluo['Andor'] = np.average(shot_image_fluo.astype(np.float32),axis=0)
-        else: img_fluo['Andor']=shot_image_fluo.astype(np.float32)
+    img={}
+    for i in ['TweezFluo']:    
+        shot_image=shot.get_image('Orca_Camera',str(i),'frame')  # Obtaining multiple images and averaging them:
+        if int(data_frame['n_loop'])>1: img[str(i)] = np.average(shot_image.astype(np.float32),axis=0)
+        else: img[str(i)]=shot_image.astype(np.float32)
 
-    plt.figure()
-    plt.imshow(img_fluo['Andor'], cmap='viridis')
-    # plt.imshow(img_fluo['Andor'], cmap='viridis',vmax=600)
-    plt.title('Fluorescence imaging @'+str(data_frame[scan_parameter]) +scan_unit +scan_parameter)
-    plt.xlabel('Fluorescence imaging @'+str(data_frame[second_scan_parameter]) +second_scan_unit +second_scan_parameter)
+    T0=[2600,900]
+    Tray=100
 
+    cntrL_ROI=0
+    if not cntrL_ROI:
+        FluoImag=img['TweezFluo']
+        TweezArea=patches.Circle(T0, Tray, linewidth=1, edgecolor='r', facecolor='none')
+    else:
+        FluoImag=img['TweezFluo'][F0[1]:F0[1]+FY, F0[0]:F0[0]+FX]
+        TweezArea=patches.Circle([T0[0]-F0[0],T0[1]-F0[1]], Tray, linewidth=1, edgecolor='r', facecolor='none')
+    # TweezerSpot=img['TweezFluo'][round(T0[1]-Tray/2):round(T0[1]+Tray/2), round(T0[0]+Tray/2):round(T0[0]+Tray/2)]
+
+    TweezerSpot=img['TweezFluo'][T0[1]-Tray:T0[1]+Tray, T0[0]-Tray:T0[0]+Tray]
+    totphotons=np.sum(TweezerSpot)
     
+    plt.figure()
+    plt.title('TweezFluo')
+    plt.gca().add_patch(TweezArea)
+    plt.imshow(FluoImag, cmap='viridis' )
+    plt.colorbar()
+    plt.legend(['Tweezer Integration Area'], loc ="lower right")
+    plt.xlabel('Integrated Signal='+str(totphotons))
+    save_imag(plt, 'fluo' )
+    plt.show() 
+
+    save_image(img,  path)
+
+
+    plt.figure(figsize=(10, 10))
+    # 2d image plot with profiles
+    h, w = TweezerSpot.shape 
+    h = h * 2
+    w = w * 2
+
+    gs = gridspec.GridSpec(2, 2, width_ratios=[w * .2, w], height_ratios=[ h, h * .2])
+    ax = [plt.subplot(gs[3]), plt.subplot(gs[0]), plt.subplot(gs[1])]
+    inty = np.sum(TweezerSpot, axis=1)
+    ax[1].plot(inty[::-1], np.linspace(1, inty.shape, Tray*2), 'b') 
+    intx = np.sum(TweezerSpot, axis=0)
+    ax[0].plot(intx, 'b')       
+    plt.title('TweezSpot')
+    ax[2].imshow(TweezerSpot, cmap='viridis',vmin=np.amin(TweezerSpot) , vmax=np.amax(TweezerSpot) ) 
+    plt.xlabel('Integrated Signal='+str(totphotons))
+    save_imag(plt, 'region_fluo')
+    plt.show() 
+
 
 saving_script(path)

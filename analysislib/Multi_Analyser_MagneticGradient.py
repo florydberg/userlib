@@ -51,6 +51,12 @@ def data_organizing(para, para1, value1, value2):
     
     return data1, data2
 
+def save_imag(plt, name):
+    picname = name
+    img_name=str(dt) + '_' + str(datetime.datetime.now().hour) + str(datetime.datetime.now().minute) + str(datetime.datetime.now().second)  + '_' + parameter_name
+    plt.savefig(two_levels_up+ '/' + img_name +  '_' + picname + ".png")
+    print(picname + ' saved')
+
 # Let's obtain the dataframe for all of lyse's currently loaded shots:
 df = data()
 paths=df['filepath']
@@ -70,6 +76,21 @@ print('optimization parameter =', parameter1_name)
 parameter1=np.array(df[parameter1_name])
 parameter2=np.array(df[parameter2_name])
 
+parameter=np.array(df[parameter_name])
+# parameter=np.multiply(parameter,1/1000)
+list_name=str(dt)  + '_' + str(datetime.datetime.now().hour)+ str(datetime.datetime.now().minute) +  str(datetime.datetime.now().second)  + '_' + parameter_name
+list_path=paths[-1]
+one_level_up = os.path.dirname(list_path)
+two_levels_up = os.path.dirname(one_level_up)
+print(two_levels_up)
+
+file_name=list_name+'.csv'
+
+with open(two_levels_up+ '/' + file_name, 'a', newline='') as csv_file:
+    writer = csv.writer(csv_file)
+    for ii in paths:
+        # print(ii)
+        writer.writerow([ii])
 
 
 ###############################################################################################
