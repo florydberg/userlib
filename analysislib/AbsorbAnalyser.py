@@ -432,7 +432,7 @@ if True:# ROI Selection
     ray=400       
 ######################
 
-scan_parameter='Imaging_Frq'
+scan_parameter='Red_MOT_Frq'
 scan_unit='MHz'
 
 op_plotting = False #extra images

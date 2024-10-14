@@ -190,14 +190,14 @@ if True: #Envelope of ttl and analog
         n_step=round(Final_V-Initial_V/0.001)
         if n_step>0:
             for i in range(0,n_step):
+                coils.constant(tt, GLOBALS['Z_Coils_Current']+i*0.001)
                 tt+=100*usec
-                coils(tt, GLOBALS['Z_Coils_Current']+i*0.001)
                 return tt
         else:
             step_n=-n_step
             for i in range(0,step_n):
+                coils.constant(tt, GLOBALS['Z_Coils_Current']-i*0.001)  
                 tt+=100*usec
-                coils(tt, GLOBALS['Z_Coils_Current']-i*0.001)  
                 return tt 
         
 def BlueMot_load(tt, load_time):
@@ -995,19 +995,23 @@ def set_MOGLABS_ready(tt):
     Sisyphus.DDS.setfreq(tt, G_Sisyphus_Frq*1e3)
     Sisyphus.DDS.setamp(tt, G_Sisyphus_Pow*1e2)
 
-def set_CompCoils(tt):
-    COILScomp_SwitchON_TTL(t+dt, True)
-    tt+=5*usec
-    COILScompX_Current(tt, abs(GLOBALS['X_Coils_Current']))
-    tt+=dt
-    COILScompY_Current(tt, abs(GLOBALS['Y_Coils_Current']))
-    tt+=dt
-    COILScompZ_Current(tt, abs(GLOBALS['Z_Coils_Current']))
-    tt+=dt
-    return tt
-    
-def setoff_CompCoils(tt):
-    COILScomp_SwitchON_TTL(t, False)
+def set_CompCoils(tt, control="ON"):
+    if control=="ON":
+        COILScomp_SwitchON_TTL(tt, True)
+        tt+=5*usec
+        COILScompX_Current(tt, abs(GLOBALS['X_Coils_Current']))
+        COILScompY_Current(tt+dt, abs(GLOBALS['Y_Coils_Current']))
+        COILScompZ_Current(tt+2*dt, abs(GLOBALS['Z_Coils_Current']))
+    else:
+        COILScomp_SwitchON_TTL(tt, False)
+        tt+=5*usec
+        COILScompX_Current(tt, 0)
+        COILScompY_Current(tt+dt, 0)
+        COILScompZ_Current(tt+2*dt, 0)
+    return tt+3*dt
+
+def setoff_CompCoils(tt): ## OBSOLETE
+    COILScomp_SwitchON_TTL(tt, False)
     tt+=5*usec
     CompCoilsI_X.constant(tt, 0)
     tt+=dt
@@ -1016,7 +1020,49 @@ def setoff_CompCoils(tt):
     CompCoilsI_Z.constant(tt, 0)
     tt+=dt
     return tt 
-   
+
+def analog_ramp(channel, tt, v_initial, v_final, duration, v_step_size=0.01):
+    v_step_size=abs(v_step_size)
+    n_step=abs(round((v_final-v_initial)/v_step_size))
+    deltat=duration/n_step
+    if v_final>v_initial:
+        for i in range(0,n_step):
+            channel.constant(tt, v_initial+i*v_step_size)
+            tt+=deltat
+    else:
+        for i in range(0,n_step):
+            channel.constant(tt, v_initial-i*v_step_size)
+            tt+=deltat
+    return tt 
+
+def set_CompCoils_QuantizationAxis(tt, control="ON", duration=GLOBALS['QuantizAxis_ramp_duration'], v_step_size=0.01):
+    # Ramp compensation coils to/from values that set Quantization axis for imaging
+    ## def ramp(self, t, duration, initial, final, samplerate, units=None, truncation=1.):
+    # generate_analog_samples
+    if control=="ON":
+        analog_ramp(CompCoilsI_X, tt, abs(GLOBALS['X_Coils_Current']), abs(GLOBALS['QuantizAxis_X_Coils_Current']), duration, v_step_size)
+        analog_ramp(CompCoilsI_Y, tt+dt, abs(GLOBALS['Y_Coils_Current']), abs(GLOBALS['QuantizAxis_Y_Coils_Current']), duration, v_step_size)
+        analog_ramp(CompCoilsI_Z, tt+2*dt, abs(GLOBALS['Z_Coils_Current']), abs(GLOBALS['QuantizAxis_Z_Coils_Current']), duration, v_step_size)
+    else:
+        analog_ramp(CompCoilsI_X, tt, abs(GLOBALS['QuantizAxis_X_Coils_Current']), abs(GLOBALS['X_Coils_Current']), duration, v_step_size)
+        analog_ramp(CompCoilsI_Y, tt+dt, abs(GLOBALS['QuantizAxis_Y_Coils_Current']), abs(GLOBALS['Y_Coils_Current']), duration, v_step_size)
+        analog_ramp(CompCoilsI_Z, tt+2*dt, abs(GLOBALS['QuantizAxis_Z_Coils_Current']), abs(GLOBALS['Z_Coils_Current']), duration, v_step_size)
+    return tt+duration+3*dt
+
+def set_CompCoils_QuantizationAxis_test(tt, control="ON", duration=GLOBALS['QuantizAxis_ramp_duration'], samplerate=1e5):
+    # Ramp compensation coils to/from values that set Quantization axis for imaging
+    ## def ramp(self, t, duration, initial, final, samplerate, units=None, truncation=1.):
+    # generate_analog_samples
+    if control=="ON":
+        CompCoilsI_X.ramp(tt,      duration, abs(GLOBALS['X_Coils_Current']), abs(GLOBALS['QuantizAxis_X_Coils_Current']), samplerate)
+        CompCoilsI_Y.ramp(tt+dt,   duration, abs(GLOBALS['Y_Coils_Current']), abs(GLOBALS['QuantizAxis_Y_Coils_Current']), samplerate)
+        CompCoilsI_Z.ramp(tt+2*dt, duration, abs(GLOBALS['Z_Coils_Current']), abs(GLOBALS['QuantizAxis_Z_Coils_Current']), samplerate)
+    else:
+        CompCoilsI_X.ramp(tt,      duration, abs(GLOBALS['QuantizAxis_X_Coils_Current']), abs(GLOBALS['X_Coils_Current']), samplerate)
+        CompCoilsI_Y.ramp(tt+dt,   duration, abs(GLOBALS['QuantizAxis_Y_Coils_Current']), abs(GLOBALS['Y_Coils_Current']), samplerate)
+        CompCoilsI_Z.ramp(tt+2*dt, duration, abs(GLOBALS['QuantizAxis_Z_Coils_Current']), abs(GLOBALS['Z_Coils_Current']), samplerate)
+    return tt+duration+3*dt
+
 def fluo_resonant_Blue(tt):
     BlueImaging_AOM_TTL(tt+10*usec, True)
     exposure_time=10000*usec

@@ -112,38 +112,40 @@ if True: #functions definition
         plt.savefig(one_level_up + '/' + img_name +  '_' + picname + ".png")
         print(picname + ' saved')
 
-    def MotPlot(MotSpot):
+    def MotPlot(MotSpot, rmin = None, rmax = None):
+        if rmin == None:
+            rmin=np.amin(MotSpot)
+        if rmax == None:
+            rmax=np.amax(MotSpot)
         plt.figure(figsize=(10, 10))
         h, w = MotSpot.shape 
         h = h * 2
         w = w * 2
+        intx = np.sum(MotSpot, axis=0)
+        inty = np.sum(MotSpot, axis=1)
         gs = gridspec.GridSpec(2, 2, width_ratios=[w * .2, w], height_ratios=[ h, h * .2])
         ax = [plt.subplot(gs[3]), plt.subplot(gs[0]), plt.subplot(gs[1])]
-        inty = np.sum(MotSpot, axis=1)
-        ax[1].plot(inty[::-1], np.linspace(1, inty.shape, MOTray*2), 'b') 
-        intx = np.sum(MotSpot, axis=0)
         ax[0].plot(intx, 'b')       
+        ax[1].plot(inty[::-1], np.linspace(1, inty.shape, MOTray*2), 'b') 
+        ax[2].imshow(MotSpot, cmap='viridis',vmin=rmin, vmax=rmax) 
         plt.title('Mot Spot')
-        ax[2].imshow(MotSpot, cmap='viridis',vmin=np.amin(MotSpot) , vmax=np.amax(MotSpot) ) 
         plt.gca().add_patch(TweezArea3)
         plt.gca().add_patch(TweezArea2)
         plt.gca().add_patch(TweezArea1)
         save_imag(plt, 'mot_fluo')
         plt.show() 
 
-    def TweezerPlot(TweezerSpot, ii):
-        plt.figure(figsize=(10, 10))
-
+    def TweezerAnalysis(TweezerSpot, ii, plotting=False, GaussFit=False):
         h, w = TweezerSpot.shape 
         h = h * 2
         w = w * 2
         totphotons=np.sum(TweezerSpot)
+        TweezerPoint=TweezerSpot[Tray-2:Tray+3, Tray-2:Tray+3]
+        mean_count=mean(TweezerPoint)
+        var_count=var(TweezerPoint)
+        shot.save_result('mean_tweezer_'+str(ii), mean_count)
+        shot.save_result('variance_tweezer_'+str(ii), var_count)
 
-        gs = gridspec.GridSpec(2, 2, width_ratios=[w * .2, w], height_ratios=[ h, h * .2])
-
-        ax = [plt.subplot(gs[3]), plt.subplot(gs[0]), plt.subplot(gs[1])]
-
-        GaussFit=0
         if GaussFit:
             x = np.linspace(1, Tray*2, Tray*2)
             y = np.linspace(1, Tray*2, Tray*2)
@@ -158,51 +160,44 @@ if True: #functions definition
     
             amplitude, xo, yo, sigma_x, sigma_y, theta, offset = popt
             popt=amplitude, xo, yo, sigma_x, sigma_y, theta, offset  
-
+            std_dev=(sigma_x+sigma_y)/2
             fit_data = gaussian_2d((X, Y), *popt)
             fitdata = fit_data.reshape((Tray*2, Tray*2), order='F')
             gauy = np.sum(fitdata, axis=1)
             gaux = np.sum(fitdata, axis=0)
-
-        inty = np.sum(TweezerSpot, axis=1)    
-        ax[1].plot(inty[::-1], np.linspace(1, inty.shape, Tray*2), 'b') 
-        if GaussFit:
-            ax[1].plot(gauy[::-1], np.linspace(1, inty.shape, Tray*2), 'r') 
-
-        intx = np.sum(TweezerSpot, axis=0)
-        ax[0].plot(intx, 'b')  
-        if GaussFit:     
-            ax[0].plot(gaux, 'r')  
-
-        plt.title('Tweezer '+ str(ii) + ' Spot')
-
-        ax[2].imshow(TweezerSpot, cmap='viridis',vmin=np.amin(MotSpot) , vmax=np.amax(MotSpot) ) 
-        
-        if GaussFit:
-            std_dev=(sigma_x+sigma_y)/2
-            plt.xlabel("peak = %d , std_dev = %d" %(round(amplitude), std_dev))
             shot.save_result('peak_tweezer_'+str(ii), amplitude)
             shot.save_result('deviation_tweezer_'+str(ii), std_dev)
 
-        TweezArea=patches.Rectangle([Tray-2,Tray-2], 4, 4, linewidth=1, edgecolor='r', facecolor='none')
-        mean_count=mean(TweezerSpot[Tray-2:Tray+2, Tray-2:Tray+2])
-        var_count=var(TweezerSpot[Tray-2:Tray+2, Tray-2:Tray+2])
-
-        plt.xlabel("mean = %d , variance = %d" %(round(mean_count), var_count))
-        shot.save_result('mean_tweezer_'+str(ii), mean_count)
-        shot.save_result('tweezer_'+str(ii), var_count)
-
-        save_imag(plt, 'tweez_fluo_'+ str(ii))
-
-        plt.gca().add_patch(TweezArea)
-        plt.legend(['Tweezer Integration Area'], loc ="lower right")
-        plt.show() 
+        if plotting:
+            plt.figure(figsize=(10, 10))
+            gs = gridspec.GridSpec(2, 2, width_ratios=[w * .2, w], height_ratios=[ h, h * .2])
+            ax = [plt.subplot(gs[3]), plt.subplot(gs[0]), plt.subplot(gs[1])]
+            ax[2].imshow(TweezerSpot, cmap='viridis',vmin=np.amin(MotSpot) , vmax=np.amax(MotSpot) )
+            plt.title('Tweezer '+ str(ii) + ' Spot')
+            intx = np.sum(TweezerSpot, axis=0)
+            inty = np.sum(TweezerSpot, axis=1)
+            ax[0].plot(intx, 'b')
+            ax[1].plot(inty[::-1], np.linspace(1, inty.shape, Tray*2), 'b') 
+            x_label1="mean = %d , variance = %d" %(round(mean_count), var_count)
+            TweezArea=patches.Rectangle([Tray-2,Tray-2], 4, 4, linewidth=1, edgecolor='r', facecolor='none')
+            plt.gca().add_patch(TweezArea)
+            plt.legend(['Tweezer Integration Area'], loc ="lower right")
+            x_label2=''
+            if GaussFit:
+                x_label2=", peak = %d , std_dev = %d " %(round(amplitude), std_dev)
+                ax[0].plot(gaux, 'r')
+                ax[1].plot(gauy[::-1], np.linspace(1, inty.shape, Tray*2), 'r')
+            plt.xlabel(x_label1+x_label2)
+            plt.show() 
+            save_imag(plt, 'tweez_fluo_'+ str(ii))
 
         
+
 ######################
 scan_parameter='ImagingTweez_Frq'
 scan_unit='MHz'
 ######################
+plt.style.use("default")
 
 with Run(path).open('r+') as shot:
     start_time = time.time()
@@ -215,27 +210,28 @@ with Run(path).open('r+') as shot:
         else: img[str(i)]=shot_image.astype(np.float32)
 
     if True: #ROIS
-        MOT0=[2600,900]
-        MOTray=100
+        # MOT0=[2600,900]
+        MOT0=[2357,843]
+        MOTray=50
 
-        T1=[81,57]
-        T2=[79,84]
-        T3=[80,112]
-
-        Tray=10
-
+        T1=[50,30]
+        T2=[50,50]
+        T3=[50,70]
+        Tray=6
+        
         FluoImag=img['TweezFluo']
+        FluoImag-=200 #offset removal
         MOTArea=patches.Circle(MOT0, MOTray, linewidth=1, edgecolor='r', facecolor='none')
         TweezArea1=patches.Circle(T1, Tray, linewidth=1, edgecolor='r', facecolor='none')
         TweezArea2=patches.Circle(T2, Tray, linewidth=1, edgecolor='r', facecolor='none')
         TweezArea3=patches.Circle(T3, Tray, linewidth=1, edgecolor='r', facecolor='none')
 
-        MotSpot=img['TweezFluo'][MOT0[1]-MOTray:MOT0[1]+MOTray, MOT0[0]-MOTray:MOT0[0]+MOTray]
+        MotSpot=FluoImag[MOT0[1]-MOTray:MOT0[1]+MOTray, MOT0[0]-MOTray:MOT0[0]+MOTray]
         TweezerSpot1=MotSpot[T1[1]-Tray:T1[1]+Tray, T1[0]-Tray:T1[0]+Tray]
         TweezerSpot2=MotSpot[T2[1]-Tray:T2[1]+Tray, T2[0]-Tray:T2[0]+Tray]
         TweezerSpot3=MotSpot[T3[1]-Tray:T3[1]+Tray, T3[0]-Tray:T3[0]+Tray]
     
-    if True: #FUllFrame 
+    if False: #FUllFrame 
         plt.figure()
         plt.title('Orca Fluo')
         plt.gca().add_patch(MOTArea)
@@ -246,17 +242,18 @@ with Run(path).open('r+') as shot:
         plt.show() 
 
     # ## MOT spot
-    # MotPlot(MotSpot)
+    MotPlot(MotSpot,0,50)
 
-    ## Tweezer Spot n 1
-    TweezerPlot(TweezerSpot1, 1)
+    # Tweezer Spot n 1
+    TweezerAnalysis(TweezerSpot1, 1, plotting=True, GaussFit=False)
 
-    ## Tweezer Spot n 2
-    TweezerPlot(TweezerSpot2, 2)
+    # Tweezer Spot n 2
+    TweezerAnalysis(TweezerSpot2, 2)
 
-    ## Tweezer Spot n 3
-    TweezerPlot(TweezerSpot3, 3)
+    # Tweezer Spot n 3
+    TweezerAnalysis(TweezerSpot3, 3)
 
+shot.save_result('background', mean(MotSpot[0:5,0:5]))
 shot.save_result('scan_parameter', scan_parameter)
 shot.save_result('scan_unit', scan_unit)
 saving_script(path)

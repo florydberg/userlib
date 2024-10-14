@@ -373,7 +373,7 @@ if co:
                             parentless=False,
                             camera_attributes = {
                                 'TRIGGER GLOBAL EXPOSURE': 2.0,                                
-                                'EXPOSURE TIME':0.012, # 0.0082944, #sec
+                                'EXPOSURE TIME':0.100, # 0.0082944, #sec
                                 'SENSOR MODE': 1.0,
                                 'READOUT SPEED': 2.0,
                                 'READOUT DIRECTION': 1.0,

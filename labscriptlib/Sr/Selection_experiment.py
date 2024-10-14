@@ -29,14 +29,14 @@ if True: ## Selects ##
     Orca_Labscript_delay= 8.3*msec
 
 if co:
-    Orca_Camera.camera_attributes['EXPOSURE TIME']=0.05
+    Orca_Camera.camera_attributes['EXPOSURE TIME']=GLOBALS['FluoImgPulse_duration']*1e-6
 
 start()
 TABLE_MODE_ON('RedMOT', t)
 t+=dt
 set_MOGLABS_ready(t)
 t+=dt
-t=set_CompCoils(t)
+t=set_CompCoils(t, "ON")
 exposure_time=10000*usec
 t+=500*msec
 
@@ -44,7 +44,7 @@ ii=0
 for i in range(0,GLOBALS['n_loop']):
 
     COILScomp_SwitchON_TTL(t, True)
-    set_CompCoils(t+5*us)    
+    set_CompCoils(t+5*us, "ON")    
 
     MOT_Red3D_Switch_TTL(t, True)      #Global rf switch
     t+=dt
@@ -154,11 +154,16 @@ for i in range(0,GLOBALS['n_loop']):
     ##### ALL OFF #################
 
     if sel_fluo_image:
-        t_ahead_fluoimag = GLOBALS['FluoImgPulse_duration']#+5*dt # matches RedMot single freq duration comprehensive of delay introduced by the coils switch-off
+        t_ahead_fluoimag = GLOBALS['QuantizAxis_ramp_duration'] + GLOBALS['FluoImgPulse_duration'] + 5*dt # matches RedMot single freq duration comprehensive of delay introduced by the coils switch-off
         #t_ahead_fluoimag = GLOBALS['MOT_RED_duration']+100*msec # to see Blue MOT
         t-=t_ahead_fluoimag ########### TIME MACHINE  ############################ for Fluorescence
+
+        # Ramp selected compensation coils to value that sets Quantization axis for imaging
+        #t+=set_CompCoils_QuantizationAxis(t, "ON", GLOBALS['QuantizAxis_ramp_duration'], v_step_size=0.01)
+        #t+=set_CompCoils_QuantizationAxis_test(t, "ON", GLOBALS['QuantizAxis_ramp_duration'], samplerate=1e4)
         
         if sel_imaging_beam=="abs":
+            ImagingBeam.DDS.setamp(t, GLOBALS['Imaging_Pow_Fluo']*1e2)
             BlueImaging_AOM_TTL(t,True)
             BlueImaging_AOM_TTL(t+GLOBALS['FluoImgPulse_duration']+dt, False)
         elif sel_imaging_beam=='tweez':
@@ -203,11 +208,13 @@ for i in range(0,GLOBALS['n_loop']):
             # Basler camera for fluorescence is controlled by Pylon Viewer
             # Basler_Camera_fluo.expose(t-100*usec+5*usec,'Fluo', frametype='tiff')
        
+        #set_CompCoils_QuantizationAxis(t, "OFF", GLOBALS['TOF'], 1e6)
         t+=t_ahead_fluoimag ############### TIME MACHINE  ############################
 
     t+=GLOBALS['TOF']# wait for time of flight
     
     if sel_abs_image:
+        ImagingBeam.DDS.setamp(t, GLOBALS['Imaging_Pow']*1e2)
         if sel_camera_abs=='andor':
             andor_trigger_delay=20*usec
             Andor_Camera_abs_readout=(1024*1024/30e6*sec+1024*2.2*usec)+30*msec # Horizontal readout + vertical shift times + buffer
@@ -238,8 +245,7 @@ for i in range(0,GLOBALS['n_loop']):
     t+=500*us
     Twizzi_Switch_TTL(t, False)
     t+=dt
-    COILScomp_SwitchON_TTL(t, False)
-    # setoff_CompCoils(t)
+    # set_CompCoils(t, "OFF")
     t+=10*us
 
 stop(t+GLOBALS['stop_buffering_time'])

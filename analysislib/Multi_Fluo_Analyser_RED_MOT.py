@@ -10,6 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import datetime, time
 import pandas as pd
+import runmanager.remote as rm
 ts=time.time()
 dt=datetime.datetime.now().date()
 
@@ -115,6 +116,10 @@ def Red_Mot_scan(peaks, devs, centers):
 # Let's obtain the dataframe for all of lyse's currently loaded shots:
 df = data()
 paths=df['filepath']
+
+rm_globals = rm.get_globals()
+
+print(rm_globals)
 
 FluoAnalyser= df['FluoAnalyser_RED_MOT']
 peaks=tuple(FluoAnalyser['peak_RedMot'])

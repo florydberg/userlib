@@ -154,9 +154,9 @@ if True: #functions definition
         if GaussFit:
             x_0=round(xo*effective_pixel_size)
             y_0=round(yo*effective_pixel_size)
-            std_dev=(sigma_x+sigma_y)/2
+            std_dev=(sigma_x+sigma_y)/2*effective_pixel_size
             # plt.colorbar(MotSpot)
-            plt.xlabel("peak = %d , std_dev = %d, center = %a um" %(round(amplitude), std_dev, [x_0,y_0]))
+            plt.xlabel("peak = %d , waist = %d, center = %a um" %(round(amplitude), std_dev, [x_0,y_0]))
             shot.save_result('peak_RedMot', amplitude)
             shot.save_result('waist_RedMot', std_dev)
             shot.save_result('center_RedMot', [x_0,y_0])
@@ -183,7 +183,7 @@ with Run(path).open('r+') as shot:
         else: img[str(i)]=shot_image.astype(np.float32)
 
     if True: #ROIS
-        MOT0=[2550,900]
+        MOT0=[2427,814]
         MOTray=200
 
         # T1=[81,57]
@@ -193,15 +193,11 @@ with Run(path).open('r+') as shot:
         Tray=10
 
         FluoImag=img['TweezFluo']
+        FluoImag=FluoImag-201 #offset removal
         MOTArea=patches.Circle(MOT0, MOTray, linewidth=1, edgecolor='r', facecolor='none')
-        # TweezArea1=patches.Circle(T1, Tray, linewidth=1, edgecolor='r', facecolor='none')
-        # TweezArea2=patches.Circle(T2, Tray, linewidth=1, edgecolor='r', facecolor='none')
-        # TweezArea3=patches.Circle(T3, Tray, linewidth=1, edgecolor='r', facecolor='none')
 
-        MotSpot=img['TweezFluo'][MOT0[1]-MOTray:MOT0[1]+MOTray, MOT0[0]-MOTray:MOT0[0]+MOTray]
-        # TweezerSpot1=MotSpot[T1[1]-Tray:T1[1]+Tray, T1[0]-Tray:T1[0]+Tray]
-        # TweezerSpot2=MotSpot[T2[1]-Tray:T2[1]+Tray, T2[0]-Tray:T2[0]+Tray]
-        # TweezerSpot3=MotSpot[T3[1]-Tray:T3[1]+Tray, T3[0]-Tray:T3[0]+Tray]
+        MotSpot=FluoImag[MOT0[1]-MOTray:MOT0[1]+MOTray, MOT0[0]-MOTray:MOT0[0]+MOTray]
+
     
     if True: #FUllFrame 
         plt.figure()
@@ -212,6 +208,7 @@ with Run(path).open('r+') as shot:
         plt.legend(['Red Mot Area'], loc ="lower right")
         save_imag(plt, 'orca_fluo' )
         plt.show() 
+
 
     ## MOT spot
     MotPlot(MotSpot)

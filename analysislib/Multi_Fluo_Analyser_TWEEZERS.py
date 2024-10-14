@@ -58,8 +58,8 @@ def Tweezers_scan(means, vars):
     for ii in range(n_tweezer):
 
         means_ii=tuple(means.get(str(ii+1)))
-        print(means_ii)
-        print(type(means_ii))
+        # print(means_ii)
+        # print(type(means_ii))
 
         para=parameter
         values=means_ii
@@ -91,7 +91,7 @@ def Tweezers_scan(means, vars):
     figure()  #####################################################################
     for ii in range(n_tweezer):
         vars_ii=tuple(vars.get(str(ii+1)))
-        print(vars_ii)
+        # print(vars_ii)
         
         # xs, ys, std_errors =data_mean(parameter, vars_ii)
         para=parameter
@@ -120,11 +120,13 @@ def Tweezers_scan(means, vars):
         plt.legend(['1','2','3'])
         save_imag(plt, title)  #####################################################################
 
+
+
 # Let's obtain the dataframe for all of lyse's currently loaded shots:
 df = data()
 paths=df['filepath']
 
-FluoAnalyser= df['FluoAnalyser']
+FluoAnalyser= df['FluoAnalyser_TWEEZERS']
 
 n_tweezer=3
 means={}
@@ -136,7 +138,7 @@ for ii in range(0,n_tweezer):
     var_name='variance_tweezer_'+str(ii+1)
     vars[str(ii+1)]=(tuple(FluoAnalyser[var_name]))
     vv=tuple(FluoAnalyser[var_name])
-
+background=tuple(FluoAnalyser['background'])
 
 print(means)
 
@@ -165,3 +167,12 @@ if True: #print list of shots in the characterization
 ###############################################################################################
 
 Tweezers_scan(means, vars)
+
+figure()
+title='Histogram of Tweezer'
+plt.title(title)        
+data_background=background
+plt.hist([means['1'],means['2'], means['3'], data_background] , bins=20)
+plt.legend(['tweezer1','tweezer2','tweezer3','background'])
+plt.show()
+save_imag(plt, title) 
