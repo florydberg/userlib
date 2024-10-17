@@ -35,11 +35,9 @@ def bin_data(data, binfactor):
     return binned_data
 
 
-threshold_min=5
-threshold_max=100
 if True: #functions definition
     if True:  # Constants and Image Analysis  
-        V_MAX=0.15 #.15 for blue .40 for red
+        V_MAX=0.4 #.15 for blue .40 for red
 
         Imag_beam_Power=440e-6 #W   #TODO: update this value with the measure we have to take
         waist_0=6.667e-3 #m
@@ -148,7 +146,7 @@ if True: #functions definition
         ampguess=min([np.max(data),np.max(intx)/(2*np.pi)**(1/2),np.max(inty)/(2*np.pi)**(1/2)]) #0.45
         
         # First Guess of Center
-        edge=100
+        edge=50
         x_0 = next(i for i in range(edge,len(intx)-edge) if intx[i] == max(intx[edge:len(intx)-edge]))
         y_0 = next(i for i in range(edge,len(inty)-edge) if inty[i] == max(inty[edge:len(inty)-edge]))
 
@@ -185,7 +183,7 @@ if True: #functions definition
         if not (threshold_min<sigma_x<threshold_max and threshold_min<sigma_y<threshold_max) :
             amplitude=0  
             Npeak=0  
-            offset=0   
+            offset=0
             xo=0
             yo=RY
         popt=amplitude, xo, yo, sigma_x, sigma_y, theta, offset  
@@ -274,19 +272,20 @@ if True: #functions definition
 
         print()
 
-        # x_values=np.round(linspace(0,(700-5)*pixel_size*1000, 6),2)
-        x_values=np.array([0,0.21,0.42,0.63,0.84,1.05])
-        x_ticks=np.arange(0, data.shape[1],60)
+        n_ticks=5
 
-        # y_values=np.round(linspace(0,(700-5)*pixel_size*1000, 6),2)
-        # y_values=np.array([0,0.26,0.52,0.77,1.03,1.28])
-        y_values=np.array([0,0.21,0.42,0.63,0.84,1.05])
-        y_ticks=np.arange(0, data.shape[1],60)
+        x_values=np.round(linspace(0,(data.shape[0])*pixel_size*1000*(n_ticks-1)/n_ticks, n_ticks),2)
+
+        x_ticks=np.arange(0, data.shape[0], data.shape[0]/n_ticks)
+
+        y_values=np.round(linspace(0,(data.shape[0])*pixel_size*1000*(n_ticks-1)/n_ticks, n_ticks),2)
+
+        y_ticks=np.arange(0, data.shape[1], data.shape[0]/n_ticks)
 
 
         if True:
             plt.figure()
-            plt.imshow(data, cmap='viridis', vmin=0, vmax=0.2)
+            plt.imshow(data, cmap='viridis', vmin=0, vmax=V_MAX)
             plt.colorbar()
             plt.xticks(ticks=x_ticks, labels=x_values)
             plt.yticks(ticks=y_ticks, labels=y_values)
@@ -411,9 +410,9 @@ if True:# ROI Selection
     # RY=1000
 
    
-    P0=(50,0)   # Starting point for the atoms ROI
-    RX=700
-    RY=700
+    P0=(50,200)   # Starting point for the atoms ROI
+    RX=800
+    RY=800
     # P0=(190,150)   # Starting point for the atoms ROI
     # RX=500
     # RY=500  
@@ -421,8 +420,8 @@ if True:# ROI Selection
     DX=(P0[0], P0[0]+RX)
     DY=(P0[1], P0[1]+RY)
 
-    p0=(300,600)   # Starting point for the correction area 
-    rX=200
+    p0=P0# Starting point for the correction area 
+    rX=80
     rY=80
 
     dX=(p0[0], p0[0]+rX)
@@ -432,18 +431,19 @@ if True:# ROI Selection
     ray=400       
 ######################
 
-scan_parameter='Red_MOT_Frq'
-scan_unit='MHz'
+scan_parameter='TOF'
+scan_unit='ms'
 
 op_plotting = False #extra images
 
 op_FFTfilter = False
 op_binning = True
-binfactor=2
+binfactor=5
 op_gauss_fit = True
 op_gauss_fit_internal = 1
-BlaserAbs_for_Fluo=False
 
+threshold_min=2
+threshold_max=500
 ######################
 
 with Run(path).open('r+') as shot:
@@ -464,8 +464,8 @@ with Run(path).open('r+') as shot:
 
         if op_plotting: plot_single_image(MOT, corr, BEAM, img, i)
       
-    figure()
-    display_absorb_trio(img)
+    
+    if op_plotting:display_absorb_trio(img)
 
     up=(img['Atoms']-img['Background'])
     print('Image dimensions = '+ str(up.shape))
@@ -505,7 +505,6 @@ with Run(path).open('r+') as shot:
     N_2D = n_2D*pixArea
     
     if op_binning:
-        
         datafit= bin_data(OD, binfactor)
         RXfit=int(RX/binfactor)
         RYfit=int(RY/binfactor)
@@ -526,11 +525,6 @@ with Run(path).open('r+') as shot:
     
     if op_gauss_fit:
         fit_gaussian(shot, data_frame[scan_parameter], RXfit, RYfit, datafit, scan_parameter, scan_unit, binfactor, N_2D, binfactor)
-
-    if BlaserAbs_for_Fluo:
-        shot_image=shot.get_image('Basler_Camera_abs','Fluo','tiff')
-        figure()
-        plt.imshow(shot_image.astype(np.float32), cmap='viridis', vmin=0, vmax=np.amax(img['Atoms']))
 
     shot.save_result('scan_parameter', scan_parameter)
     shot.save_result('scan_unit', scan_unit)

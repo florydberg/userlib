@@ -964,6 +964,7 @@ def take_fluoImaging_Basler(tt, name):
 
 def set_MOGLABS_ready(tt):
     G_Imaging_Frq=GLOBALS['Imaging_Frq']/1e6
+    G_ImagingFluo_Frq=GLOBALS['ImagingFluo_Frq']/1e6
     G_dueD_MOT_Frq=GLOBALS['dueD_MOT_Frq']/1e6
     G_treD_MOT_Frq=GLOBALS['treD_MOT_Frq']/1e6
     G_Red_MOT_Frq=GLOBALS['Red_MOT_Frq']/1e6
@@ -971,6 +972,7 @@ def set_MOGLABS_ready(tt):
     G_Sisyphus_Frq=GLOBALS['Sisyphus_Frq']/1e6
         
     G_Imaging_Pow=GLOBALS['Imaging_Pow']
+    G_ImagingFluo_Pow=GLOBALS['ImagingFluo_Pow']
     G_treD_MOT_Pow=GLOBALS['treD_MOT_Pow']
     G_Red_MOT_Pow=GLOBALS['Red_MOT_Pow']
     G_ImagingTweez_Pow=GLOBALS['ImagingTweez_Pow']
@@ -980,8 +982,8 @@ def set_MOGLABS_ready(tt):
     # RedMOT.DDS.setfreq(tt, G_Red_MOT_Frq*1e3)  ##################### VERY VERY  BAD THINGS TO CIRCUMVENT DRIVER BUG  TODO: FIX removing 1e3or2 ask Andre #################
     # RedMOT.DDS.setamp(tt, G_Red_MOT_Pow*1e2)
 
-    ImagingBeam.DDS.setfreq(tt, G_Imaging_Frq*1e3)
-    ImagingBeam.DDS.setamp(tt, G_Imaging_Pow*1e2)
+    # ImagingBeam.DDS.setfreq(tt, G_Imaging_Frq*1e3)
+    # ImagingBeam.DDS.setamp(tt, G_Imaging_Pow*1e2)
 
     dueD_MOT.DDS.setfreq(tt, G_dueD_MOT_Frq*1e3)
     dueD_MOT.DDS.setamp(tt, G_dueD_MOT_Pow*1e2)
@@ -1036,9 +1038,6 @@ def analog_ramp(channel, tt, v_initial, v_final, duration, v_step_size=0.01):
     return tt 
 
 def set_CompCoils_QuantizationAxis(tt, control="ON", duration=GLOBALS['QuantizAxis_ramp_duration'], v_step_size=0.01):
-    # Ramp compensation coils to/from values that set Quantization axis for imaging
-    ## def ramp(self, t, duration, initial, final, samplerate, units=None, truncation=1.):
-    # generate_analog_samples
     if control=="ON":
         analog_ramp(CompCoilsI_X, tt, abs(GLOBALS['X_Coils_Current']), abs(GLOBALS['QuantizAxis_X_Coils_Current']), duration, v_step_size)
         analog_ramp(CompCoilsI_Y, tt+dt, abs(GLOBALS['Y_Coils_Current']), abs(GLOBALS['QuantizAxis_Y_Coils_Current']), duration, v_step_size)

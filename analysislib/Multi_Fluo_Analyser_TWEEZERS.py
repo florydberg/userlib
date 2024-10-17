@@ -52,7 +52,7 @@ def save_imag(plt, name):
     print(picname + ' saved')
 
 def Tweezers_scan(means, vars):
-    
+    colors=['r','yellow','orange','b']   
 
     figure()  ##################################################################### 
     for ii in range(n_tweezer):
@@ -79,9 +79,10 @@ def Tweezers_scan(means, vars):
 
         plt.xlabel(str(parameter_name)+' ('+str(scan_unit)+')')
 
-        title='Mean of Fluo Signal'
+        title='Photo-Count of Fluo Signal'
         plt.title(title)
         plt.xlabel(str(parameter_name)+' ('+str(scan_unit)+')')
+        plt.ylabel('photons')
         plt.errorbar(x, y, yerr=std_error, fmt='--o', ecolor='k',capsize=5)
         plt.legend(['1','2','3'])
         save_imag(plt, title)   #####################################################################
@@ -131,6 +132,8 @@ FluoAnalyser= df['FluoAnalyser_TWEEZERS']
 n_tweezer=3
 means={}
 vars={}
+photons={}
+tweezDim=7  
 for ii in range(0,n_tweezer):
     mean_name='mean_tweezer_'+str(ii+1)
     means[str(ii+1)]=tuple(FluoAnalyser[mean_name])
@@ -138,9 +141,12 @@ for ii in range(0,n_tweezer):
     var_name='variance_tweezer_'+str(ii+1)
     vars[str(ii+1)]=(tuple(FluoAnalyser[var_name]))
     vv=tuple(FluoAnalyser[var_name])
-background=tuple(FluoAnalyser['background'])
+    photons[str(ii+1)]=tuple(i*tweezDim**2/10 for i in FluoAnalyser[mean_name])
+    pp=tuple(i*tweezDim**2/10 for i in FluoAnalyser[mean_name])
+photo_background=tuple(i*tweezDim**2/10 for i in FluoAnalyser['background'])
+background=tuple(i*tweezDim**2/10 for i in FluoAnalyser['background'])
 
-print(means)
+# print(means)
 
 parameter_name =FluoAnalyser['scan_parameter'].iloc[-1]
 scan_unit=FluoAnalyser['scan_unit'].iloc[-1]
@@ -154,7 +160,7 @@ if True: #print list of shots in the characterization
     list_path=paths[-1]
     one_level_up = os.path.dirname(list_path)
     two_levels_up = os.path.dirname(one_level_up)
-    print(two_levels_up)
+    # print(two_levels_up)
 
     file_name=list_name+'.csv'
 
@@ -166,13 +172,15 @@ if True: #print list of shots in the characterization
 
 ###############################################################################################
 
-Tweezers_scan(means, vars)
+Tweezers_scan(photons, vars)
 
 figure()
 title='Histogram of Tweezer'
 plt.title(title)        
 data_background=background
-plt.hist([means['1'],means['2'], means['3'], data_background] , bins=20)
+plt.hist([photons['1'],photons['2'],photons['3'], data_background] , bins=20, color=['r','yellow','orange','b'])
 plt.legend(['tweezer1','tweezer2','tweezer3','background'])
+plt.xlabel('photons')
+plt.ylabel('occurencies')
 plt.show()
 save_imag(plt, title) 

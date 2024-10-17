@@ -39,7 +39,7 @@ threshold_min=5
 threshold_max=100
 if True: #functions definition
     if True:  # Constants and Image Analysis  
-        pixel_size = 4.6  # micrometers per pixel (Orca magnified)
+        pixel_size = 4.6e-6  # meters per pixel (Orca magnified)
         effective_pixel_size = 1.104 # M = f_tubelens/f_eff; pixel_eff = pixel_size/M, ftubelens = 100, f_eff = 24mm
  
 
@@ -114,14 +114,15 @@ if True: #functions definition
             gauy = np.sum(fitdata, axis=1)
             gaux = np.sum(fitdata, axis=0)
 
-        x_values=np.round(linspace(0,(MOTray*2-round(MOTray*2/8))*effective_pixel_size, 8))
-        # x_values=np.array([0,0.21,0.42,0.63,0.84,1.05,1.15])
-        x_ticks=np.arange(0,  MotSpot.shape[0],50)
+        n_ticks=7
 
-        y_values=np.round(linspace(0,(MOTray*2-round(MOTray*2/8))*effective_pixel_size, 8))
-        # y_values=np.array([0,0.21,0.42,0.63,0.84,1.05,1.15])
-        y_ticks=np.arange(0,  MotSpot.shape[1],50)
+        x_values=np.round(linspace(0,(MotSpot.shape[0])*pixel_size*1000*(n_ticks-1)/n_ticks, n_ticks),2)
 
+        x_ticks=np.arange(0, MotSpot.shape[0], MotSpot.shape[0]/n_ticks)
+
+        y_values=np.round(linspace(0,(MotSpot.shape[0])*pixel_size*1000*(n_ticks-1)/n_ticks, n_ticks),2)
+
+        y_ticks=np.arange(0, MotSpot.shape[1], MotSpot.shape[0]/n_ticks)
 
 
         gs = gridspec.GridSpec(2, 2, width_ratios=[w * .2, w], height_ratios=[ h, h * .2])
@@ -149,7 +150,7 @@ if True: #functions definition
             plt.ylabel('um')
             # plt.show() 
 
-        ax[2].imshow(MotSpot, cmap='viridis',vmin=np.amin(MotSpot) , vmax=np.amax(MotSpot) ) 
+        ax[2].imshow(MotSpot, cmap='plasma',vmin=np.amin(MotSpot) , vmax=np.amax(MotSpot) ) 
 
         if GaussFit:
             x_0=round(xo*effective_pixel_size)
@@ -168,8 +169,8 @@ if True: #functions definition
 
         
 ######################
-scan_parameter='Objective_distance'
-scan_unit='um'
+scan_parameter='TOF'
+scan_unit='ms'
 ######################
 
 with Run(path).open('r+') as shot:
@@ -203,7 +204,7 @@ with Run(path).open('r+') as shot:
         plt.figure()
         plt.title('Orca Fluo')
         plt.gca().add_patch(MOTArea)
-        plt.imshow(FluoImag, cmap='viridis' )
+        plt.imshow(FluoImag, cmap='plasma' )
         plt.colorbar()
         plt.legend(['Red Mot Area'], loc ="lower right")
         save_imag(plt, 'orca_fluo' )

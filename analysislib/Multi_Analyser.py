@@ -20,7 +20,7 @@ def gaussian(x, a, x0, sigma, offset):
 def parabbola(x, T, offset):
     mass = 1.67*88e-27
     kB=1.38*1e-23
-    a=sqrt(offset**2+ kB*T/mass*x*x)
+    a=sqrt( offset**2+kB*T/mass*x*x)
     return a
 
 def plot_parabbola(x, T, offset):
@@ -226,67 +226,26 @@ if True:
 
     # Make an initial guess for the parameters [amplitude, mean, standard deviation]
     initial_guess = [35e-6, 0.36]
-    low = [17e-6, 0.30]
+    low = [1e-6, 0.00]
     upper = [45e-2, 0.7]
-    # upper = [25e-5, 0.3]
     bounds = [low, upper]
 
     # Fit the data using curve_fit
-    # params, covariance = curve_fit(parabbola, xw, yw, p0=initial_guess, bounds=bounds )
+    params, covariance = curve_fit(parabbola, xw, yw, p0=initial_guess, bounds=bounds)
 
     # Extract the fitted parameters
     Temp_fit, waist_i = params
 
     # Print the fitted parameters
     print(f"Fitted parameters: Temp = {Temp_fit}, waist_i={waist_i}")
+
     title='Waist avg (mm)'
     plt.title(title)
-    plt.xlabel(str(parameter_name)+' ('+str(scan_unit)+')')
-    plt.xlabel(str(parameter_name)+' (ms)')
+    plt.xlabel(str(parameter_name)+' ('+str(scan_unit)+'), Temperature = '+ str(round(Temp_fit*1e6, 2)) +' uK')
     plt.errorbar(xw, yw, yerr=std_errorw, fmt='--ro', ecolor='k',capsize=5)
-    # plt.plot(xw, plot_parabbola(xw, Temp_fit, waist_i),'-b')
+    plt.plot(xw, plot_parabbola(xw, Temp_fit, waist_i),'-b')
     save_imag(plt, title)
 
-    #End of test
-
-
-
-
-    # figure()
-    # xx, yx, stdevx, std_errorx =data_mean(parameter, centerx)
-    # plt.errorbar(xx, yx, yerr=std_errorx, fmt='r-o', ecolor='gray', capsize=5)
-    # plt.ylabel('Center X')
-    # plt.xlabel(str(parameter_name)+' ('+str(scan_unit)+')')
-    # plt.xlabel(str(parameter_name)+' (ms)')
-
-    # figure()
-    # xy, yy, stdevy, std_errory =data_mean(parameter, centery)
-    # plt.errorbar(xy, yy, yerr=std_errory, fmt='b-o', ecolor='gray', capsize=5)
-    # plt.ylabel('Center Y')
-    # plt.xlabel(str(parameter_name)+' ('+str(scan_unit)+')')
-    # plt.xlabel(str(parameter_name)+' (ms)')
-
-
-    ##################################################################################
-    # print('\n-----------------------------------\n')
-    # print('best value is ', optimum, 'for', parameter_name)
-    # print('\n-----------------------------------')
-
-
-
-
-    # main_path=r'F:\Calibrations'
-
-    # file_name=str(parameter_name)+'.csv'
-    # calibration_file=str(main_path+'\\'+file_name)
-    # control=0
-    # if not os.path.exists(calibration_file):
-    #     control=1
-
-    # with open(calibration_file, 'a', newline='') as csv_file:
-    #     writer = csv.writer(csv_file)
-    #     if control:
-    #         writer.writerow([str(parameter_name), 'NumberOfAtoms', 'RunTime', 'Routine'])
 
         # writer.writerow([optimum,str(best_value), df['sequence'].iloc[-1], str(df['labscript'].iloc[-1])])
 

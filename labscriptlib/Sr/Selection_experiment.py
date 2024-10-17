@@ -129,6 +129,15 @@ for i in range(0,GLOBALS['n_loop']):
 
             t+=dt   
             t+=GLOBALS['MOT_RED_SF_duration']
+            if True: #cooling by ramping down RED beam power
+                NEW_TABLE_LINE('RedMOT', t, GLOBALS['Red_MOT_Frq']/1e6, GLOBALS['Red_MOT_Pow']*9/10)
+                t+=GLOBALS['MOT_RED_SF_duration']/8
+                NEW_TABLE_LINE('RedMOT', t, GLOBALS['Red_MOT_Frq']/1e6, GLOBALS['Red_MOT_Pow']*8/10)
+                t+=GLOBALS['MOT_RED_SF_duration']/8
+                # NEW_TABLE_LINE('RedMOT', t, GLOBALS['Red_MOT_Frq']/1e6, GLOBALS['Red_MOT_Pow']*7/10)
+                # t+=GLOBALS['MOT_RED_SF_duration']/8
+                # NEW_TABLE_LINE('RedMOT', t, GLOBALS['Red_MOT_Frq']/1e6, GLOBALS['Red_MOT_Pow']*6/10)
+
             MOT_Red3D_Switch_TTL(t, False)       
             MOT_Red3D_singleFrq_TTL(t, False)
             t+=dt
@@ -142,9 +151,18 @@ for i in range(0,GLOBALS['n_loop']):
 
         if sel_tweezer:
             ##### Tweezers loading #################
-            t-=GLOBALS['Tweezer_duration']
-            Twizzi_Switch_TTL(t, True)
-            t+=GLOBALS['Tweezer_duration']
+            t-=GLOBALS['TweezerLoading_duration']
+            Twizzi_Switch_TTL(t, True)                
+            t+=GLOBALS['TweezerLoading_duration']
+
+            if GLOBALS['LAC']: 
+                NEW_TABLE_LINE('RedMOT', t, GLOBALS['LAC_Frq']/1e6, GLOBALS['LAC_Pow'])
+                t+=3*dt
+                MOT_Red3D_Switch_TTL(t, True) 
+                MOT_Red3D_singleFrq_TTL(t, True)
+                t+=+GLOBALS['LAC_duration']
+                MOT_Red3D_Switch_TTL(t, False)       
+                MOT_Red3D_singleFrq_TTL(t, False)
 
             t+=GLOBALS['FluoImgPulse_duration'] # tweezer stays on during fluo imaging
             t+=50*ms  #"TOF" Only to see the atoms in tweezers and the atoms in the red mot expand, this is a variable to be adjusted, minimum was 6ms to see minimal atoms, 10ms was a good value
@@ -154,16 +172,19 @@ for i in range(0,GLOBALS['n_loop']):
     ##### ALL OFF #################
 
     if sel_fluo_image:
-        t_ahead_fluoimag = GLOBALS['QuantizAxis_ramp_duration'] + GLOBALS['FluoImgPulse_duration'] + 5*dt # matches RedMot single freq duration comprehensive of delay introduced by the coils switch-off
+        ImagingBeam.DDS.setfreq(dt, GLOBALS['ImagingFluo_Frq']/1e6*1e3)
+        ImagingBeam.DDS.setamp(dt, GLOBALS['ImagingFluo_Pow']*1e2)
+
+        t_ahead_fluoimag = GLOBALS['QuantizAxis_ramp_duration'] + GLOBALS['FluoImgPulse_duration'] + 10*dt # matches RedMot single freq duration comprehensive of delay introduced by the coils switch-off
         #t_ahead_fluoimag = GLOBALS['MOT_RED_duration']+100*msec # to see Blue MOT
+
         t-=t_ahead_fluoimag ########### TIME MACHINE  ############################ for Fluorescence
 
         # Ramp selected compensation coils to value that sets Quantization axis for imaging
-        #t+=set_CompCoils_QuantizationAxis(t, "ON", GLOBALS['QuantizAxis_ramp_duration'], v_step_size=0.01)
+        if GLOBALS['quantization_ax']:set_CompCoils_QuantizationAxis(t-GLOBALS['QuantizAxis_ramp_duration'], "ON", GLOBALS['QuantizAxis_ramp_duration'], v_step_size=0.01)
         #t+=set_CompCoils_QuantizationAxis_test(t, "ON", GLOBALS['QuantizAxis_ramp_duration'], samplerate=1e4)
         
         if sel_imaging_beam=="abs":
-            ImagingBeam.DDS.setamp(t, GLOBALS['Imaging_Pow_Fluo']*1e2)
             BlueImaging_AOM_TTL(t,True)
             BlueImaging_AOM_TTL(t+GLOBALS['FluoImgPulse_duration']+dt, False)
         elif sel_imaging_beam=='tweez':
@@ -185,7 +206,7 @@ for i in range(0,GLOBALS['n_loop']):
 
         elif sel_camera_fluo=='orca':
             if co:
-                t+=Orca_Camera.expose(t-orca_trigger_delay-Orca_Labscript_delay,'TweezFluo', trigger_duration=10, saving=True)+orca_trigger_delay+Orca_Labscript_delay
+                t+=Orca_Camera.expose(t+5*msec-orca_trigger_delay-Orca_Labscript_delay,'TweezFluo', trigger_duration=10, saving=True)+orca_trigger_delay+Orca_Labscript_delay #+5 for sync with fluo
             else:
                 Orca_Camera_trigger.go_high(t-orca_trigger_delay) 
                 Orca_Camera_trigger.go_low(t-orca_trigger_delay+100*usec) 
@@ -208,13 +229,14 @@ for i in range(0,GLOBALS['n_loop']):
             # Basler camera for fluorescence is controlled by Pylon Viewer
             # Basler_Camera_fluo.expose(t-100*usec+5*usec,'Fluo', frametype='tiff')
        
-        #set_CompCoils_QuantizationAxis(t, "OFF", GLOBALS['TOF'], 1e6)
         t+=t_ahead_fluoimag ############### TIME MACHINE  ############################
+        if GLOBALS['quantization_ax']:set_CompCoils_QuantizationAxis(t, "OFF", GLOBALS['QuantizAxis_ramp_duration'] )
 
     t+=GLOBALS['TOF']# wait for time of flight
     
     if sel_abs_image:
-        ImagingBeam.DDS.setamp(t, GLOBALS['Imaging_Pow']*1e2)
+        ImagingBeam.DDS.setfreq(dt,GLOBALS['Imaging_Frq']/1e6*1e3)
+        ImagingBeam.DDS.setamp(dt, GLOBALS['Imaging_Pow']*1e2)
         if sel_camera_abs=='andor':
             andor_trigger_delay=20*usec
             Andor_Camera_abs_readout=(1024*1024/30e6*sec+1024*2.2*usec)+30*msec # Horizontal readout + vertical shift times + buffer
@@ -246,6 +268,6 @@ for i in range(0,GLOBALS['n_loop']):
     Twizzi_Switch_TTL(t, False)
     t+=dt
     # set_CompCoils(t, "OFF")
-    t+=10*us
+    t+=1*ms
 
 stop(t+GLOBALS['stop_buffering_time'])
