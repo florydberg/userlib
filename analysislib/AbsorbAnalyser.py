@@ -37,7 +37,8 @@ def bin_data(data, binfactor):
 
 if True: #functions definition
     if True:  # Constants and Image Analysis  
-        V_MAX=0.4 #.15 for blue .40 for red
+        # V_MAX=0.6 #.15 for blue .40 for red
+        V_MAX=0.4
 
         Imag_beam_Power=440e-6 #W   #TODO: update this value with the measure we have to take
         waist_0=6.667e-3 #m
@@ -155,7 +156,7 @@ if True: #functions definition
 
         initial_guess = (ampguess, x_0, y_0, 10, 10, 0.01, 0.01)  # Initial guess for amplitude, xo, yo, sigma_x, sigma_y, theta, offset
         low = [0, 0, 0, 0, 0, 0, -10]
-        upper = [1e10, RX-RX/10, RY-RY/10, 2*RX, 2*RY, 0.25, 10]
+        upper = [1e10, RX-RX/10, RY-RY/10, 2*RX, 2*RY, 3.1415/2, 10]
         bounds = [low, upper]
 
         def residuals(params, xy, data):
@@ -211,7 +212,8 @@ if True: #functions definition
 
         #########################  Plot the original data and the fitted Gaussian  #########################
         figure()
-        plt.figure(figsize=(20, 10))
+        plt.figure(figsize=(40, 40))
+        plt.rcParams.update({'font.size': 14})
         # 2d image plot with profiles
         h, w = data.shape 
         h = h * 2
@@ -220,24 +222,32 @@ if True: #functions definition
         gs = gridspec.GridSpec(3, 3, width_ratios=[w * .2, w, w], height_ratios=[h * .2, h, h * .2])
 
         ax = [plt.subplot(gs[3]), plt.subplot(gs[4]), plt.subplot(gs[7]), plt.subplot(gs[5])]
-        bounds = [x.min(), x.max(), y.min(), y.max()]
+        bounds = [pixel_size*x.min(), pixel_size*x.max(), pixel_size*y.min(), pixel_size*y.max()]
+        conv=pix*binfactor*1e3   #Convert the scales from pixels to mm, accounting for the pixel size in um and possible binning
 
-        ax[1].imshow(data, cmap='viridis', vmin=0, vmax=V_MAX, extent=(x.min(), x.max(), y.min(), y.max()))
-
+        ax[1].imshow(data, cmap='viridis', vmin=0, vmax=V_MAX, extent=( conv*x.min(), conv*x.max(),conv*y.min(), conv*y.max()))
+        # figure.supxlabel('Time (s)', fontsize=14)
+        # figure.supylabel('Amplitude', fontsize=14)
         ffit_data = gaussian_2d((XXX, YYY), *popt)
         print(len(xxx))
         ffitdata = ffit_data.reshape((RY*binning, RX*binning), order='F')
 
         inty = np.sum(data, axis=1)
         gauy = np.sum(fitdata, axis=1)
-        ax[0].plot(inty[::-1], np.linspace(1, inty.shape, RX), 'b') 
-        ax[0].plot(gauy[::-1], np.linspace(1, inty.shape, RX), 'r')
+        # ax[0].plot(inty[::-1], np.linspace(1, inty.shape, RX), 'b') 
+        # ax[0].plot(gauy[::-1], np.linspace(1, inty.shape, RX), 'r')
+        ax[0].plot(inty[::-1], np.linspace(conv*y.min(), conv*y.max(), inty.shape[0]), 'b')
+        ax[0].plot(gauy[::-1], np.linspace(conv*y.min(), conv*y.max(), gauy.shape[0]), 'r')
+
 
 
         intx = np.sum(data, axis=0)
         gaux = np.sum(fitdata, axis=0)
-        ax[2].plot(intx, 'b')
-        ax[2].plot(gaux, 'r')
+        # ax[2].plot(intx, 'b')
+        # ax[2].plot(gaux, 'r')
+        ax[2].plot(np.linspace( conv*x.min(), conv * x.max(), intx.shape[0]), intx, 'b')
+        ax[2].plot(np.linspace( conv*x.min(), conv * x.max(), gaux.shape[0]), gaux, 'r')
+
 
         sigma_x=sigma_x*pix*binfactor
         sigma_y=sigma_y*pix*binfactor
@@ -246,18 +256,21 @@ if True: #functions definition
         #n_3D=fitN_of_atoms/(sigma_x*sigma_y*sigma_z*(2*np.pi)**(3/2))*1e-6 #in cm^3
         n_3D=Npeak/(sqrt(2*np.pi)*sigma_z*pixArea*binfactor**2)*1e-6 #in cm^3
 
-        ax[3].imshow(fitdata_shifted, cmap='viridis', vmin=0, vmax=V_MAX, extent=(x.min(), x.max(), y.min(), y.max())) 
-        plt.title('Fitted number of atoms = {}'.format("{:.2e}".format(fitN_of_atoms)))
+        
+
+        ax[3].imshow(fitdata_shifted, cmap='viridis', vmin=0, vmax=V_MAX,  extent=( conv*x.min(), conv*x.max(),conv*y.min(), conv*y.max())) 
+        # ax[3].imshow(fitdata_shifted, cmap='viridis', vmin=0, vmax=V_MAX,  extent=( pixel_size*x.max(),x.min(),  pixel_size*y.max(),y.min())) 
+        plt.title('Fitted number of atoms = {}'.format("{:.2e}".format(fitN_of_atoms)), fontsize=10)
         picname = " @ " + str(round(value,3)) +' '+ scan_unit +' of '+ scan_parameter
         plt.xlabel(str('3D peak density: %s in cm$^3$  \n sig_x,y:(%s um, %s um)\n Center=(%s, %s)\n %s' %
                     ("{:.2e}".format(n_3D), "{:.0e}".format(sigma_x*1e6), "{:.2e}".format(sigma_y*1e6),
-                        round(xo * 100) / 100, round((RY - yo) * 100) / 100, str(picname))))
+                        round(xo * 100) / 100, round((RY - yo) * 100) / 100, str(picname))), fontsize=10)
 
         # plt.colorbar()
         # plt.savefig(picname + ".png")
         save_imag(plt, "abs_imaging")
         sigma_awg = (sigma_x+sigma_y)/2
-
+        plt.tight_layout()
         plt.show()
 
         shot.save_result('number_of_atoms', fitN_of_atoms)
@@ -274,16 +287,32 @@ if True: #functions definition
 
         n_ticks=5
 
-        x_values=np.round(linspace(0,(data.shape[0])*pixel_size*1000*(n_ticks-1)/n_ticks, n_ticks),2)
+        # x_values=np.round(linspace(0,(data.shape[0])*pixel_size*1000*(n_ticks-1)/n_ticks, n_ticks),2)
 
+        # x_ticks=np.arange(0, data.shape[0], data.shape[0]/n_ticks)
+
+        # y_values=np.round(linspace(0,(data.shape[0])*pixel_size*1000*(n_ticks-1)/n_ticks, n_ticks),2)
+
+        # y_ticks=np.arange(0, data.shape[1], data.shape[0]/n_ticks)
+
+        x_values=np.round(linspace(0,(data.shape[0])*conv*(n_ticks-1)/n_ticks, n_ticks),2)
         x_ticks=np.arange(0, data.shape[0], data.shape[0]/n_ticks)
-
-        y_values=np.round(linspace(0,(data.shape[0])*pixel_size*1000*(n_ticks-1)/n_ticks, n_ticks),2)
-
+        y_values=np.round(linspace(0,(data.shape[0])*conv*(n_ticks-1)/n_ticks, n_ticks),2)
         y_ticks=np.arange(0, data.shape[1], data.shape[0]/n_ticks)
 
 
         if True:
+            plt.figure()
+            plt.imshow(data, cmap='viridis', vmin=0, vmax=V_MAX)
+            cbar = plt.colorbar()
+            cbar.ax.tick_params(labelsize=44)
+            plt.xticks(ticks=x_ticks, labels=x_values, fontsize=46)
+            plt.yticks(ticks=y_ticks, labels=y_values, fontsize=46)
+            plt.xlabel('mm', fontsize=46)
+            plt.ylabel('mm',fontsize=46)
+            plt.show() 
+
+        if False:
             plt.figure()
             plt.imshow(data, cmap='viridis', vmin=0, vmax=V_MAX)
             plt.colorbar()
@@ -292,8 +321,6 @@ if True: #functions definition
             plt.xlabel('mm')
             plt.ylabel('mm')
             plt.show() 
-
-
 
 
         #plt.figure()
@@ -410,7 +437,7 @@ if True:# ROI Selection
     # RY=1000
 
    
-    P0=(50,200)   # Starting point for the atoms ROI
+    P0=(100,250)   # Starting point for the atoms ROI
     RX=800
     RY=800
     # P0=(190,150)   # Starting point for the atoms ROI
@@ -431,14 +458,14 @@ if True:# ROI Selection
     ray=400       
 ######################
 
-scan_parameter='TOF'
-scan_unit='ms'
+scan_parameter='Red_MOT_Frq'
+scan_unit='MHz'
 
 op_plotting = False #extra images
 
 op_FFTfilter = False
 op_binning = True
-binfactor=5
+binfactor=2
 op_gauss_fit = True
 op_gauss_fit_internal = 1
 

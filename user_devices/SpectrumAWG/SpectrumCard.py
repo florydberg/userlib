@@ -17,6 +17,7 @@ class SpectrumCard:
         self.device_path = device_path
         self.hCard = None
         self.timeout = timeout
+        # self.generation_mode='single'
 
     def __del__(self):
         """
@@ -68,7 +69,7 @@ class SpectrumCard:
         # Check Memory on the card
         lMemSize = int64(0)
         spcm_dwGetParam_i64(self.hCard, SPC_PCIMEMSIZE, byref(lMemSize))
-        print(f"There are {self.format_to_si(lMemSize.value)}bytes of memory on the card.")
+        print(f"There are {self.format_to_si(lMemSize.value)} bytes of memory on the card.")
         self.memSize = lMemSize.value
 
         # Get Limits for Sequence replay
@@ -229,40 +230,27 @@ class SpectrumCard:
 
         return formatted_rate
 
-    def set_channel_status(self, channel_number, channel_status = False):
+    def set_channel_status(self, active_channels, channel_status = 1): #changed by Andre
         """
         Turns channels 1 and 2 on or off on the Spectrum card.
 
         Parameters:
         - channel_number: Number of the channel (0 ... 3) to set.
-        - channel_status: Boolean indicating the desired status for the channel (True for on, False for off).
+        - channel_status: numerical value that indicates th combination of open channels ( 1 for '0', 2 for '1', 3 for both)
         """
         # Read number of channels of the card
         buff = int64(0)
         spcm_dwGetParam_i64(self.hCard, SPC_MIINST_CHPERMODULE, byref(buff))
         self.channels_available = buff.value
-        
 
-        # Validate channel_number input
-        if channel_number < 0 or channel_number >= self.channels_available:
-            raise ValueError(f"Invalid channel number. Channel number must be between 0 and {self.channels_available-1}.")
-
-        # Current bitmask for channel enable status
+        # # Current bitmask for channel enable status
         current_status = int64(0)
         spcm_dwGetParam_i64(self.hCard, SPC_CHENABLE, byref(current_status))
+        print(current_status.value)
 
-        # Calculate the new bitmask based on desired channel statuses
-        # Note: Adjust the bit manipulation as necessary based on your card's documentation
-        new_status = current_status.value
-        if channel_status:
-            new_status |= (1 << channel_number)  # Set bit channel_number to enable channel 1
-        else:
-            new_status &= ~(1 << channel_number)  # Clear bit channel_number to disable channel 1
-
-        # Apply the new channel enable status
-        result = spcm_dwSetParam_i64(self.hCard, SPC_CHENABLE, new_status)
+        # # Apply the new channel enable status
+        result = spcm_dwSetParam_i64(self.hCard, SPC_CHENABLE, channel_status)
         if result != ERR_OK:
-            print(result)
             print("Failed to set channel status.")
             self.handle_error()
         else:
@@ -270,11 +258,11 @@ class SpectrumCard:
             spcm_dwGetParam_i64(self.hCard, SPC_CHENABLE, byref(current_status))
             print("Updated channel statuses:")
             for i in range(self.channels_available):  # Print all channels statuses
-                channel_is_on = bool(current_status.value & (1 << i))
+                channel_is_on = bool(str(i) in active_channels)
                 print(f"Channel {i}: {'On' if channel_is_on else 'Off'}")
             
             spcm_dwGetParam_i64(self.hCard, SPC_CHCOUNT, byref(buff))
-            channels_active = buff.value
+            channels_active = self.getNumActiveChannels() 
             print(f"The card reports a total of {channels_active} active channels.")
 
     def set_channel_enable(self, output_number, enable):
@@ -292,6 +280,9 @@ class SpectrumCard:
             2: SPC_ENABLEOUT2,
             3: SPC_ENABLEOUT3
         }
+        buff = int64(0)
+        spcm_dwGetParam_i64(self.hCard, SPC_MIINST_CHPERMODULE, byref(buff))
+        self.channels_available = buff.value
 
         # Validate output_number input
         if output_number not in output_registers or output_number >= self.channels_available:
@@ -379,12 +370,12 @@ class SpectrumCard:
         else:
             print(f"Filter for channel {output_number} {'enabled' if filter_setting else 'disabled'} succesfully.")
 
-    def set_channel_mode(self,channel_number , mode=None):
+    def set_channel_mode(self, channel_number, mode=None):
         """
         Sets the mode for a specified channel on the Spectrum card.
 
         Parameters:
-        - channel_number: The number of the channel to configure (e.g., 0, 1, 2).
+        - channel_number: The number of the channel to configure (e.g., 0, 1).
         - mode: The output mode of the channel:
             - None: Single-ended mode.
             - 'diff': The channel is set as a differential output.
@@ -393,8 +384,7 @@ class SpectrumCard:
         # Example mapping of modes to registers for each channel. Adjust based on actual API.
         mode_registers = {
             0: {'diff': SPC_DIFF0, 'double': SPC_DOUBLEOUT0},
-            1: {'diff': SPC_DIFF0, 'double': SPC_DOUBLEOUT1},
-            2: {'diff': SPC_DIFF2, 'double': SPC_DOUBLEOUT2},
+            1: {'diff': SPC_DIFF1, 'double': SPC_DOUBLEOUT1}, #changed by Andre
         }
 
         if channel_number not in mode_registers or mode not in ['diff', 'double', None]:
@@ -744,6 +734,22 @@ class SpectrumCard:
         else:
             print("Trigger AND mask set successfully.")
 
+    def getNumActiveChannels(self):
+        """
+        Return the number of activated channels.
+        """
+        actualEnabledChannels = int32(0)
+        spcm_dwGetParam_i32(self.hCard, SPC_CHCOUNT, byref(actualEnabledChannels))
+        return actualEnabledChannels.value
+
+    def getBytesPerSample(self):
+        """
+        Return the bytes per sample. Default should be 2 bytes. 
+        """
+        bytesPerSample = int32(0)
+        spcm_dwGetParam_i32(self.hCard, SPC_MIINST_BYTESPERSAMPLE, byref(bytesPerSample))
+        return bytesPerSample.value
+    
     def card_reset(self):
         """Performs a hard and software reset of the card."""
         spcm_dwSetParam_i32(self.hCard, SPC_M2CMD , M2CMD_CARD_RESET)
@@ -826,7 +832,7 @@ class SpectrumCard:
         
         spcm_dwSetParam_i64(self.hCard, SPC_MEMSIZE, np.int64(np.ceil(sample_number / 4096) * 4096))
         print("Starting the DMA transfer and waiting until data is in board memory ...")
-        spcm_dwDefTransfer_i64(self.hCard, SPCM_BUF_DATA, SPCM_DIR_PCTOCARD, 0, byref(samples), 0, sample_number*2)
+        spcm_dwDefTransfer_i64(self.hCard, SPCM_BUF_DATA, SPCM_DIR_PCTOCARD, 0, byref(samples), 0, sample_number*2) #(carefull since the card is 16-bit we need twice as many bytes!)
         spcm_dwSetParam_i32(self.hCard, SPC_M2CMD, M2CMD_DATA_STARTDMA | M2CMD_DATA_WAITDMA)
         print("... data has been transferred to board memory.")
 
@@ -876,12 +882,12 @@ class SpectrumCard:
         - segment: index of the segment to transfer the data to.
         - samples: The array of samples to transfer.
         """
-
-        sample_number = len(samples) # number of samples (carefull since the card is 16-bit we need twice as many bytes!)
+        ch_num=2 #change this if using only one channel
+        sample_len = len(samples) # number of samples 
         
         # Convert the samples array to a ctypes array if it's not already.
         # This depends on the data type of your samples; let's assume they are 16-bit integers.
-        sample_array_type = ctypes.c_int16 * sample_number
+        sample_array_type = ctypes.c_int16 * sample_len
         samples = sample_array_type(*samples)
 
         # Check if all samples are 16-bit integers
@@ -891,13 +897,13 @@ class SpectrumCard:
         # Select correct memory segment
         result = spcm_dwSetParam_i32(self.hCard, SPC_SEQMODE_WRITESEGMENT, segment)
         if result == ERR_OK:
-             result = spcm_dwSetParam_i32(self.hCard, SPC_SEQMODE_SEGMENTSIZE,  sample_number)
+            result = spcm_dwSetParam_i32(self.hCard, SPC_SEQMODE_SEGMENTSIZE,  int(sample_len/ch_num))
         if result != ERR_OK:
             print(f"Failed to set the active memory segments to segment number {segment}.")
             self.handle_error()
 
         print("Starting the DMA transfer and waiting until data is in board memory ...")
-        spcm_dwDefTransfer_i64(self.hCard, SPCM_BUF_DATA, SPCM_DIR_PCTOCARD, 0, byref(samples), 0, sample_number*2)
+        spcm_dwDefTransfer_i64(self.hCard, SPCM_BUF_DATA, SPCM_DIR_PCTOCARD, 0, byref(samples), 0, sample_len*2) # (carefull since the card is 16-bit we need twice as many bytes!)
         spcm_dwSetParam_i32(self.hCard, SPC_M2CMD, M2CMD_DATA_STARTDMA | M2CMD_DATA_WAITDMA)
         print("... data has been transferred to board memory.")
 
@@ -916,13 +922,14 @@ class SpectrumCard:
         if step_index < 0 or step_index >= self.seq_max_steps:
             raise ValueError(f"Step index out of range. Must be between 0 and {self.seq_max_steps-1}.")
 
-        # Lower 32 bits: Segment and Next Step Masks
-        lower_32 = (segment_index & 0xFFFF) | ((next_step & 0xFFFF) << 16)
+        
+        lower_32 = (segment_index & 0xFFFF) | ((next_step & 0xFFFF) << 16) # Lower 32 bits: Segment and Next Step Masks
+        upper_32 = (loop_count & 0xFFFFF)                                  # Upper 32 bits: Loop Mask and Flags
 
-        # Upper 32 bits: Loop Mask and Flags
-        upper_32 = (loop_count & 0xFFFFF)
         if end_loop_condition == 'on_trigger':
             upper_32 |= SPCSEQ_ENDLOOPONTRIG
+        elif end_loop_condition == 'always':
+            upper_32 |= SPCSEQ_ENDLOOPALWAYS
         if last_step:
             upper_32 |= SPCSEQ_END
 
@@ -957,6 +964,14 @@ class SpectrumCard:
         else:
             print(f"Segment size set to {segment_size} successfully.")
 
+    def set_start_step(self, first_step=0):
+        result = spcm_dwDefTransfer_i64(self.hCard, SPC_SEQMODE_STARTSTEP, first_step)
+        if result != ERR_OK:
+            print(f"Failed to set sequence step {first_step} as first.")
+            self.handle_error()  # Assuming handleError is your function for error handling
+        else:
+            print(f"Sequence step {first_step} set as first.")
+
     def fifo_initialize_buffer(self, samples, notify_size):
         """
         Initiallizes FIFO buffer and transfers first set of samples.
@@ -977,7 +992,7 @@ class SpectrumCard:
             raise ValueError("All samples must be 16-bit integers.")
         
         print("Starting the DMA transfer and waiting until data is in board memory ...")
-        spcm_dwDefTransfer_i64(self.hCard, SPCM_BUF_DATA, SPCM_DIR_PCTOCARD, notify_size, byref(samples), 0, sample_number*2)
+        spcm_dwDefTransfer_i64(self.hCard, SPCM_BUF_DATA, SPCM_DIR_PCTOCARD, notify_size, byref(samples), 0, sample_number*2) # (carefull since the card is 16-bit we need twice as many bytes!)
         spcm_dwSetParam_i32(self.hCard, SPC_DATA_AVAIL_CARD_LEN, sample_number*2)
         spcm_dwSetParam_i32(self.hCard, SPC_M2CMD, M2CMD_DATA_STARTDMA | M2CMD_DATA_WAITDMA)
         print("... data has been transferred to board memory.")
@@ -998,13 +1013,12 @@ def generate_single_tone(frequency, num_samples, sample_rate = 1.25e9 ):
     - numpy.ndarray: An array of int16 values representing the generated sine wave signal.
     """
     duration = num_samples/sample_rate  # Duration to cover one cycle of the sine wave, in seconds
-
     # Calculate the number of samples needed for one cycle
     print(f"Number of samples: {num_samples}")
     # Generate time values
     t = np.linspace(0, duration, num_samples, endpoint=False)
     
-    return np.int16(np.sin(2 * np.pi * frequency * t) * 32767)
+    return np.int16(np.sin(2 * np.pi * frequency * t)* 32767 ) # Normalize the signal to the range [-32767, 32767] to prevent overflow when casting to int16
 
 def generate_multi_tone(frequencies, amplitudes, phases, num_samples, sample_rate=1.25e9, print_crest_factor=False):
     """

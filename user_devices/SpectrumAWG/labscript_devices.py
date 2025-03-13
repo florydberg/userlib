@@ -1,5 +1,7 @@
+# Modified by Andre FloRydberg 11/2024
 from labscript import Device, Output, Trigger, LabscriptError, config, set_passed_properties
 import numpy as np
+import math
 
 class AWGOutput(Output):
     description = 'Arbitray Waveform Output'
@@ -48,6 +50,7 @@ class AWGOutput(Output):
         # With the (maximal) sample rate of 1.25GHz, this means the sample duration has minimal
         # steps of 3.2769µs.
         num_samples = np.round(sample_duration*self.parent_device.sample_rate/4096)*4096
+        print(self.parent_device.sample_rate)
         return num_samples
 
     def generate_single_tone(self, t, sample_duration, frequency, label=None):
@@ -78,6 +81,8 @@ class AWGOutput(Output):
         ----------
         t : float
             Time.
+        sample_duration : float
+            Duration of sample (that gets repeated), in seconds.
         frequencies : 
             Iterable of frequencies for each tone
         amplitude : (optional)
@@ -93,9 +98,9 @@ class AWGOutput(Output):
             amplitudes = np.ones(len(frequencies))
         if phases is None:
             phases = np.zeros(len(frequencies))
-            # TODO: for equally spaced frequencies using 
-            # phases = np.pi*np.arange(len(frequencies))**2/len(frequencies)
-            # are good values.
+            # TODO: for equally spaced frequencies using phases = np.pi*np.arange(len(frequencies))**2/len(frequencies)# are good values.
+            phases= np.pi*np.random.rand(len(frequencies))
+            
 
         # Check frequency resolution
         freq_sorted = np.sort(frequencies)
@@ -111,23 +116,24 @@ class AWGOutput(Output):
     def do_checks(self):
         for t,instruction in self.instructions.items():
             if instruction[0]>self.parent_device.max_sample_size:
-                raise LabscriptError(f"Instruction for '{self.name}' at t={t} has too many samples (num_samples={instruction[0]:.0f}).")
+                raise LabscriptError(f"Instruction for '{self.name}' at t={t} has too many samples (num_samples={instruction[0]:.0f}). The maximum is {self.parent_device.max_sample_size} with your settings.")
+            elif instruction[0] <= 0:
+                 raise LabscriptError(f"Instruction for '{self.name}' at t={t} has too short sample length. The minimum is {4096/self.parent_device.sample_rate*1e9}ns.")
             
-
 
 class SpectrumAWG(Device):
     description = "Spectrum Instrumentation Arbitray Waveform Generator"
     allowed_children = [AWGOutput]
 
     @set_passed_properties(
-        property_names={"connection_table_properties": ["device_path","timeout","external_clock_rate","sample_rate","memory_segments"],
+        property_names={"connection_table_properties": ["device_path","timeout","external_clock_rate","sample_rate","memory_segments", "generation_mode"],
                         "device_properties": []                
         }
         )
-    def __init__(self, name, device_path, sample_rate, external_clock_rate=None, timeout=5000, channel_mode="seq", memory_segments=2**16, **kwargs):
+    def __init__(self, name, device_path, sample_rate, external_clock_rate=None, timeout=5000, generation_mode="single", memory_segments=256, **kwargs):
         """ Create SpectrumAWG instance.
         
-        Parameters
+        NEW Parameters
         ----------
         name : str
             Name for device.
@@ -137,25 +143,37 @@ class SpectrumAWG(Device):
             Timeout for opterations in BLACS worker, in milliseconds.
         external_clock_rate : int
             Frequency of the external clock (ClkIn) in Hz. If None, the card uses the internal clock.
-        channel_mode : str
-            Sets the output mode of the AWG channel between sequence ('seq') and streaming ('fifo').
-            TODO: implemet fifo mode
+        generation_mode : str
+            Sets the output mode of the AWG channel between sequence ('single'), sequence ('sequence') and streaming ('fifo').TODO: implemet fifo mode
+            generation_modes = {
+                'single': SPC_REP_STD_SINGLE,
+                'multi': SPC_REP_STD_MULTI,
+                'gated': SPC_REP_STD_GATE,
+                'single_trg': SPC_REP_STD_SINGLERESTART,
+                'sequence': SPC_REP_STD_SEQUENCE,
+                'fifo_single': SPC_REP_FIFO_SINGLE,
+                'fifo_multi': SPC_REP_FIFO_MULTI,
+                'fifo_gate': SPC_REP_FIFO_GATE,
+                'dds': SPC_REP_STD_DDS,
+            }
         memory_segments : int
             In sequence mode how many different segments can be stored in memory.
         """
         super().__init__(name, parent_device=None, connection="None", **kwargs)
         self.BLACS_connection = device_path
-        self.channel_mode = channel_mode
-        self.sample_rate = sample_rate
+        self.generation_mode = generation_mode #definition
+        self.sample_rate = sample_rate         #new value
+        memory_segments= int(pow(2,math.ceil(math.log(memory_segments)/math.log(2)))) # conversion to power of 2
         self.memory_segments = memory_segments
 
         # Calculate maximal sample size
         internal_memory = 2**32 # 4GB
-        self.max_sample_size = internal_memory//2//memory_segments # TODO: according to the messages in the worker we don't need the factor 2 here
+        self.max_sample_size = internal_memory//2//memory_segments
 
     def do_checks(self):
         if len(self.child_devices)>1:
-            raise NotImplementedError("This code can just handle 1 output channel for now.")
+            # raise NotImplementedError("This code can just handle 1 output channel for now.")
+            none=None
 
     def generate_code(self, hdf5_file):
         group = hdf5_file.require_group(f"devices/{self.name}")
@@ -175,9 +193,6 @@ class SpectrumAWG(Device):
                     group[output.connection]["labels"].attrs[str(i)] = output.instructions[t][-1]
 
         
-
-
-
 if __name__=="__main__":
     from labscript import start
     import h5py
@@ -186,7 +201,7 @@ if __name__=="__main__":
     with h5py.File("user_devices/SpectrumAWG/testing/labscript_devices.h5","w") as hdf5_file:
         hdf5_file.require_group("devices")
         SpectrumAWG("TestAWG","/dev/spcm0",timeout=5000,sample_rate=1250e6)
-        AWGOutput("Tweezers", TestAWG, "0", None, None, 100)
+        Tweezers=AWGOutput("Tweezers", TestAWG, "0", None, None, 100)
 
         start()
         Tweezers.generate_single_tone(1,1e-3,10e6)
@@ -196,4 +211,3 @@ if __name__=="__main__":
         TestAWG.generate_code(hdf5_file)
 
         stop(11)
- 

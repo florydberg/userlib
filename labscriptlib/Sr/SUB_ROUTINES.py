@@ -1,9 +1,9 @@
 ########## SUB ROUTINES #######################
 # by Andrea for Sr FloRydberg Group           #
 # register of actions for Labscript Ruotines  #
-# last edited 06/03/2024                      # 
+# last edited 12/03/2025   by Andre           # 
 ###############################################
-from user_devices.mogdevice import MOGDevice
+from user_devices.MOGlabsQRF.mogdevice import MOGDevice
 import runmanager.remote
 import h5py
 from labscript_utils import import_or_reload
@@ -141,9 +141,15 @@ if True: #Envelope of ttl and analog
 
     def Twizzi_Switch_TTL(tt, control=True):
         if control:
-            Tweezer_gate.go_high(tt)
+            Tweezer_switch.go_high(tt)
         else:
-            Tweezer_gate.go_low(tt)
+            Tweezer_switch.go_low(tt)
+
+    def Tweezers_AOM_TTL(tt, control=True):
+        if control:
+            Tweezers_gate.go_high(tt)
+        else:
+            Tweezers_gate.go_low(tt)  
 
     def MOT_Blue3D_Shutter_TTL(tt, control=True):
         if control:
@@ -970,6 +976,7 @@ def set_MOGLABS_ready(tt):
     G_Red_MOT_Frq=GLOBALS['Red_MOT_Frq']/1e6
     G_ImagingTweez_Frq=GLOBALS['ImagingTweez_Frq']/1e6
     G_Sisyphus_Frq=GLOBALS['Sisyphus_Frq']/1e6
+    G_Tweezers_Frq=GLOBALS['Tweezers_Frq']/1e6
         
     G_Imaging_Pow=GLOBALS['Imaging_Pow']
     G_ImagingFluo_Pow=GLOBALS['ImagingFluo_Pow']
@@ -978,12 +985,16 @@ def set_MOGLABS_ready(tt):
     G_ImagingTweez_Pow=GLOBALS['ImagingTweez_Pow']
     G_dueD_MOT_Pow=GLOBALS['dueD_MOT_Pow']    
     G_Sisyphus_Pow=GLOBALS['Sisyphus_Pow']
+    G_Tweezers_Pow=GLOBALS['Tweezers_Pow']
+
+    G_ImagingFluo_SetPoint=GLOBALS['ImagingFluo_SetPoint']
 
     # RedMOT.DDS.setfreq(tt, G_Red_MOT_Frq*1e3)  ##################### VERY VERY  BAD THINGS TO CIRCUMVENT DRIVER BUG  TODO: FIX removing 1e3or2 ask Andre #################
     # RedMOT.DDS.setamp(tt, G_Red_MOT_Pow*1e2)
 
     # ImagingBeam.DDS.setfreq(tt, G_Imaging_Frq*1e3)
     # ImagingBeam.DDS.setamp(tt, G_Imaging_Pow*1e2)
+    ImagingBeam.DDS.setpoint_pid(tt, G_ImagingFluo_SetPoint)
 
     dueD_MOT.DDS.setfreq(tt, G_dueD_MOT_Frq*1e3)
     dueD_MOT.DDS.setamp(tt, G_dueD_MOT_Pow*1e2)
@@ -996,6 +1007,10 @@ def set_MOGLABS_ready(tt):
 
     Sisyphus.DDS.setfreq(tt, G_Sisyphus_Frq*1e3)
     Sisyphus.DDS.setamp(tt, G_Sisyphus_Pow*1e2)
+
+    Tweezers.DDS.setfreq(tt,  G_Tweezers_Frq*1e3)
+    Tweezers.DDS.setamp(tt, G_Tweezers_Pow*1e2)
+    Tweezers_gate.go_high(tt+dt)
 
 def set_CompCoils(tt, control="ON"):
     if control=="ON":

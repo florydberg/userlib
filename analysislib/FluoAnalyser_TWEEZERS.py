@@ -15,26 +15,6 @@ ts=time.time()
 datetime.datetime.now()
 dt=datetime.datetime.now().date()
 
-def bin_data(data, binfactor):
-    # Get original shape
-    original_shape = np.array(data.shape)
-
-    # Check if the dimensions are divisible by binfactor
-    if np.any(original_shape % binfactor != 0):
-        # If not, crop the array to the nearest size that is divisible by binfactor
-        new_shape = original_shape - (original_shape % binfactor)
-        data = data[:new_shape[0], :new_shape[1]]
-    
-    # Calculate new shape
-    new_shape = (data.shape[0] // binfactor, binfactor,
-                 data.shape[1] // binfactor, binfactor)
-    
-    # Perform binning
-    binned_data = data.reshape(new_shape).sum(axis=(1, 3)) / (binfactor**2)
-    
-    return binned_data
-
-
 if True: #functions definition
     if True:  # Constants and Image Analysis  
         pixel_size = 4.6e-6  # meters per pixel (Orca magnified)
@@ -85,7 +65,9 @@ if True: #functions definition
         plt.savefig(one_level_up + '/' + img_name +  '_' + picname + ".png")
         print(picname + ' saved')
 
-    def MotPlot(MotSpot, rmin = None, rmax = None):
+    def MotPlot(MotSpot, rmin = None, rmax = None, GaussFit=False):
+        MOTray=round(size(MotSpot,1)/2)
+        print(MOTray)
         if rmin == None:
             rmin=np.amin(MotSpot)
         if rmax == None:
@@ -94,6 +76,25 @@ if True: #functions definition
         h, w = MotSpot.shape 
         h = h * 2
         w = w * 2
+        if GaussFit:
+            x = np.linspace(1, MOTray*2, MOTray*2)
+            y = np.linspace(1, MOTray*2, MOTray*2)
+            xx, yy = np.meshgrid(x, y)
+            X = xx.ravel(order='F')
+            Y = yy.ravel(order='F')
+            initial_guess = (260, MOTray, MOTray, MOTray/2, MOTray/2, 0.01, 0.01)
+            try:
+                popt, cov = curve_fit(gaussian_2d, (X, Y), MotSpot.ravel(order='F'), p0=initial_guess)
+            except:
+                popt = [26, 1, 1, 1, 1, 0, 0]
+    
+            amplitude, xo, yo, sigma_x, sigma_y, theta, offset = popt
+            popt=amplitude, xo, yo, sigma_x, sigma_y, theta, offset  
+
+            fit_data = gaussian_2d((X, Y), *popt)
+            fitdata = fit_data.reshape((MOTray*2, MOTray*2), order='F')
+            gauy = np.sum(fitdata, axis=1)
+            gaux = np.sum(fitdata, axis=0)
         intx = np.sum(MotSpot, axis=0)
         inty = np.sum(MotSpot, axis=1)
         
@@ -105,35 +106,54 @@ if True: #functions definition
 
         gs = gridspec.GridSpec(2, 2, width_ratios=[w * .2, w], height_ratios=[ h, h * .2])
         ax = [plt.subplot(gs[3]), plt.subplot(gs[0]), plt.subplot(gs[1])]
-        ax[0].plot(intx, 'b')       
+        ax[0].plot(intx, 'b')  
+        if GaussFit:     
+            ax[0].plot(np.linspace(1, intx.shape, MOTray*2)*effective_pixel_size, gaux,  'r')       
         ax[1].plot(inty[::-1], np.linspace(1, inty.shape, MOTray*2), 'b') 
+        if GaussFit:
+            pixel_line=np.linspace(1, inty.shape, MOTray*2)*effective_pixel_size
+            ax[1].plot(gauy[::-1], pixel_line, 'r') 
         ax[2].imshow(MotSpot, cmap='plasma',vmin=rmin, vmax=rmax) 
         plt.title('Mot Spot')
-        plt.gca().add_patch(TweezArea3)
-        plt.gca().add_patch(TweezArea2)
-        plt.gca().add_patch(TweezArea1)
-        save_imag(plt, 'mot_fluo')
-        plt.show() 
+        if not GaussFit:
+            plt.gca().add_patch(back)
+            plt.gca().add_patch(TweezArea3)
+            plt.gca().add_patch(TweezArea2)
+            plt.gca().add_patch(TweezArea1)
+        if saving_plots: save_imag(plt, 'mot_fluo')
         if True:
-            # ax[2].colorbar()
             plt.xticks(ticks=x_ticks, labels=x_values)
             plt.yticks(ticks=y_ticks, labels=y_values)
             plt.xlabel('mm')
             plt.ylabel('mm')
-            # plt.show() 
+        if GaussFit:
+            x_0=round(xo*effective_pixel_size)
+            y_0=round(yo*effective_pixel_size)
+            std_dev=(sigma_x+sigma_y)/2*effective_pixel_size
+            # plt.colorbar(MotSpot)
+            plt.xlabel("peak = %d , waist = %d, center = %a um" %(round(amplitude), std_dev, [x_0,y_0]))
+            shot.save_result('peak_RedMot', amplitude)
+            shot.save_result('waist_RedMot', std_dev)
+            shot.save_result('center_RedMot', [x_0,y_0])
+            shot.save_result('angle_RedMot', theta)
+            shot.save_result('offset_RedMot', offset)
+        plt.show() 
 
     def TweezerAnalysis(TweezerSpot, ii, plotting=False, GaussFit=False):
         h, w = TweezerSpot.shape 
         h = h * 2
         w = w * 2
 
-        totphotons=np.sum(TweezerSpot)
-        waist=round(tweezDim/2)
-        TweezerPoint=TweezerSpot[Tray-waist:Tray+waist+1, Tray-waist:Tray+waist+1]
+        TweezerPoint=TweezerSpot[Tray-waist:Tray+waist, Tray-waist:Tray+waist]
         mean_count=mean(TweezerPoint)
+        photon_count=sum(TweezerPoint)/10
         var_count=var(TweezerPoint)
+        max_count=np.max(TweezerPoint)
         shot.save_result('mean_tweezer_'+str(ii), mean_count)
+        shot.save_result('max_tweezer_'+str(ii), max_count)
         shot.save_result('variance_tweezer_'+str(ii), var_count)
+        shot.save_result('photon_tweezer_'+str(ii), photon_count)
+        shot.save_result('atom_in_tweezer_'+str(ii), int(photon_count>atom_presence_threshold))
 
         if GaussFit:
             x = np.linspace(1, Tray*2, Tray*2)
@@ -143,7 +163,7 @@ if True: #functions definition
             Y = yy.ravel(order='F')
             initial_guess = (260, Tray, Tray, Tray/2, Tray/2, 0.01, 0.01)
             try:
-                popt, cov = curve_fit(gaussian_2d, (X, Y), TweezerSpot.ravel(order='F'), p0=initial_guess)
+                popt, _ = curve_fit(gaussian_2d, (X, Y), TweezerSpot.ravel(order='F'), p0=initial_guess)
             except:
                 popt = [26, 1, 1, 1, 1, 0, 0]
     
@@ -169,7 +189,9 @@ if True: #functions definition
             ax[0].plot(intx, 'b')
             ax[1].plot(inty[::-1], np.linspace(1, inty.shape, Tray*2), 'b') 
             x_label1="mean = %d , variance = %d" %(round(mean_count), var_count)
-            TweezArea=patches.Rectangle([Tray-waist,Tray-waist], tweezDim, tweezDim, linewidth=1, edgecolor='r', facecolor='none')
+
+            TweezArea=patches.Rectangle([Tray-waist,Tray-waist], tweezROI, tweezROI, linewidth=1, edgecolor='r', facecolor='none')
+
             plt.gca().add_patch(TweezArea)
             plt.legend(['Tweezer Integration Area'], loc ="lower right")
             x_label2=''
@@ -179,78 +201,84 @@ if True: #functions definition
                 ax[1].plot(gauy[::-1], np.linspace(1, inty.shape, Tray*2), 'r')
             plt.xlabel(x_label1+x_label2)
             plt.show() 
-            save_imag(plt, 'tweez_fluo_'+ str(ii))
-
-
-        
+            if saving_plots: save_imag(plt, 'tweez_fluo_'+ str(ii))
 
 ######################
-scan_parameter='LAC_Frq'
+scan_parameter='SisyphusImg_Frq'
 scan_unit='MHz'
-# scan_parameter1='imaging_waveplate_2'
-# scan_unit1='°'
+saving_plots=True
+tweezROI=8
+waist=round(tweezROI/2)
+atom_presence_threshold=40
 ######################
 plt.style.use("default")
 
 with Run(path).open('r+') as shot:
     start_time = time.time()
     data_frame=data(path)
-
+    ROI=data_frame['Orca_ROI']
+    
     img={}
     for i in ['TweezFluo']:    
         shot_image=shot.get_image('Orca_Camera',str(i),'frame')  # Obtaining multiple images and averaging them:
         if int(data_frame['n_loop'])>1: img[str(i)] = np.average(shot_image.astype(np.float32),axis=0)
         else: img[str(i)]=shot_image.astype(np.float32)
 
-    if True: #ROIS
-        # MOT0=[2600,900]
-        MOT0=[2357,843]
-        MOTray=50
+    FluoImag=img['TweezFluo']
+    FluoImag-=200 #offset removal
+    MOTray=50
+    plt.figure(10)
+    plt.title('Orca Fluo')
+    plt.imshow(FluoImag, cmap='plasma')
+    plt.colorbar()
 
-        T1=[51,30]
-        T2=[51,51]
-        T3=[51,72]
-        Tray=6
-        
-        FluoImag=img['TweezFluo']
-        FluoImag-=200 #offset removal
+    if ROI=='full': #ROIS
+        MOT0=[2360,841] 
         MOTArea=patches.Circle(MOT0, MOTray, linewidth=1, edgecolor='r', facecolor='none')
-        TweezArea1=patches.Circle(T1, Tray, linewidth=1, edgecolor='r', facecolor='none')
-        TweezArea2=patches.Circle(T2, Tray, linewidth=1, edgecolor='r', facecolor='none')
-        TweezArea3=patches.Circle(T3, Tray, linewidth=1, edgecolor='r', facecolor='none')
-
         MotSpot=FluoImag[MOT0[1]-MOTray:MOT0[1]+MOTray, MOT0[0]-MOTray:MOT0[0]+MOTray]
-        TweezerSpot1=MotSpot[T1[1]-Tray:T1[1]+Tray, T1[0]-Tray:T1[0]+Tray]
-        TweezerSpot2=MotSpot[T2[1]-Tray:T2[1]+Tray, T2[0]-Tray:T2[0]+Tray]
-        TweezerSpot3=MotSpot[T3[1]-Tray:T3[1]+Tray, T3[0]-Tray:T3[0]+Tray]
-    
-    if True: #FUllFrame 
-        plt.figure()
-        plt.title('Orca Fluo')
         plt.gca().add_patch(MOTArea)
-        plt.imshow(FluoImag, cmap='plasma' )
-        plt.colorbar()
-        plt.legend(['Red Mot Area'], loc ="lower right")
-        save_imag(plt, 'orca_fluo' )
-        plt.show() 
+    elif ROI=='mot':
+        MOT0=[659,441] 
+        MOTArea=patches.Circle(MOT0, MOTray, linewidth=1, edgecolor='r', facecolor='none')
+        MotSpot=FluoImag[MOT0[1]-MOTray:MOT0[1]+MOTray, MOT0[0]-MOTray:MOT0[0]+MOTray]
+        plt.gca().add_patch(MOTArea)
+    elif ROI=='tweez':
+        MOTArea=patches.Circle(MOTray, MOTray, linewidth=1, edgecolor='r', facecolor='none')
+        MotSpot=FluoImag
 
-    tweezDim=7
+    plt.legend(['Red Mot Area'], loc ="lower right")
+    if saving_plots: save_imag(plt, 'orca_fluo' )
+    plt.show() 
+
+    Tray=6
+    T1=[51,31]
+    T2=[51,51]
+    T3=[51,72]
+    back=patches.Rectangle([MOTray,round(MOTray/4)],waist*2, waist*2, linewidth=1, edgecolor='b', facecolor='none')
+    TweezArea1=patches.Circle(T1, Tray, linewidth=1, edgecolor='r', facecolor='none')
+    TweezArea2=patches.Circle(T2, Tray, linewidth=1, edgecolor='r', facecolor='none')
+    TweezArea3=patches.Circle(T3, Tray, linewidth=1, edgecolor='r', facecolor='none')
+    TweezerSpot1=MotSpot[T1[1]-Tray:T1[1]+Tray, T1[0]-Tray:T1[0]+Tray]
+    TweezerSpot2=MotSpot[T2[1]-Tray:T2[1]+Tray, T2[0]-Tray:T2[0]+Tray]
+    TweezerSpot3=MotSpot[T3[1]-Tray:T3[1]+Tray, T3[0]-Tray:T3[0]+Tray]
 
     # ## MOT spot
-    MotPlot(MotSpot,0,50)
+    if not data_frame['tweezers']:
+        MotPlot(MotSpot,0,50, GaussFit=True)
+    else:
+        MotPlot(MotSpot,0,50)
+        # Tweezer Spot n 1
+        TweezerAnalysis(TweezerSpot1, 1, plotting=True, GaussFit=False)
 
-    # Tweezer Spot n 1
-    TweezerAnalysis(TweezerSpot1, 1, plotting=True, GaussFit=False)
+        # Tweezer Spot n 2
+        TweezerAnalysis(TweezerSpot2, 2, plotting=True, GaussFit=False)
 
-    # Tweezer Spot n 2
-    TweezerAnalysis(TweezerSpot2, 2, plotting=True, GaussFit=False)
+        # Tweezer Spot n 3
+        TweezerAnalysis(TweezerSpot3, 3, plotting=True, GaussFit=False)
+        
+        shot.save_result('photo_background', sum(MotSpot[round(MOTray/4)-waist:round(MOTray/4)+waist, MOTray-waist:MOTray+waist])/10)
 
-    # Tweezer Spot n 3
-    TweezerAnalysis(TweezerSpot3, 3, plotting=True, GaussFit=False)
-
-shot.save_result('background', mean(MotSpot[0:tweezDim,0:tweezDim]))
 shot.save_result('scan_parameter', scan_parameter)
 shot.save_result('scan_unit', scan_unit)
-# shot.save_result('scan_parameter1', scan_parameter1)
-# shot.save_result('scan_unit1', scan_unit1)
+
 saving_script(path)

@@ -48,7 +48,7 @@
          <item row="0" column="0">
           <widget class="QLabel" name="label_2">
            <property name="text">
-            <string>Single Tone</string>
+            <string>Channel 0 and 1</string>
            </property>
           </widget>
          </item>
@@ -100,6 +100,23 @@
           <widget class="QPushButton" name="pushButton_refresh">
            <property name="toolTip">
             <string>Refresh dropdown menu</string>
+           </property>
+           <property name="text">
+            <string/>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="1">
+          <widget class="QLabel" name="label_3">
+           <property name="text">
+            <string>Card Reset:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="2">
+          <widget class="QPushButton" name="pushButton_reset">
+           <property name="toolTip">
+            <string>Restart Card</string>
            </property>
            <property name="text">
             <string/>

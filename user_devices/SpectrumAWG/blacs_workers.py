@@ -1,3 +1,4 @@
+#Modified by Andre FloRydberg
 import labscript_utils.h5_lock
 import h5py
 from blacs.tab_base_classes import Worker
@@ -5,10 +6,15 @@ from . import SpectrumCard
 import numpy as np
 
 class SpectrumAWGWorker(Worker):
+
     def init(self):
-        print("### INITIALIZE ###\n")
+
+        print("### INITIALIZING IT ###\n")
         self.AWG = SpectrumCard.SpectrumCard(self.device_path,timeout=self.timeout)
+        # print(self.__dir__())
+
         self.AWG.open()
+
         if self.external_clock_rate is None:
             self.AWG.set_clock('internal')
         else:
@@ -16,43 +22,78 @@ class SpectrumAWGWorker(Worker):
         self.AWG.set_sample_rate(int(self.sample_rate))
 
         self.channels = []
-        for ch in range(2):
+        for ch in range(2):  #changed by Andre
             if hasattr(self,f"channel_amplitude_{ch}"):
                 self.channels.append(str(ch))
-                self.AWG.set_channel_status(ch,True)
-                self.AWG.set_channel_enable(ch,True)
-                self.AWG.set_channel_amplitude(ch,getattr(self,f"channel_amplitude_{ch}"))
-                self.AWG.set_channel_filter(ch,False)
-                self.AWG.set_channel_mode(ch,None)
+                # print(self.channels)
+                
+        if '0' in self.channels and '1' in self.channels:
+            channel_status=3
+        elif '0' in self.channels:
+            channel_status=1
+        elif '1' in self.channels:
+            channel_status=2
+        # print(channel_status)
+        self.AWG.set_channel_status(self.channels, channel_status)
+
+        for ch in self.channels:
+                self.AWG.set_channel_enable(int(ch),True)
+                self.AWG.set_channel_amplitude(int(ch),getattr(self,f"channel_amplitude_{ch}"))
+                self.AWG.set_channel_filter(int(ch),False)
+                self.AWG.set_channel_mode(int(ch),None)
+        self.ch_num=len(self.channels)
+
 
         self.AWG.set_ext_trigger_mode('ext0','pos',rearm=True)
         self.AWG.set_ext_trigger_level('ext0',2000,800) # 2V trigger, 0.8V rearm
         self.AWG.set_trigger_or_mask(['ext0'])
-        self.AWG.set_generation_mode(mode='single')
         self.AWG.seq_set_memory_segments(self.memory_segments)
+        self.AWG.card_write_setup()
 
         print("\n### INITIALIZATION DONE ###\n")
 
-        # Initialize memory for smart programming
-        # Keys: hash of instructions, Values: position in memory
+        # Initialize memory for smart programming: keys=hash of instructions, Values=position in memory
         self.smart_cache = {}
+        memory_size= 2**22
+        bytesPerSample = self.AWG.getBytesPerSample()
+        self.num_manual_samples=memory_size*bytesPerSample
+        # self.num_manual_samples=4096*4
     
     def program_manual(self, values):
-        if values is None:
-            self.AWG.card_stop()
-            return{}
-        elif type(values) is float:
-            # Stream single frequency
-            data = SpectrumCard.generate_single_tone(values*1e6,4096,self.sample_rate) # TODO: Set num_samples dynamically
-            self.AWG.transfer_sequence_replay_samples(len(self.smart_cache),data) # Write in next free memory
-            self.AWG.seq_set_sequence_step(0,len(self.smart_cache),0,1,'on_trigger',last_step=False)
-        elif type(values) is int:
-            if values == -1:
-                return {} # not memory index selected
-            # Stream sample from memory
-            self.AWG.seq_set_sequence_step(0,values,0,1,'on_trigger',last_step=False)
-        else: 
-            return{}
+        self.AWG.set_generation_mode(mode='single') #added by Andre  
+
+        if self.ch_num==1:
+            if values is None:
+                self.AWG.card_stop()
+                return{}
+            elif type(values) is float:
+                # Stream single frequency
+                data = SpectrumCard.generate_single_tone(values*1e6,self.num_manual_samples,self.sample_rate) # TODO: Set num_samples dynamically
+                self.AWG.transfer_sequence_replay_samples(len(self.smart_cache),data) # Write in next free memory
+                self.AWG.seq_set_sequence_step(0,0,0,1,'on_trigger',last_step=False)
+            elif type(values) is int:
+                if values == -1:
+                    return {} # not memory index selected
+                self.AWG.seq_set_sequence_step(0,values,0,1,'on_trigger',last_step=False) # Stream sample from memory
+            else: 
+                return{}
+        elif self.ch_num==2:
+            if values is None:
+                self.AWG.card_stop()
+                return{}
+            elif type(values) is float:
+                data = SpectrumCard.generate_single_tone(values*1e6,self.num_manual_samples,self.sample_rate) 
+                data_combined=np.zeros(self.num_manual_samples*2, dtype=np.int16)
+                data_combined[0::2]=data
+                data_combined[1::2]=data 
+                self.AWG.transfer_sequence_replay_samples(0,data_combined) 
+                self.AWG.seq_set_sequence_step(0,0,0,1,'on_trigger',last_step=False) # Stream single frequency
+            elif type(values) is int:
+                if values == -1: 
+                    return {} # not memory index selected
+                self.AWG.seq_set_sequence_step(0,values,0,1,'on_trigger',last_step=False) # Stream sample from memory
+            else: 
+                return{}
         self.AWG.card_write_setup()
         self.AWG.card_start()
         self.AWG.card_force_trigger() # Start replay without a hardware trigger
@@ -60,60 +101,89 @@ class SpectrumAWGWorker(Worker):
 
     def transition_to_buffered(self, device_name, h5_file, initial_values, fresh):
         self.AWG.card_stop() # If card was still running, e.g. from manual mode
+        self.AWG.set_generation_mode(self.generation_mode) #added by Andre 
+
         with h5py.File(h5_file,'r') as f:
             group = f[f"devices/{device_name}"]
-            for ch in self.channels:
-                if fresh or len(self.smart_cache)+len(group[ch].attrs) > self.memory_segments:
-                    # Reset smart programming and start writing memory from the beginning
-                    # TODO: What if we want to always keep specific instruction in the memory?
-                    self.smart_cache = {}
+            shot_seq_length=len(group['0'].attrs)
+            last_index = shot_seq_length-1
 
-                last_index = len(group[ch].attrs)-1
-                for index in range(len(group[ch].attrs)):
-                    index_h5 = str(index) # The index in the h5 file is a str
+            if fresh or len(self.smart_cache)+shot_seq_length > self.memory_segments: #default value
+                self.smart_cache = {} # Reset smart programming and start writing memory from the beginning otherwise monsters will arise
+            void_data=np.zeros(self.num_manual_samples, dtype=np.int16)
+            
+
+
+            for index in range(shot_seq_length): #index of sequences
+                print('Starting the configuration of sequence step '+str(index))
+                index_h5 = str(index) # The index in the h5 file is a str
+                instructions={}
+                size=np.zeros(self.ch_num)
+                for ch in self.channels:
                     ### LOOP TROUGH STREAMING STEPS ###
-                    instruction = group[ch].attrs[index_h5]
-                    instruction_hash = hash(instruction.tobytes())
-                    if instruction_hash in self.smart_cache:
-                        memory_index = self.smart_cache[instruction_hash]
-                    else:
-                        memory_index = len(self.smart_cache)
-                        self.smart_cache[instruction_hash] = memory_index
+                    instructions[ch] = group[ch].attrs[index_h5]
+                    size[int(ch)]=instructions[ch][0]
+                num_samples = int(max(size))
+
+                print(f"duration= {num_samples/self.sample_rate:.6f} s")
+
+                data_combined= np.zeros(num_samples*self.ch_num, dtype=np.int16)
+                immutable_instructions = {key: tuple(value) for key, value in instructions.items()}
+                instruction_hash = hash(frozenset(immutable_instructions.items())) # Generate the hash
+
+                if instruction_hash in self.smart_cache:
+                    memory_index = self.smart_cache[instruction_hash]
+                    print(f'memory_index {memory_index}')
+                    print('already in memory')
+
+                else:
+                    memory_index = len(self.smart_cache)
+                    print(f'memory_index {memory_index}')
+                    print('new in memory')
+                    self.smart_cache[instruction_hash] = memory_index
+                    initial_values[memory_index] = ''
+                    for ch in self.channels:
+                        print('channel '+str(ch))
+                        
                         ### CALCULATE DATA ###
-                        num_samples = int(instruction[0])
-                        if len(instruction)==2: 
-                            # SINGLE TONE
-                            data = SpectrumCard.generate_single_tone(instruction[1],num_samples,self.sample_rate)
-                            initial_values[memory_index] = f"{instruction[0]}Hz"
-                        elif (len(instruction)-1)%3 == 0: 
-                            # MULTI TONE
-                            num_tones = (len(instruction)-1)//3
-                            freq = instruction[1:num_tones+1]
-                            ampl = instruction[num_tones+1:2*num_tones+1]
-                            phase= instruction[2*num_tones+1:]
+                        if len(instructions[ch]) == 2:  # SINGLE TONE
+                            data = SpectrumCard.generate_single_tone(instructions[ch][1],num_samples,self.sample_rate)
+                            if index_h5 in group[ch]["labels"].attrs:
+                                initial_values[memory_index] += group[ch]["labels"].attrs[index_h5]
+                            else:
+                                initial_values[memory_index] += f"{instructions[ch][1]*1e-6:.3f} MHz"
+                        elif (len(instructions[ch])-1) % 3 == 0:  # MULTI TONE
+                            num_tones = (len(instructions[ch])-1)//3
+                            freq = instructions[ch][1:num_tones+1]
+                            ampl = instructions[ch][num_tones+1:2*num_tones+1]
+                            phase= instructions[ch][2*num_tones+1:]
                             data = SpectrumCard.generate_multi_tone(freq,ampl,phase,num_samples,self.sample_rate)
-                            initial_values[memory_index] = f"f:{freq}Hz, a:{ampl}, p:{phase}"
+                            if index_h5 in group[ch]["labels"].attrs:
+                                initial_values[memory_index] += f"f:{freq*1e-6} MHz, a:{ampl}, p:{phase}"
+                            else:
+                                initial_values[memory_index] += f"{instructions[ch][1]*1e-6:.3f} MHz"
                         else:
                             raise RuntimeError("Instruction length does not match, what happened??")
-                        
                         if index_h5 in group[ch]["labels"].attrs:
                             initial_values[memory_index] = group[ch]["labels"].attrs[index_h5]
-                            
-                        self.AWG.transfer_sequence_replay_samples(memory_index,data)
-                    if index!=last_index:
-                        self.AWG.seq_set_sequence_step(step_index=index,segment_index=memory_index,next_step=index+1,loop_count=1,end_loop_condition='on_trigger',last_step=True)
-                    else:
-                        self.AWG.seq_set_sequence_step(index,memory_index,index,1,'on_trigger',last_step=False)
-                        # If there is a trigger at the stop time, repeat one last sequence 
-                        # and then stop (if not card_stop() was called already)
-                        self.AWG.seq_set_sequence_step(index+1,memory_index,0,1,'always',last_step=True)
-                # ONLY IMPLEMENTED FOR ONE CHANNEL, IF TWO CHANNELS ARE NEEDED WE ALREADY GET AN ERROR IN LABSCRIPT
-                # FOR IMPLEMENTATION ONE HAS TO INTERWEAVE THE DATA FOR BOTH CHANNELS
-                break 
-
-        self.AWG.card_write_setup() # TODO: Do we have to call that every shot or just once after the initialization?
-        self.AWG.card_start()
-        self.AWG.card_enable_trigger()
+                        if self.ch_num>1:
+                            data_combined[int(ch)::2] = data 
+                        elif self.ch_num==1: 
+                            data_combined = data
+                    self.AWG.transfer_sequence_replay_samples(memory_index,data_combined)
+                ## SET UP THE SEQUENCE STEPS    
+                seq_index=index 
+                print(f'seq_index {seq_index}')
+                if index!=last_index:
+                    self.AWG.seq_set_sequence_step(seq_index,memory_index,seq_index+1,1,'always',last_step=False)
+                    print('more steps:...')
+                else:
+                    self.AWG.seq_set_sequence_step(seq_index,memory_index,seq_index,1,'always',last_step=True) 
+                    print('...last step! Sequence ended.')
+            if len(group['0'].attrs)>0:
+                self.AWG.card_write_setup() # TODO: Do we have to call that every shot or just once after the initialization?
+                self.AWG.card_start()
+                self.AWG.card_enable_trigger()
         return initial_values
 
     def transition_to_manual(self):
@@ -129,3 +199,7 @@ class SpectrumAWGWorker(Worker):
 
     def abort_transition_to_buffered(self):
         return True
+
+    def card_reset(self):
+        self.AWG.card_reset()
+        self.init()

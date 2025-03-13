@@ -9,6 +9,8 @@ from scipy.optimize import curve_fit, least_squares
 import numpy as np
 import matplotlib.pyplot as plt
 import datetime, time
+import seaborn as sns
+import pandas as pd
 ts=time.time()
 dt=datetime.datetime.now().date()
 
@@ -45,212 +47,473 @@ def data_mean(para, values):
     eN= [stdN[key] for key in x]
     return x, y, e, eN
 
+def duo_mean(param1, param2, values):
+    """
+    Computes the mean, standard deviation, and standard error for each combination of param1 and param2 values.
+
+    Args:
+        param1: List or array of first parameter values.
+        param2: List or array of second parameter values.
+        values: List or array of values corresponding to the param1, param2 pairs.
+
+    Returns:
+        A dictionary containing:
+        - mean_values: Dictionary with (param1, param2) pairs as keys and their mean values as values.
+        - std_values: Dictionary with (param1, param2) pairs as keys and their standard deviations as values.
+        - error_values: Dictionary with (param1, param2) pairs as keys and their standard errors as values.
+    """
+    mean_values = {}
+    std_values = {}
+    error_values = {}
+    param1=tuple(round(i*n_order)/n_order for i in param1)
+    param2=tuple(round(i*n_order)/n_order for i in param2)
+    
+    # Ensure that param1, param2, and values are all of the same length
+    if len(param1) != len(param2) or len(param1) != len(values):
+        raise ValueError("The length of param1, param2, and values must be the same.")
+
+    # Create unique pairs of (param1, param2)
+    unique_pairs = set(zip(param1, param2))
+    
+    for pair in unique_pairs:
+        # Step 1: Generate indices where param1 and param2 match the pair
+        indices = [idx for idx, val in enumerate(zip(param1, param2)) if val == pair]
+
+        if not indices:
+            continue  # Skip if there are no indices for this pair
+        
+        # Step 2: Extract corresponding values using indices
+        try:
+            aa = [values[idx] for idx in indices]
+        except IndexError as e:
+            print(f"IndexError: {e}. Check the length of the values list and the indices.")
+            continue
+        
+        # Step 3: Compute mean, std, and error on mean
+        mean_values[pair] = np.mean(aa)
+        std_values[pair] = np.std(aa)
+        error_values[pair] = np.std(aa) / sqrt(len(aa))
+    
+    return mean_values, std_values, error_values
+
+def plot_heatmap(mean_values):
+    """
+    Plots a heatmap from the mean values of (param1, param2) pairs.
+
+    Args:
+        mean_values: Dictionary with (param1, param2) pairs as keys and their mean values as values.
+    """
+    # Step 1: Convert the mean_values dictionary to a DataFrame
+    df = pd.DataFrame(list(mean_values.items()), columns=['Params', 'Mean Value'])
+    
+    # Split the Params tuple into two separate columns: 'param1' and 'param2'
+    df['param1'] = df['Params'].apply(lambda x: x[0])
+    df['param2'] = df['Params'].apply(lambda x: x[1])
+    
+    # Adjust param2 values by subtracting the offset
+    offset=20
+    # Mapping for param1 (y-axis) 3d
+    # param1_mapping = {
+    #     23: 0.054,
+    #     24: 0.064,
+    #     25: 0.075,
+    #     26: 0.086,
+    #     27: 0.093,
+    #     28: 0.097,
+    #     29: 0.100,
+    # }
+    param1_mapping = {
+        25: 64,
+        26: 95,
+        27: 144,
+        28: 221,
+        29: 309,
+    }
+    param2_mapping = {
+        74.84: -180,
+        74.85: -160,
+        74.86: -140,
+        74.87: -120,
+        74.88: -100,
+        74.89: -80,
+        74.90: -60,
+        74.91: -40,
+        74.92: -20,
+    }
+    # param1_mapping = {
+    #     23: 6.2e-2,
+    #     24: 7.3e-2,
+    #     25: 8.4e-2,
+    #     26: 9.5e-2,
+    #     27: 10.3e-2,
+    #     28: 10.7e-2,
+    #     29: 11.1e-2,
+    # }
+    df['adjusted_param2'] = df['param2'].map(param2_mapping)
+    df['adjusted_param1'] = df['param1'].map(param1_mapping)
+    # Step 2: Pivot the DataFrame to create a matrix format
+    df_pivot = df.pivot(index='adjusted_param1', columns='adjusted_param2', values='Mean Value')
+    # Step 2: Pivot the DataFrame to create a matrix format
+    # df_pivot = df.pivot(index='param1', columns='param2', values='Mean Value')
+
+    # Step 3: Plot the heatmap
+    plt.figure(figsize=(35, 15))
+    plt.rcParams.update({'font.size': 20})
+    sns.heatmap(df_pivot, annot=False, fmt='.2e', cmap="viridis", linewidths=.5)
+    
+    # Add labels and a title
+    plt.title("Heatmap of Mean Values across param1 and param2")
+    # plt.xlabel("param2")
+    plt.xlabel("2D MOT beams detuning (MHz)")
+    plt.ylabel("param1")
+    plt.show()
+
+def mean_scan_duo(values, title):
+    values=tuple(values)
+    mean_values, std_values, error_values = duo_mean(parameter2, parameter1, values)
+    plot_heatmap(mean_values)
+
+
+    plt.ylabel(str(para2_name)+ ' ('+str(para2_unit)+')')
+    xlabel=str(para1_name)+' ('+str(para1_unit)+')'
+    if saving_location:
+        xlabel+='\n' + 'dataset:'+ str(one_level_up)
+    plt.xlabel(xlabel)
+    plt.title(title)
+
+
+    print("Heatmap data saved to heatmap_data.csv")
+
+    if saving_plots: save_imag(plt, title)  #####################################################################
+
 def save_imag(plt, name):
     picname = name
-    img_name=str(dt) + '_' + str(datetime.datetime.now().hour) + str(datetime.datetime.now().minute) + str(datetime.datetime.now().second)  + '_' + parameter_name
+    if duo:
+        img_name=str(dt) + '_' + str(datetime.datetime.now().hour) + str(datetime.datetime.now().minute) + str(datetime.datetime.now().second)  + '_' + para1_name + '_' + para2_name
+    else:
+        img_name=str(dt)  + '_' + str(datetime.datetime.now().hour)+ str(datetime.datetime.now().minute) +  str(datetime.datetime.now().second)  + '_' + para1_name
     plt.savefig(two_levels_up+ '/' + img_name +  '_' + picname + ".png")
     print(picname + ' saved')
 
-# Let's obtain the dataframe for all of lyse's currently loaded shots:
-df = data()
-paths=df['filepath']
+################################### 
+duo=1
+saving_plots=True
+saving_location=True
+fit_TOF_waist = False
+n_order=1000 # order of digits in parameter values
 
-AbAnalyser= df['AbsorbAnalyser']
-# AbAnalyser= df['AbsorbAnalyser_Red']
-number_of_atoms=tuple(AbAnalyser['number_of_atoms'])
-sum_of_atoms=tuple(AbAnalyser['sum_of_atoms'])
-peak_density=tuple(AbAnalyser['peak_density'])
-waistawg=tuple(AbAnalyser['waistavg'])
-waistx=tuple(AbAnalyser['waistx'])
-waisty=tuple(AbAnalyser['waisty'])
-centerx=tuple(AbAnalyser['centerx'])
-centery=tuple(AbAnalyser['centery'])
+para1_name='Red_MOT_Frq' #'n_shot'
+para1_unit='MHz'    #'s' 
+if duo:
+    para2_name='Red_MOT_Pow'
+    para2_unit='dBm'
 
-parameter_name =AbAnalyser['scan_parameter'].iloc[-1]
-scan_unit=AbAnalyser['scan_unit'].iloc[-1]
+###################################################################################
+try: #initialization
+    # Let's obtain the dataframe for all of lyse's currently loaded shots:
+    df = data()
+    paths=df['filepath']
+    AbAnalyser= df['AbsorbAnalyser']
+    # AbAnalyser= df['AbsorbAnalyser_Red']
+    means={}
+    maxs={}
+    vars={}
+    photons={}
+    atoms={}
 
-print('optimization parameter =', parameter_name)
+    parameter1=np.array(df[para1_name])
+    # print('optimization parameter 1 =', parameter1)
+    parameter_name = para1_name
+    if duo:
+        parameter2=np.array(df[para2_name])
+        # print('optimization parameter 2 =', parameter2)
+    #parameter_name = AbAnalyser['scan_parameter'].iloc[-1]
+    #scan_unit=AbAnalyser['scan_unit'].iloc[-1]
 
-parameter=np.array(df[parameter_name])
-# parameter=np.multiply(parameter,1/1000)
-list_name=str(dt)  + '_' + str(datetime.datetime.now().hour)+ str(datetime.datetime.now().minute) +  str(datetime.datetime.now().second)  + '_' + parameter_name
-list_path=paths[-1]
-one_level_up = os.path.dirname(list_path)
-two_levels_up = os.path.dirname(one_level_up)
-print(two_levels_up)
+    number_of_atoms=tuple(AbAnalyser['number_of_atoms'])
+    sum_of_atoms=tuple(AbAnalyser['sum_of_atoms'])
+    peak_density=tuple(AbAnalyser['peak_density'])
+    waistawg=tuple(AbAnalyser['waistavg'])
+    waistx=tuple(AbAnalyser['waistx'])
+    waisty=tuple(AbAnalyser['waisty'])
+    centerx=tuple(AbAnalyser['centerx'])
+    centery=tuple(AbAnalyser['centery'])
 
-file_name=list_name+'.csv'
+    # parameter=np.array(df[parameter_name])
+    # parameter=np.multiply(parameter,1/1000)
 
-with open(two_levels_up+ '/' + file_name, 'a', newline='') as csv_file:
-    writer = csv.writer(csv_file)
-    for ii in paths:
-        # print(ii)
-        writer.writerow([ii])
-
-###############################################################################################
-
-if True:
-    figure()
-    x, y, stdev, std_error =data_mean(parameter, peak_density)
-    xs, ys, stdevs, std_errors =data_mean(parameter, sum_of_atoms)
-
-    # plt.ylabel()
-    plt.xlabel(str(parameter_name)+' ('+str(scan_unit)+')')
-
-    x_data = x
-    y_data = y
-    # Make an initial guess for the parameters [amplitude, mean, standard deviation]
-    initial_guess = [max(y), mean(x), 2, 2e6]
-    low = [0, 0, 0, 1e6]
-    upper = [2*max(y), max(x), 5, 2.5e6]
-    bounds = [low, upper]
-
-    # Fit the data using curve_fit
-    # params, covariance = curve_fit(gaussian, x_data, y_data, p0=initial_guess, bounds=bounds )
-
-    # Extract the fitted parameters
-    # a_fit, x0_fit, sigma_fit, offset = params
-
-    # Print the fitted parameters
-    # print(f"Fitted parameters: amplitude = {a_fit}, mean = {x0_fit}, sigma = {sigma_fit}")
-
-    title='Peak density'
-    plt.title(title)
-    plt.xlabel(str(parameter_name)+' ('+str(scan_unit)+')')
-    # plt.xlabel(str(parameter_name)+' ('+str(scan_unit)+')'+'\n'+ f"Fitted parameters: peak = {round((a_fit+offset)/1e6,2)} M, x_0 = {round(x0_fit,2)}, sigma_x = {round(sigma_fit,2)}")
-    # plt.errorbar(x, y, stdev, fmt='-bo', ecolor='gray',capsize=5)
-    plt.errorbar(x, y, yerr=std_error, fmt='--ro', ecolor='k',capsize=5)
-    # plt.plot(x_data, gaussian(x_data, *params), color='red', label='Gaussian fit')
-    # plt.errorbar(xs, ys, std_errors, fmt='-co', ecolor='c',capsize=5)
-    # plt.legend(['Fitted','Raw'])
-    # plt.legend(['Fitted'])
-    save_imag(plt, title)
-
-    figure()
-    x, y, stdev, std_error =data_mean(parameter, number_of_atoms)
-    xs, ys, stdevs, std_errors =data_mean(parameter, sum_of_atoms)
-    plt.xlabel(str(parameter_name)+' ('+str(scan_unit)+')')
+    if True: #print list of shots in the characterization
+        if duo:
+            list_name=str(dt)  + '_' + str(datetime.datetime.now().hour)+ str(datetime.datetime.now().minute) +  str(datetime.datetime.now().second)  + '_' + para1_name + '_' + para2_name
+        else:
+            list_name=str(dt)  + '_' + str(datetime.datetime.now().hour)+ str(datetime.datetime.now().minute) +  str(datetime.datetime.now().second)  + '_' + para1_name
+        list_path=paths[-1]
+        one_level_up = os.path.dirname(list_path)
+        two_levels_up = os.path.dirname(one_level_up)
+        print(two_levels_up)
 
 
-    x_data = x
-    y_data = y
+        file_name=list_name+'.csv'
+
+        with open(two_levels_up+ '/' + file_name, 'a', newline='') as csv_file:
+            writer = csv.writer(csv_file)
+            for ii in paths:
+                # print(ii)
+                writer.writerow([ii])
+
+    """ list_name=str(dt)  + '_' + str(datetime.datetime.now().hour)+ str(datetime.datetime.now().minute) +  str(datetime.datetime.now().second)  + '_' + parameter_name
+    list_path=paths[-1]
+    one_level_up = os.path.dirname(list_path)
+    two_levels_up = os.path.dirname(one_level_up)
+    print(two_levels_up)
+    
+    file_name=list_name+'.csv'
+
+    with open(two_levels_up+ '/' + file_name, 'a', newline='') as csv_file:
+        writer = csv.writer(csv_file)
+        for ii in paths:
+            # print(ii)
+            writer.writerow([ii]) """
+
+    ###############################################################################################
+
+    if duo:
+        print('duo analysis')
+        mean_scan_duo(number_of_atoms,'Number of atoms')
+        # mean_scan_duo(peak_density,'Peak density')
+        img_name=str(dt) + '_' + str(datetime.datetime.now().hour) + str(datetime.datetime.now().minute) + str(datetime.datetime.now().second)  
+        img_name+='_' + para1_name + '_' + para2_name + '_density'
+        df.to_csv(two_levels_up+ '/' + img_name + '.csv', index=False)
+
+        print('duo analysis')
+        mean_scan_duo(peak_density,'Peak density')
+        img_name=str(dt) + '_' + str(datetime.datetime.now().hour) + str(datetime.datetime.now().minute) + str(datetime.datetime.now().second)  
+        img_name+='_' + para1_name + '_' + para2_name + '_density'
+        df.to_csv(two_levels_up+ '/' + img_name + '.csv', index=False)      
 
 
-    # Make an initial guess for the parameters [amplitude, mean, standard deviation]
-    initial_guess = [max(y), mean(x), 2, 2e6]
-    low = [0, 0, 0, 1e6]
-    upper = [2*max(y), max(x), 5, 2.5e6]
-    bounds = [low, upper]
+    else:
+        print('single analysis')
+        figure()
 
-    # Fit the data using curve_fit
-    # params, covariance = curve_fit(gaussian, x_data, y_data, p0=initial_guess, bounds=bounds )
+        x, y, stdev, std_error = data_mean(parameter1, peak_density)
+        xs, ys, stdevs, std_errors = data_mean(parameter1, sum_of_atoms)
 
-    # Extract the fitted parameters
-    # a_fit, x0_fit, sigma_fit, offset = params
+        # plt.ylabel()
+        plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+')')
 
-    # Print the fitted parameters
-    # print(f"Fitted parameters: amplitude = {a_fit}, mean = {x0_fit}, sigma = {sigma_fit}")
+        x_data = x
+        y_data = y
+        # Make an initial guess for the parameters [amplitude, mean, standard deviation]
+        initial_guess = [max(y), mean(x), 2, 2e6]
+        low = [0, 0, 0, 1e6]
+        upper = [2*max(y), max(x), 5, 2.5e6]
+        bounds = [low, upper]
 
-    title='Number Of Atoms'
-    plt.title(title)
-    plt.xlabel(str(parameter_name)+' ('+str(scan_unit)+')')
-    # plt.xlabel(str(parameter_name)+' ('+str(scan_unit)+')'+'\n'+ f"Fitted parameters: peak = {round((a_fit+offset)/1e6,2)} M, x_0 = {round(x0_fit,2)}, sigma_x = {round(sigma_fit,2)}")
-    # plt.errorbar(x, y, stdev, fmt='-bo', ecolor='gray',capsize=5)
-    plt.errorbar(x, y, yerr=std_error, fmt='--bo', ecolor='k',capsize=5)
-    # plt.plot(x_data, gaussian(x_data, *params), color='red', label='Gaussian fit')
-    # plt.errorbar(xs, ys, std_errors, fmt='-co', ecolor='c',capsize=5)
-    # plt.legend(['Fitted','Raw'])
-    # plt.legend(['Fitted'])
-    save_imag(plt, title)
+        # Fit the data using curve_fit
+        # params, covariance = curve_fit(gaussian, x_data, y_data, p0=initial_guess, bounds=bounds )
 
+        # Extract the fitted parameters
+        # a_fit, x0_fit, sigma_fit, offset = params
 
+        # Print the fitted parameters
+        # print(f"Fitted parameters: amplitude = {a_fit}, mean = {x0_fit}, sigma = {sigma_fit}")
 
+        title='Peak density'
+        plt.title(title,fontsize=25)
+        plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+')')
+        # plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+')'+'\n'+ f"Fitted parameters: peak = {round((a_fit+offset)/1e6,2)} M, x_0 = {round(x0_fit,2)}, sigma_x = {round(sigma_fit,2)}")
+        # plt.errorbar(x, y, stdev, fmt='-bo', ecolor='gray',capsize=5)
+        plt.errorbar(x, y, yerr=std_error, fmt='--ro', ecolor='k',capsize=5)
+        # plt.plot(x_data, gaussian(x_data, *params), color='red', label='Gaussian fit')
+        # plt.errorbar(xs, ys, std_errors, fmt='-co', ecolor='c',capsize=5)
+        # plt.legend(['Fitted','Raw'])
+        # plt.legend(['Fitted'])
+        save_imag(plt, title)
 
-    # figure()
-    xw, yw, stdevw, std_errorw =data_mean(parameter, np.multiply(waistx,1000))
+        figure()
+        x, y, stdev, std_error =data_mean(parameter1, number_of_atoms)
+        xs, ys, stdevs, std_errors =data_mean(parameter1, sum_of_atoms)
+        plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+')')
 
-    # Make an initial guess for the parameters [amplitude, mean, standard deviation]
-    initial_guess = [25e-6, 0.2]
-    low = [0, 0]
-    upper = [25e-3, 0.6]
-    # upper = [25e-5, 0.3]
-    bounds = [low, upper]
+        x_data = x
+        y_data = y
 
-    # Fit the data using curve_fit
-    params, covariance = curve_fit(parabbola, xw, yw, p0=initial_guess, bounds=bounds )
+        # Make an initial guess for the parameters [amplitude, mean, standard deviation]
+        initial_guess = [max(y), mean(x), 2, 2e6]
+        low = [0, 0, 0, 1e6]
+        upper = [2*max(y), max(x), 5, 2.5e6]
+        bounds = [low, upper]
 
-    # Extract the fitted parameters
-    Temp_fit, waist_i = params
+        # Fit the data using curve_fit
+        # params, covariance = curve_fit(gaussian, x_data, y_data, p0=initial_guess, bounds=bounds )
 
-    # Print the fitted parameters
-    print(f"Fitted parameters: Temp = {Temp_fit}, waist_i={waist_i}")
+        # Extract the fitted parameters
+        # a_fit, x0_fit, sigma_fit, offset = params
 
-    # plt.ylabel('Waist X (mm)')
-    # plt.xlabel(str(parameter_name)+' ('+str(scan_unit)+')')
-    # plt.xlabel(str(parameter_name)+' (ms)')
-    # plt.errorbar(xw, yw, yerr=std_errorw, fmt='--ro', ecolor='k',capsize=5)
+        # Print the fitted parameters
+        # print(f"Fitted parameters: amplitude = {a_fit}, mean = {x0_fit}, sigma = {sigma_fit}")
 
+        title='Number Of Atoms'
+        plt.title(title,fontsize=25)
+        plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+')')
+        # plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+')'+'\n'+ f"Fitted parameters: peak = {round((a_fit+offset)/1e6,2)} M, x_0 = {round(x0_fit,2)}, sigma_x = {round(sigma_fit,2)}")
+        # plt.errorbar(x, y, stdev, fmt='-bo', ecolor='gray',capsize=5)
+        # x_adjusted = [2*(xi - 74.85) for xi in x]
+        plt.errorbar(x, y, yerr=std_error, fmt='--bo', ecolor='k',capsize=5)
+        # plt.plot(x_data, gaussian(x_data, *params), color='red', label='Gaussian fit')
+        # plt.errorbar(xs, ys, std_errors, fmt='-co', ecolor='c',capsize=5)
+        # plt.legend(['Fitted','Raw'])
+        # plt.legend(['Fitted'])
+        save_imag(plt, title)
 
+        if fit_TOF_waist:
+            xw, yw, stdevw, std_errorw =data_mean(parameter1, np.multiply(waistx,1000))
+            # Make an initial guess for the parameters [amplitude, mean, standard deviation]
+            initial_guess = [25e-6, 0.2]
+            low = [0, 0]
+            upper = [25e-3, 0.6]
+            # upper = [25e-5, 0.3]
+            bounds = [low, upper]
 
+            # Fit the data using curve_fit
+            params, covariance = curve_fit(parabbola, xw, yw, p0=initial_guess, bounds=bounds )
 
-    # figure()
+            # Extract the fitted parameters
+            Temp_fit, waist_i = params
 
-    xw, yw, stdevw, std_errorw =data_mean(parameter, np.multiply(waisty,1000))
+            # Print the fitted parameters
+            print(f"Fitted parameters: Temp = {Temp_fit}, waist_i={waist_i}")
+            #figure()
+            # plt.ylabel('Waist X (mm)')
+            # plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+')')
+            # plt.xlabel(str(parameter_name)+' (ms)')
+            # plt.errorbar(xw, yw, yerr=std_errorw, fmt='--ro', ecolor='k',capsize=5)
 
-    initial_guess = [25e-6, 0.2]
-    low = [0, 0]
-    upper = [25e-3, 0.6]
-    # upper = [25e-5, 0.3]
-    bounds = [low, upper]
+            xw, yw, stdevw, std_errorw =data_mean(parameter1, np.multiply(waisty,1000))
 
-    # Fit the data using curve_fit
-    # params, covariance = curve_fit(parabbola,xw, yw,p0=initial_guess, bounds=bounds )
+            initial_guess = [25e-6, 0.2]
+            low = [0, 0]
+            upper = [25e-3, 0.6]
+            # upper = [25e-5, 0.3]
+            bounds = [low, upper]
 
-    # Extract the fitted parameters
-    Temp_fit, waist_i = params
+            # Fit the data using curve_fit
+            # params, covariance = curve_fit(parabbola,xw, yw,p0=initial_guess, bounds=bounds )
 
-    # Print the fitted parameters
-    print(f"Fitted parameters: Temp = {Temp_fit}, waist_i={waist_i}")
+            # Extract the fitted parameters
+            Temp_fit, waist_i = params
 
+            # Print the fitted parameters
+            print(f"Fitted parameters: Temp = {Temp_fit}, waist_i={waist_i}")
+            #figure()
+            # plt.ylabel('Waist Y (mm)')
+            # plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+')')
+            # plt.xlabel(str(parameter_name)+' (ms)')
+            # plt.errorbar(xw, yw, yerr=std_errorw, fmt='--bo', ecolor='k',capsize=5)
+            # plt.plot(xw, plot_parabbola(xw, Temp_fit, waist_i), fmt='--ko', capsize=5)
 
-    # plt.ylabel('Waist Y (mm)')
-    # plt.xlabel(str(parameter_name)+' ('+str(scan_unit)+')')
-    # plt.xlabel(str(parameter_name)+' (ms)')
-    # plt.errorbar(xw, yw, yerr=std_errorw, fmt='--bo', ecolor='k',capsize=5)
-    # plt.plot(xw, plot_parabbola(xw, Temp_fit, waist_i), fmt='--ko', capsize=5)
+        xw, yw, stdevw, std_errorw =data_mean(parameter1, np.multiply(waistawg,1000))
+        if fit_TOF_waist:   #Test to fit the average waist and plot the fit parameters
+            # Make an initial guess for the parameters [amplitude, mean, standard deviation]
+            initial_guess = [35e-6, 0.36]
+            low = [1e-6, 0.00]
+            upper = [45e-2, 0.7]
+            bounds = [low, upper]
+            # Fit the data using curve_fit
+            params, covariance = curve_fit(parabbola, xw, yw, p0=initial_guess, bounds=bounds)
+            # Extract the fitted parameters
+            Temp_fit, waist_i = params
+            # Print the fitted parameters
+            print(f"Fitted parameters: Temp = {Temp_fit}, waist_i={waist_i}")
 
-
-    #Test to fit the average waist and plot the fit parameters
-    figure()
-    xw, yw, stdevw, std_errorw =data_mean(parameter, np.multiply(waistawg,1000))
-
-    # Make an initial guess for the parameters [amplitude, mean, standard deviation]
-    initial_guess = [35e-6, 0.36]
-    low = [1e-6, 0.00]
-    upper = [45e-2, 0.7]
-    bounds = [low, upper]
-
-    # Fit the data using curve_fit
-    params, covariance = curve_fit(parabbola, xw, yw, p0=initial_guess, bounds=bounds)
-
-    # Extract the fitted parameters
-    Temp_fit, waist_i = params
-
-    # Print the fitted parameters
-    print(f"Fitted parameters: Temp = {Temp_fit}, waist_i={waist_i}")
-
-    title='Waist avg (mm)'
-    plt.title(title)
-    plt.xlabel(str(parameter_name)+' ('+str(scan_unit)+'), Temperature = '+ str(round(Temp_fit*1e6, 2)) +' uK')
-    plt.errorbar(xw, yw, yerr=std_errorw, fmt='--ro', ecolor='k',capsize=5)
-    plt.plot(xw, plot_parabbola(xw, Temp_fit, waist_i),'-b')
-    save_imag(plt, title)
-
+        figure()
+        plt.rcParams.update({'font.size': 22})
+        plt.errorbar(xw, yw, yerr=std_errorw, fmt='--ro', ecolor='k',capsize=5)
+        plt.title('Waist avg',fontsize=25)
+        plt.ylabel('Waist avg (um)',fontsize=25)
+        if fit_TOF_waist:
+            plt.plot(xw, plot_parabbola(xw, Temp_fit, waist_i),'-b')
+            plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+'), Temperature = '+ str(round(Temp_fit*1e6, 2)) +' uK',fontsize=25)
+        else:
+            plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+')')
+        
+        if saving_plots: save_imag(plt, title)
 
         # writer.writerow([optimum,str(best_value), df['sequence'].iloc[-1], str(df['labscript'].iloc[-1])])
+        figure()
+        x, y, stdev, std_error = data_mean(parameter1, centery)
+        xs, ys, stdevs, std_errors = data_mean(parameter1, sum_of_atoms)
 
-    if False: #switch to automatic updating of optimization parameter
-        runmanager.remote.set_globals({opt_parameter: optimum})
-        print('optimum set to global')
+        # plt.ylabel()
+        plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+')')
 
+        x_data = x
+        y_data = y
+        # Make an initial guess for the parameters [amplitude, mean, standard deviation]
+        initial_guess = [max(y), mean(x), 2, 2e6]
+        low = [0, 0, 0, 1e6]
+        upper = [2*max(y), max(x), 5, 2.5e6]
+        bounds = [low, upper]
+
+        # Fit the data using curve_fit
+        # params, covariance = curve_fit(gaussian, x_data, y_data, p0=initial_guess, bounds=bounds )
+
+        # Extract the fitted parameters
+        # a_fit, x0_fit, sigma_fit, offset = params
+
+        # Print the fitted parameters
+        # print(f"Fitted parameters: amplitude = {a_fit}, mean = {x0_fit}, sigma = {sigma_fit}")
+
+        title='Center along x'
+        plt.title(title,fontsize=25)
+        plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+')')
+        # plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+')'+'\n'+ f"Fitted parameters: peak = {round((a_fit+offset)/1e6,2)} M, x_0 = {round(x0_fit,2)}, sigma_x = {round(sigma_fit,2)}")
+        # plt.errorbar(x, y, stdev, fmt='-bo', ecolor='gray',capsize=5)
+        plt.errorbar(x, y, yerr=std_error, fmt='--ro', ecolor='k',capsize=5)
+        # plt.plot(x_data, gaussian(x_data, *params), color='red', label='Gaussian fit')
+        # plt.errorbar(xs, ys, std_errors, fmt='-co', ecolor='c',capsize=5)
+        # plt.legend(['Fitted','Raw'])
+        # plt.legend(['Fitted'])
+        save_imag(plt, title)
+        figure()
+        x, y, stdev, std_error = data_mean(parameter1, centery)
+        xs, ys, stdevs, std_errors = data_mean(parameter1, sum_of_atoms)
+
+        # plt.ylabel()
+        plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+')')
+
+        x_data = x
+        y_data = y
+        # Make an initial guess for the parameters [amplitude, mean, standard deviation]
+        initial_guess = [max(y), mean(x), 2, 2e6]
+        low = [0, 0, 0, 1e6]
+        upper = [2*max(y), max(x), 5, 2.5e6]
+        bounds = [low, upper]
+
+        # Fit the data using curve_fit
+        # params, covariance = curve_fit(gaussian, x_data, y_data, p0=initial_guess, bounds=bounds )
+
+        # Extract the fitted parameters
+        # a_fit, x0_fit, sigma_fit, offset = params
+
+        # Print the fitted parameters
+        # print(f"Fitted parameters: amplitude = {a_fit}, mean = {x0_fit}, sigma = {sigma_fit}")
+
+        title='Center along y'
+        plt.title(title,fontsize=25)
+        plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+')')
+        # plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+')'+'\n'+ f"Fitted parameters: peak = {round((a_fit+offset)/1e6,2)} M, x_0 = {round(x0_fit,2)}, sigma_x = {round(sigma_fit,2)}")
+        # plt.errorbar(x, y, stdev, fmt='-bo', ecolor='gray',capsize=5)
+        plt.errorbar(x, y, yerr=std_error, fmt='--ro', ecolor='k',capsize=5)
+        # plt.plot(x_data, gaussian(x_data, *params), color='red', label='Gaussian fit')
+        # plt.errorbar(xs, ys, std_errors, fmt='-co', ecolor='c',capsize=5)
+        # plt.legend(['Fitted','Raw'])
+        # plt.legend(['Fitted'])
+        save_imag(plt, title)
+        if False: #switch to automatic updating of optimization parameter
+            runmanager.remote.set_globals({opt_parameter: optimum})
+            print('optimum set to global')
+except:
+    pass
 

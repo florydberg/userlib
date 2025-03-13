@@ -43,11 +43,12 @@ if True:
     # min/max RF frequency in MHz
     MIN_RF_FREQ     = 5.0
     MAX_RF_FREQ     = 250.0
-    DEFAULT_RF_FREQ = MIN_RF_FREQ
+    DEFAULT_RF_FREQ = 20e+3
 
     # min/max RF amplitudes in dBm
     MIN_RF_AMP      = -50.0
     MAX_RF_AMP      = 33.0
+    DEFAULT_RF_AMP = 0
 
     # min/max RF phase in degree
     MIN_RF_PHASE    = 0
@@ -172,6 +173,8 @@ class QRF_DDS(IntermediateDevice):
         # set default frequency in MHz
         self.DDS.frequency.default_value = DEFAULT_RF_FREQ
 
+        self.DDS.amplitude.default_value = DEFAULT_RF_AMP
+
         # notify MOGLabs_QRF of new pseudoclock. this will adapt the clock_limt and clock_resolution to fastest clock
         parent_device.add_device(self.pseudoclock)
 
@@ -255,7 +258,7 @@ class MOGLabs_QRF(PseudoclockDevice):
 
     def generate_code(self, hdf5_file):
 
-        print(f"'{self.name}' generating code")
+        print(f"'{self.name}' generating code...")
 
         # create list of times and raw_data for each device
         PseudoclockDevice.generate_code(self, hdf5_file)
@@ -269,7 +272,8 @@ class MOGLabs_QRF(PseudoclockDevice):
             for clockline in pseudoclock.child_devices:
                 #print(clockline)
                 for IM in clockline.child_devices:
-                    print(IM)
+                    if False:
+                        print(IM)
                     for dds in IM.child_devices:
                         #print(dds.name)
                         try:
@@ -282,11 +286,10 @@ class MOGLabs_QRF(PseudoclockDevice):
                         print(gate.name)
                         gate_cl = gate.parent_device.parent_device
                         gate_ps = gate_cl.parent_device
-                        print(gate_ps.times[gate_cl])
-                        print(gate.raw_output)
-                        print(gate.child_devices)
-
-
+                        if False:
+                            print(gate_ps.times[gate_cl])
+                            print(gate.raw_output)
+                            print(gate.child_devices)
 
                         # for connection in DDSs:
                         #     if connection in range(2):
@@ -298,7 +301,8 @@ class MOGLabs_QRF(PseudoclockDevice):
                         #                              'Format must be \'channel n\' with n from 0 to 4.')
 
                         times = pseudoclock.times[clockline]
-                        print(f"'{dds.name}' times: {times}")
+                        if False:
+                            print(f"'{dds.name}' times: {times}")
                         #print(f"'{self.name}' DDSs: {DDSs}")
 
                         # TODO: enable/disable act on the TTL. in table mode we need to know the RF level and set amp to minimum / last level.
@@ -315,17 +319,15 @@ class MOGLabs_QRF(PseudoclockDevice):
                         out_table['amp'][:]   = dds.amplitude.raw_output
                         out_table['phase'][:] = dds.phase.raw_output
 
-                        if False:
+                        if IM.table_mode:
                             grp.create_dataset('TABLE_DATA%i'%channel, compression=config.compression, data=out_table)
-                            flags = (FLAG_TABLE_MODE if IM.table_mode else 0) | (FLAG_TRIGGER_EACH_STEP if IM.trigger_each_step else 0)
+                            flags = (FLAG_TABLE_MODE) | (FLAG_TRIGGER_EACH_STEP if IM.trigger_each_step else 0)
                             grp.create_dataset('TABLE_OPT%i' % channel, compression=config.compression, data=np.array([flags], dtype=np.uint8))
                         else:
-                            grp.create_dataset('STATIC_DATA%i'%channel, compression=config.compression, data=out_table)
-                            # grp.create_dataset('STATIC_OPT%i' % channel, compression=config.compression, data=np.array([flags], dtype=np.uint8))
-                        
+                            grp.create_dataset('STATIC_DATA%i'%channel, compression=config.compression, data=out_table)                        
 
-
-                        print(f"'{dds.name}' generate_code, out_table:\n time/freq/amp/phase\n", out_table)
+                        if False:
+                            print(f"'{dds.name}' generate_code, out_table:\n time/freq/amp/phase\n", out_table)
 
 # Andi: power check boxes for each DDS
 class power_check_boxes(QWidget):
@@ -503,7 +505,7 @@ class MOGLabs_QRF_Tab(DeviceTab):
                     #print(IM.name)
                     for name, child in IM.child_list.items():
                         channels[child.parent_port] = name
-        #print(channels)
+        print(channels)
 
         # add check boxes to enable signal/power/both:
         place_below = False # True = below DDS frame, False = right of DDS frame
@@ -660,44 +662,16 @@ class MOGLabs_QRF_Worker(Worker):
     def transition_to_buffered(self, device_name, h5file, initial_values, fresh):
         # try to reconnect. return on failure.
         if (self.dev is None) and (not self.reconnect('check_remote_values')):
-
-            if False: #Andrea
-                # Andi test read table data for each channel
-                # program device below in this way
-                print('%s cannot connect. test reading hdf5 file....' % (device_name))
-                with h5py.File(h5file, 'r') as hdf5_file:
-                    group = hdf5_file['/devices/' + device_name]
-                    # If there are values to set the unbuffered outputs to, set them now:
-                    if 'STATIC_DATA' in group:
-                        static_data = group['STATIC_DATA'][:][0]
-                    # Now program the buffered outputs:
-                    for i in range(MAX_NUM_CHANNELS):
-                        table_name = 'TABLE_OPT%i'%i
-                        if table_name in group:
-                            flags = group[table_name][:][0]
-                            print('%s / channel %i options:' % (device_name, i), flags)
-                            table_mode        = (flags & FLAG_TABLE_MODE        ) == FLAG_TABLE_MODE
-                            trigger_each_step = (flags & FLAG_TRIGGER_EACH_STEP) == FLAG_TRIGGER_EACH_STEP
-                            print('table mode %s, trigger each step %s' % (table_mode, trigger_each_step))
-                        table_name = 'TABLE_DATA%i'%i
-                        if table_name in group:
-                            table_data = group[table_name][:]  # Skip last line?: ale
-                            print('%s / channel %i data:' % (device_name, i), table_data)
-
-                return True # avoid every time to restart during testing
-
+            # Andi: TODO update code as in test case without connection above!
+            # each channel can be in table mode or not and in table mode can be triggered one time or each step
+            # these options are given in connection table.
+            # the table_data contains time/frequency/amplitude/phase for all cases.
+            # time is in seconds and needs to be divided by 5us and is needed only in table mode with single trigger.
             return False
-
-        # Andi: TODO update code as in test case without connection above!
-        # each channel can be in table mode or not and in table mode can be triggered one time or each step
-        # these options are given in connection table.
-        # the table_data contains time/frequency/amplitude/phase for all cases.
-        # time is in seconds and needs to be divided by 5us and is needed only in table mode with single trigger.
-
 
         # Store the initial values in case we have to abort and restore them:
         self.initial_values = initial_values
-        print(f"'{device_name}'Transition to buffered. Device info: {self.dev.ask('info')}  ")
+        print(f"'{device_name}' Transition to buffered. Device info: {self.dev.ask('info')}  ")
         # Store the final values to for use during transition_to_static:
         self.final_values = {}
         static_data = None
@@ -706,99 +680,104 @@ class MOGLabs_QRF_Worker(Worker):
         self.shot_file = h5file
         with h5py.File(self.shot_file, 'r') as hdf5_file:
             group = hdf5_file['/devices/' + device_name]
-            # If there are values to set the unbuffered outputs to, set them now:
-            if 'STATIC_DATA' in group:
-                static_data = group['STATIC_DATA'][:][0]
-            # Now program the buffered outputs:
-            if 'TABLE_DATA' in group:
-                table_data = group['TABLE_DATA'] [:] # Skip last line?: ale
-
-        if False:#Andrea:if you not work in Table mode
             for channel in range(MAX_NUM_CHANNELS):
-                self.dev.cmd(f'MODE,{channel+1},TSB')            
-                # Added by Ale 
-                #self.dev.cmd(f'TABLE,CLEAR,{channel+1}')            
-                self.dev.cmd(F'TABLE,EDGE,{channel+1},RISING') # set trigger edge rising
-                self.dev.cmd('ON,%i,ALL' % (channel+1)) 
-        else:# Added by Andrea
-                for channel in range(MAX_NUM_CHANNELS):
-                    string=str('STATIC_DATA'+str(channel))
-                    static_data = group[string][:][0]
-                    self.dev.cmd(f'MODE,{channel+1},NSB') 
-                    self.dev.cmd(f"FREQ,{channel+1},{static_data['freq']}")
-                    # self.dev.cmd(f"POWER,{channel+1},{data[0]['amp']}")
-                    self.dev.cmd('ON,%i,ALL' % (channel+1))   
+                # If there are values to set the unbuffered outputs to, set them now:
+                if 'STATIC_DATA%i'%channel in group:
+                    static_data = group['STATIC_DATA%i'%channel][:]
+                if 'TABLE_DATA%i'%channel in group:
+                    table_data = group['TABLE_DATA%i'%channel][:]
 
-        print(f"'{device_name}'in table mode")
-        # Now program the buffered outputs:
-        if table_data is not None:
-            data = table_data
-            # Add switch off 
-            #data.append(f'{data[-1,0]}, {data[-1,1]}, {data[-1,2]}, {data[-1,3]}, 0, 0, 0, 0, 0x0, 0x0, 0x0, 0x0')
-            #print(f"Table data: {data}")
-            for i, line in enumerate(data):
-                st = time.time()
-                oldtable = self.smart_cache['TABLE_DATA']
-                for ddsno in range(MAX_NUM_CHANNELS):
-                    if fresh or i >= len(oldtable) or (
-                    line['freq%d' % ddsno], line['phase%d' % ddsno], line['amp%d' % ddsno]) != (
-                    oldtable[i]['freq%d' % ddsno], oldtable[i]['phase%d' % ddsno], oldtable[i]['amp%d' % ddsno]):
-                        #command = 'table,entry,%d,%d,%fMHz,%fdBm,%fdeg,1,trig' % ( # gives always invalid table enry!?
-                        #ddsno + 1, i + 1, line['freq%d' % ddsno], line['amp%d' % ddsno], line['phase%d' % ddsno])
-                        command = 'TABLE,APPEND,%d,%i,%.3f,%.3f,0' % (
-                        ddsno + 1, line['freq%d' % ddsno], line['amp%d' % ddsno], line['phase%d' % ddsno])
-                        print(f"A line in the table of Ch {ddsno+1} has changed: sending command", command)
+                if table_data is not None: #Added by Andre
+                    self.dev.cmd(f'MODE,{channel+1},TSB')            
+                    self.dev.cmd(f'TABLE,CLEAR,{channel+1}')            
+                    self.dev.cmd(F'TABLE,EDGE,{channel+1},RISING') # set trigger edge rising
+                    print(f"Ch {channel} in table mode:")
+                    if True:
+                        data = table_data
+                        for i, line in enumerate(data):
+                            st = time.time()
+                            # oldtable = self.smart_cache['TABLE_DATA%i'%channel]
+                            ddsno = channel
+                            if fresh or (line['freq'], line['phase' ], line['amp']) != 0: 
+                                command = 'TABLE,APPEND,%d,%.3f,%.3f,%.3f,0x1, TRIG' % (ddsno+1, 1e-3*line['freq'], 1e-2*line['amp'], line['phase'])
+                                print(f"A line in the table of Ch {ddsno} has changed sending command", command)
+                                self.dev.cmd(command)
+
+                            et = time.time()
+                            tt = et - st
+                            self.logger.debug('Time spent on line %s: %s' % (i, tt))
+                        command = 'TABLE,APPEND,%d,10,0x0,0,0x1, TRIG' % (channel+1)
+                        print(f"A line in the table of Ch {channel} has changed sending command", command)
                         self.dev.cmd(command)
-                et = time.time()
-                tt = et - st
-                self.logger.debug('Time spent on line %s: %s' % (i, tt))
-            # Added by Ale: set the power to 0 at the end of the ramp
 
-            #print('Switch off channels')
+                    self.dev.cmd('TABLE,ARM,%i' % (channel+1))
+                    print('table armed')
+                    # self.dev.cmd('TABLE,START,%i' % (channel+1))
+                    # print('table started')
+                    table_data = None
 
-            # Store the table for future smart programming comparisons:
-            try:
-                self.smart_cache['TABLE_DATA'][:len(data)] = data
-                self.logger.debug('Stored new table as subset of old table')
-            except:  # new table is longer than old table
-                self.smart_cache['TABLE_DATA'] = data
-                self.logger.debug('New table is longer than old table and has replaced it.')
 
-            # Get the final values of table mode so that the GUI can
-            # reflect them after the run:
-            self.final_values['channel 0'] = {}
-            self.final_values['channel 1'] = {}
-            self.final_values['channel 2'] = {}
-            self.final_values['channel 3'] = {}
+                elif static_data is not None: # Added by Andre
+                    print(f"Ch {channel} in static mode: {static_data[-1]['freq']} MHz, {static_data[-1]['amp']} dBm")
+                    
+                    self.dev.cmd(f'MODE,{channel+1},NSB') 
+                    self.dev.cmd(f"FREQ,{channel+1},{1e-3*static_data[-1]['freq']}") ##### BUG  TODO: FIX removing 1e-3 ask Andre #################
+                    self.dev.cmd(f"POW,{channel+1},{1e-2*static_data[-1]['amp']}")   ##### BUG  TODO: FIX removing 1e-2 ask Andre #################
+                    
+                    self.dev.cmd('ON,%i,ALL' % (channel+1))
 
-            self.final_values['channel 0']['freq'] = data[-1]['freq0']
-            self.final_values['channel 1']['freq'] = data[-1]['freq1']
-            self.final_values['channel 2']['freq'] = data[-1]['freq2']
-            self.final_values['channel 3']['freq'] = data[-1]['freq3']
-            self.final_values['channel 0']['amp'] = data[-1]['amp0']
-            self.final_values['channel 1']['amp'] = data[-1]['amp1']
-            self.final_values['channel 2']['amp'] = data[-1]['amp2']
-            self.final_values['channel 3']['amp'] = data[-1]['amp3']
-            self.final_values['channel 0']['phase'] = data[-1]['phase0']
-            self.final_values['channel 1']['phase'] = data[-1]['phase1']
-            self.final_values['channel 2']['phase'] = data[-1]['phase2']
-            self.final_values['channel 3']['phase'] = data[-1]['phase3']
-            
-            # Transition to table mode:
-            # Set the number of entries for each channel
+                    # self.final_values[f'channel {channel}']['freq'] = 1e-3*static_data[-1]['freq']
+                    # self.final_values[f'channel {channel}']['amp'] = 1e-2*static_data[-1]['amp']
+                    # self.final_values[f'channel {channel}']['phase'] = static_data[-1]['phase']
 
-            for ch in range(MAX_NUM_CHANNELS):
-                self.dev.cmd(f'TABLE,APPEND,{ch+1},10,0x0,0,0') # Switch off
-                self.dev.cmd(f'TABLE,ENTRIES,{ch+1},{len(data)+1}')
-                self.dev.cmd(f'TABLE,ARM,{ch+1}')
-                print(f"Ch {ch+1}: armed with {len(data)+1} entries")
+        
+                # Now program the buffered table outputs: #shitty stuff
+                if False: #table_data is not None:
+                    
+                    # Added by Ale: set the power to 0 at the end of the ramp
 
-            for channel in range(MAX_NUM_CHANNELS): 
-                self.dev.cmd('ON,%i,ALL' % (channel))   
- 
-        # import time
-        # time.sleep(1)
-            #print(f"Table final values: {self.final_values}")
+                    #print('Switch off channels')
+
+                    if True:# Store the table for future smart programming comparisons:
+                        try:
+                            self.smart_cache['TABLE_DATA'][:len(data)] = data
+                            self.logger.debug('Stored new table as subset of old table')
+                        except:  # new table is longer than old table
+                            self.smart_cache['TABLE_DATA'] = data
+                            self.logger.debug('New table is longer than old table and has replaced it.')
+
+                    if False:
+                        # Get the final values of table mode so that the GUI can
+                        # reflect them after the run:
+                        self.final_values['channel 0'] = {}
+                        self.final_values['channel 1'] = {}
+                        self.final_values['channel 2'] = {}
+                        self.final_values['channel 3'] = {}
+
+                        self.final_values['channel 0']['freq'] = data[-1]['freq0']
+                        self.final_values['channel 1']['freq'] = data[-1]['freq1']
+                        self.final_values['channel 2']['freq'] = data[-1]['freq2']
+                        self.final_values['channel 3']['freq'] = data[-1]['freq3']
+                        self.final_values['channel 0']['amp'] = data[-1]['amp0']
+                        self.final_values['channel 1']['amp'] = data[-1]['amp1']
+                        self.final_values['channel 2']['amp'] = data[-1]['amp2']
+                        self.final_values['channel 3']['amp'] = data[-1]['amp3']
+                        self.final_values['channel 0']['phase'] = data[-1]['phase0']
+                        self.final_values['channel 1']['phase'] = data[-1]['phase1']
+                        self.final_values['channel 2']['phase'] = data[-1]['phase2']
+                        self.final_values['channel 3']['phase'] = data[-1]['phase3']
+                        
+                        # Transition to table mode:
+                        # Set the number of entries for each channel
+
+                        
+                        self.dev.cmd(f'TABLE,APPEND,{ddsno+1},10,0x0,0,0') # Switch off
+                        self.dev.cmd(f'TABLE,ENTRIES,{ddsno+1},{len(data)+1}')
+                        self.dev.cmd(f'TABLE,ARM,{ddsno+1}')
+                        print(f"Ch {ddsno+1}: armed with {len(data)+1} entries")
+
+                # self.dev.cmd('ON,%i,ALL' % (channel+1))
+
         return self.final_values
 
     def abort_transition_to_buffered(self):
@@ -808,16 +787,22 @@ class MOGLabs_QRF_Worker(Worker):
         # TODO: untested
         return self.transition_to_manual(True)
 
+
     def transition_to_manual(self, abort=False):
         print('Transition to manual')
         if self.dev is not None:
-            for channel in range(MAX_NUM_CHANNELS):
-                print(f"Stopping Ch {channel+1}")
-                #self.dev.cmd('TABLE,STOP,%i' % (channel + 1))
-                #self.dev.cmd('TABLE,CLEAR,%i' % (channel + 1))
-                self.dev.cmd('MODE,%i,NSB' % (channel+1))
-                self.dev.cmd(f"ON,{channel+1},SIG")
 
+            for channel in range(MAX_NUM_CHANNELS): 
+                try:
+                    self.dev.cmd(f'TABLE,STOP,{channel+1}') 
+                    self.dev.cmd(f'TABLE,CLEAR,{channel+1}')  
+                    self.dev.cmd(f'MODE,%i,NSB' % (channel+1))
+                    self.dev.cmd(f"ON,{channel+1},SIG")
+                    print(f"Ch {channel} end of table mode")
+                except:
+                    print(f"Ch {channel} already in normal mode")
+                    self.dev.cmd('MODE,%i,NSB' % (channel+1))
+                    self.dev.cmd(f"ON,{channel+1},SIG")
 
             if abort:
                 DDSs = [] # Andi to avoid problems

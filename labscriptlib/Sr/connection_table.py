@@ -55,7 +55,7 @@ if f:
         DigitalOut(name='ImagingTweezBeam_gate', parent_device=DO0, connection=str(4))
 
     DigitalOut(name='coilsMosfet', parent_device=DO0, connection=str(5))   
-    DigitalOut(name='Tweezer_gate', parent_device=DO0, connection=str(6))
+    DigitalOut(name='Tweezer_switch', parent_device=DO0, connection=str(6))
     if not co:
         DigitalOut(name='Orca_Camera_trigger', parent_device=DO0, connection=str(7))    
     if not cb_abs:
@@ -64,12 +64,11 @@ if f:
         DigitalOut(name='QRFRed_trigger', parent_device=DO0, connection=str(9))
         DigitalOut(name='RED_switch', parent_device=DO0, connection=str(10))
         DigitalOut(name='RedMOT_gate', parent_device=DO0, connection=str(11))
-        DigitalOut(name='Free_gate', parent_device=DO0, connection=str(11))
-        DigitalOut(name='Sisyphus_gate', parent_device=DO0, connection=str(11))
+        DigitalOut(name='Free_gate', parent_device=DO0, connection=str(12))
+        DigitalOut(name='Sisyphus_gate', parent_device=DO0, connection=str(13))
         
-    DigitalOut(name='awg_trigger', parent_device=DO0, connection=14)
+    awg_trigger=DigitalOut(name='awg_trigger', parent_device=DO0, connection=14)
     IGBT_close=DigitalOut(name='IGBT_close', parent_device=DO0, connection=str(15))
-        # RED_multifrq=DigitalOut(name='RED_multifrq', parent_device=DO0, connection=str(13))
 
     DO2=DigitalChannels(name='DO2'  , parent_device=main_board, connection='0x05', rack=0, max_channels = 16)
 
@@ -141,7 +140,7 @@ if f:
         secondary = None
 ############################################################################################################### MogLabs-QRFs
 if mb:
-    from user_devices.MOGLabs_QRF import MOGLabs_QRF, QRF_DDS
+    from user_devices.MOGlabsQRF.MOGLabs_QRF import MOGLabs_QRF, QRF_DDS
     QRF_trigger_1=DigitalOut(name='QRFBlue_trigger', parent_device=DO0, connection=0)
 
     if p:
@@ -162,7 +161,7 @@ if mb:
     ImagingTweezBeam_trigger=ImagingTweezBeam_gate
 
 if mr:
-    from user_devices.MOGLabs_QRF import MOGLabs_QRF, QRF_DDS
+    from user_devices.MOGlabsQRF.MOGLabs_QRF import MOGLabs_QRF, QRF_DDS
     QRF_trigger_2=DigitalOut(name='QRFRed_trigger', parent_device=DO0, connection=9)
 
     if p:
@@ -170,7 +169,7 @@ if mr:
     elif f:
         QRF_Red=MOGLabs_QRF(name='QRF_Red', parent_device=QRF_trigger_2, addr='192.168.1.103', port=7802)
 
-    BlueSpectr=QRF_DDS(name='BlueSpectr', parent_device=QRF_Red, connection='channel 0', 
+    Tweezers=QRF_DDS(name='Tweezers', parent_device=QRF_Red, connection='channel 0', 
             table_mode=False,                         digital_gate={'device':DO0, 'connection': 10})
     RedMOT=QRF_DDS(name='RedMOT', parent_device=QRF_Red, connection='channel 1', 
             table_mode=True, trigger_each_step=True, digital_gate={'device':DO0, 'connection': 11})
@@ -179,7 +178,8 @@ if mr:
             table_mode=False, trigger_each_step=True, digital_gate={'device':DO0, 'connection': 12})
     Free_trigger=Free_gate
     Sisyphus=QRF_DDS(name='Sisyphus', parent_device=QRF_Red, connection='channel 3', 
-            table_mode=False, trigger_each_step=True, digital_gate={'device':DO0, 'connection': 13})
+            table_mode=True, trigger_each_step=True, digital_gate={'device':DO0, 'connection': 13})
+    Sisyphus_trigger=Sisyphus_gate
 
 ############################################################################################################### CAMERAS
 if ca:
@@ -373,7 +373,7 @@ if co:
                             parentless=False,
                             camera_attributes = {
                                 'TRIGGER GLOBAL EXPOSURE': 2.0,                                
-                                'EXPOSURE TIME':0.100, # 0.0082944, #sec
+                                'EXPOSURE TIME':0.25, # 0.0082944, #sec
                                 'SENSOR MODE': 1.0,
                                 'READOUT SPEED': 2.0,
                                 'READOUT DIRECTION': 1.0,
@@ -413,11 +413,11 @@ if co:
                                 
                                 'OUTPUT TRIGGER PRE HSYNC COUNT': 0.0,
 
-                                # 'SUBARRAY HPOS': 0.0,
-                                # 'SUBARRAY HSIZE': 4096.0,
-                                # 'SUBARRAY VPOS': 0.0,
-                                # 'SUBARRAY VSIZE': 2304.0,
-                                # 'SUBARRAY MODE': 1.0,
+                                'SUBARRAY HPOS': 0.0,
+                                'SUBARRAY HSIZE': 100.0,
+                                'SUBARRAY VPOS': 0.0,
+                                'SUBARRAY VSIZE': 100.0,
+                                'SUBARRAY MODE': 1.0,
 
                                 'CAPTURE MODE': 1.0, #must stay 1
                                 'INTENSITY LUT MODE': 1.0,
@@ -451,10 +451,10 @@ if a:
     from user_devices.SpectrumAWG.labscript_devices import SpectrumAWG, AWGOutput
 
     # # Create the AWG device
-    awg = SpectrumAWG('awg', device_path="/dev/spcm0", timeout=5000, channel_mode='single', sample_rate=1250e6)
-    Vertical=AWGOutput("Vertical", awg, "0", main_board, 'ext0', 2000)
-    # Horizontal=AWGOutput("Horizontal", awg, "1", main_board, 'ext0', 2000)
-    # AWGOutput("Horizontal", awg, "1", None, None, 100)
+    awg = SpectrumAWG('awg', device_path="/dev/spcm0", timeout=5000, generation_mode='sequence', memory_segments=10, sample_rate=1e8)
+    Vertical=AWGOutput("Vertical", awg, "0", main_board, 'software', 2000) #ext0
+    Horizontal=AWGOutput("Horizontal", awg, "1", main_board, 'software', 2000)
+
 #################################################################################
  # ATTENTION: start() and stop(1) cannot be missing! time for stop must be >0. #
 #################################################################################
@@ -466,25 +466,25 @@ if __name__ == '__main__':
     Shutter_Blue.go_low(t)
     # Andor_Camera.enable_cooldown(temperature_setpoint=-60, water_cooling=False, wait_until_stable=False)
     if mb:
-        from user_devices.mogdevice import MOGDevice  #Blue MOGLABS QRF
+        from user_devices.MOGlabsQRF.mogdevice import MOGDevice  #Blue MOGLABS QRF
         dev = MOGDevice('192.168.1.102')
         print('Device info:', dev.ask('info'))
 
-        dev.cmd('MODE,1,  NSB') #2D MOT
-        dev.cmd('FREQ,1,198.0')
-        dev.cmd('POW, 1, 28')
+        # dev.cmd('MODE,1,  NSB') #2D MOT
+        # dev.cmd('FREQ,1,198.0')
+        # dev.cmd('POW, 1, 28')
 
-        dev.cmd('MODE,2,  NSB') #3D MOT
-        dev.cmd('FREQ,2,169.0')
-        dev.cmd('POW, 2, 28')
+        # dev.cmd('MODE,2,  NSB') #3D MOT
+        # dev.cmd('FREQ,2,169.0')
+        # dev.cmd('POW, 2, 28')
 
-        dev.cmd('MODE,3,  NSB') #TwezImaging
-        dev.cmd('FREQ,3,111.0')
-        dev.cmd('POW, 3, 26.86')
+        # dev.cmd('MODE,3,  NSB') #TwezImaging
+        # dev.cmd('FREQ,3,111.0')
+        # dev.cmd('POW, 3, 26.86')
 
-        dev.cmd('MODE,4,  NSB') #Imaging
-        dev.cmd('FREQ,4,113')
-        dev.cmd('POW, 4, 20')
+        # dev.cmd('MODE,4,  NSB') #Imaging
+        # dev.cmd('FREQ,4,113')
+        # dev.cmd('POW, 4, 20')
 
 
         # RedMOT.DDS.setfreq(tt, G_Red_MOT_Frq)
@@ -503,13 +503,13 @@ if __name__ == '__main__':
         # ImagingTweezBeam.DDS.setamp(tt, G_ImagingTweez_Pow)
 
     if mr:
-        from user_devices.mogdevice import MOGDevice  #Red MOGLABS QRF
+        from user_devices.MOGlabsQRF.mogdevice import MOGDevice  #Red MOGLABS QRF
         dev = MOGDevice('192.168.1.103')
         print('Device info:', dev.ask('info'))
 
         dev.cmd('MODE,1,  NSB')
-        dev.cmd('FREQ,1,110.3')
-        dev.cmd('POW, 1, 27.2')
+        dev.cmd('FREQ,1,80')
+        dev.cmd('POW, 1, 25')
 
         dev.cmd('MODE,2,  NSB')
         dev.cmd('FREQ,2, 70.0')

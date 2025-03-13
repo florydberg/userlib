@@ -24,29 +24,30 @@ if (oPlatform[0] == '64bit'):
 else:
     bIs64Bit = 0
 
-# define pointer aliases
-int8  = c_int8
-int16 = c_int16
-int32 = c_int32
-int64 = c_int64
+if True:
+    # define pointer aliases
+    int8  = c_int8
+    int16 = c_int16
+    int32 = c_int32
+    int64 = c_int64
 
-ptr8  = POINTER (int8)
-ptr16 = POINTER (int16)
-ptr32 = POINTER (int32)
-ptr64 = POINTER (int64)
+    ptr8  = POINTER (int8)
+    ptr16 = POINTER (int16)
+    ptr32 = POINTER (int32)
+    ptr64 = POINTER (int64)
 
-uint8  = c_uint8
-uint16 = c_uint16
-uint32 = c_uint32
-uint64 = c_uint64
+    uint8  = c_uint8
+    uint16 = c_uint16
+    uint32 = c_uint32
+    uint64 = c_uint64
 
-uptr8  = POINTER (uint8)
-uptr16 = POINTER (uint16)
-uptr32 = POINTER (uint32)
-uptr64 = POINTER (uint64)
+    uptr8  = POINTER (uint8)
+    uptr16 = POINTER (uint16)
+    uptr32 = POINTER (uint32)
+    uptr64 = POINTER (uint64)
 
-double = c_double
-dptr64 = POINTER (double)
+    double = c_double
+    dptr64 = POINTER (double)
 
 
 # Windows

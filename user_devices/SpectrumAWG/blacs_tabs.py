@@ -30,12 +30,15 @@ class SpectrumAWGTab(DeviceTab):
         self.ui.pushButton_MemoryReplay.clicked.connect(lambda: self.manual_memory_replay())
         self.ui.pushButton_refresh.setIcon(QtGui.QIcon(':/qtutils/fugue/arrow-circle-double'))
         self.ui.pushButton_refresh.clicked.connect(lambda: self.refresh_dropdown_menu())
+        self.ui.pushButton_reset.setIcon(QtGui.QIcon(':/qtutils/fugue/arrow-circle-double'))
+        self.ui.pushButton_reset.clicked.connect(lambda: self.reset_card())
         self.manual_active = False
         # Memory
         self.ui.used_memory.setMaximum(props["memory_segments"])
 
 
-        self.auto_place_widgets(("AWG",{"AWG":self.ui}))
+        self.auto_place_widgets(("Single Mode Generator",{"AWG":self.ui}))
+        
      
     def get_front_panel_values(self):
         return self._final_values
@@ -82,3 +85,7 @@ class SpectrumAWGTab(DeviceTab):
             self.ui.comboBox_memory.addItem(f"{memory_index} {instruction}")
         self.ui.comboBox_memory.view().setMinimumWidth(self.ui.comboBox_memory.view().sizeHintForColumn(0)+30)
         
+    @define_state(MODE_MANUAL, True)
+    def reset_card(self):
+        self.queue_work(self._primary_worker,'card_reset')
+        yield(self.queue_work(self._primary_worker,'program_manual',0.00))
