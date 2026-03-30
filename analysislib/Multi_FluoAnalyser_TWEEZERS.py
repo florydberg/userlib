@@ -134,14 +134,14 @@ def save_imag(plt, name):
     print(picname + ' saved')
 
 def Tweezers_scan(value, title):
-    figure()  ##################################################################### 
+    plt.figure()  ##################################################################### 
     for jj in range(9):
         means_ii=tuple(value.get(str(jj+1)))
         x,y,error,errorN=data_mean(parameter1, means_ii)
         # Subtract offset from x-axis values
         x_adjusted = [2*(xi) for xi in x]
         # plt.errorbar(x, y, yerr=errorN, fmt='--o', ecolor='gray',capsize=5)
-        plt.errorbar(x, y, yerr=errorN, fmt='--o', ecolor='gray',capsize=5)  #
+        plt.errorbar(x, y, yerr=errorN, fmt='--o', ecolor='black',capsize=5)  #
     plt.rcParams.update({'font.size': 20})
     plt.legend(['ROI1','ROI2','ROI3','ROI4','ROI5','ROI6','ROI7','ROI8','ROI9'])
     xlabel=str(para1_name)+' ('+str(para1_unit)+')'
@@ -153,21 +153,20 @@ def Tweezers_scan(value, title):
     plt.title(str(one_level_up))
     plt.ylabel('photons')
     # plt.yscale('log')
-    plt.grid(True)
+    plt.grid(False)
     # plt.xscale('log')
     # plt.ylim(0,1)
     if saving_plots: save_imag(plt, title)  #####################################################################
 
 
 def Tweezers_scan_tot(value, title):
-    figure()  ##################################################################### 
+    plt.figure()  ##################################################################### 
     all_y = []
     all_errorN = []    
     
     for jj in range(9):
         means_ii=tuple(value.get(str(jj+1)))
-        x,y,error,errorN=data_mean(parameter1, means_ii)
-                
+        x,y,error,errorN=data_mean(parameter1, means_ii)      
         all_y.append(y)
         all_errorN.append(errorN)
 
@@ -179,8 +178,9 @@ def Tweezers_scan_tot(value, title):
 
     # Subtract offset from x-axis values
     x_adjusted = [2*(xi) for xi in x]
+    print(x, y, errorN_mean)
     # plt.errorbar(x, y, yerr=errorN, fmt='--o', ecolor='gray',capsize=5)
-    plt.errorbar(x, y_mean, yerr=errorN_mean, fmt='--o', ecolor='gray',capsize=5)  #
+    plt.errorbar(x, y_mean, yerr=errorN_mean, fmt='-o',mfc='none', mec='black', lw=1, ecolor='black', color='black', capsize=5)  #
     plt.rcParams.update({'font.size': 20})
     # plt.legend(['mean of the 9 ROI'])
     # xlabel=str(para1_name)+' ('+str(para1_unit)+')'
@@ -189,10 +189,10 @@ def Tweezers_scan_tot(value, title):
     # plt.xlabel(xlabel)
     plt.xlabel('Detuning from free space resonance (MHz)')
     #plt.xlabel('time(ms) holdTime_fluoImg')
-    # plt.title(str(one_level_up))
+    plt.title(str(one_level_up))
     plt.ylabel('photons')
     # plt.yscale('log')
-    plt.grid(True)
+    plt.grid(False)
     # plt.xscale('log')
     # plt.ylim(0,1)
     # if saving_plots: save_imag(plt, title)  #####################################################################
@@ -215,24 +215,27 @@ def Tweezers_scan_duo(values, title):
     if saving_plots: save_imag(plt, title)  #####################################################################
 
 ################################### 
+################################### 
 duo=0
 saturation_conversion=False
 saving_plots=True
 saving_location=True
-# n_tweezer=3
-# n_tweezer=5
 n_tweezer=9
+saving_data=True
 
-para1_name='SisyphusImg_Frq' #'n_shot'
-para1_unit='MHz'    #'s' 
+para1_name='ImagingFluo_SetPoint' #'n_shot'
+para1_unit='ms'    #'s' 
 if duo:
     para2_name='FluoImgPulse_Dt'
     para2_unit='ms'
-
+################################### 
 ###################################
 
 try: #initialization
+# if True:
     df = data()
+    second_shot = all(pd.Series.to_list(df['second_shot']))
+    # second_shot=False
     paths=df['filepath']
     FluoAnalyser= df['FluoAnalyser_5tweez']
     # FluoAnalyser= df['FluoAnalyser_TWEEZERS']
@@ -265,11 +268,34 @@ try: #initialization
 
         atom_in_name='atom_in_tweezer_'+str(ii+1)
         atoms[str(ii+1)]=(tuple(FluoAnalyser[atom_in_name]))
-        aa=tuple(FluoAnalyser[atom_in_name])    
+        aa=tuple(FluoAnalyser[atom_in_name])
+    
+    if second_shot:
+        for ii in range(n_tweezer+1,2*n_tweezer+1):
+            mean_name='mean_tweezer_'+str(ii+1)
+            means[str(ii+1)]=tuple(FluoAnalyser[mean_name])
+            mm=tuple(FluoAnalyser[mean_name])
 
+            max_name='mean_tweezer_'+str(ii+1)
+            maxs[str(ii+1)]=tuple(FluoAnalyser[max_name])
+            mxm=tuple(FluoAnalyser[max_name])
 
+            var_name='variance_tweezer_'+str(ii+1)
+            vars[str(ii+1)]=(tuple(FluoAnalyser[var_name]))
+            vv=tuple(FluoAnalyser[var_name])
 
+            photon_name='photon_tweezer_'+str(ii+1)
+            photons[str(ii+1)]=(tuple(FluoAnalyser[photon_name]))
+            pp=tuple(FluoAnalyser[photon_name])
+
+            atom_in_name='atom_in_tweezer_'+str(ii+1)
+            atoms[str(ii+1)]=(tuple(FluoAnalyser[atom_in_name]))
+            aa=tuple(FluoAnalyser[atom_in_name])
+        
     photo_background=tuple(FluoAnalyser['photo_background'])
+    
+    if second_shot:
+        photo_background_2nd=tuple(FluoAnalyser['photo_background_2nd'])
 
     if saturation_conversion:
         if para1_name=='ImagingFluo_Pow': # conversion dbm to saturation parameter:
@@ -294,6 +320,10 @@ try: #initialization
 
 
         file_name=list_name+'.csv'
+        if saving_data:
+            histogram_data_csv = one_level_up + '/' + list_name +'histogram_data.csv'
+
+
 
         with open(two_levels_up+ '/' + file_name, 'a', newline='') as csv_file:
             writer = csv.writer(csv_file)
@@ -315,278 +345,379 @@ try: #initialization
         Tweezers_scan(photons, 'Photo-Count of Fluo Signal')
 
     
-
-    tot_count = 1
-
-    if tot_count:
-        Tweezers_scan_tot(photons, 'Photo-Count of Fluo Signal')
-        
-        #Histogram of photons divided per tweezer 
-
-        # figure()
-        # # title='Histogram of Tweezer'
-        # title=str(one_level_up)
-        # plt.title(title,fontsize=14)        
-        data_background=photo_background
-        # # plt.xlim(-20,100)
-        # # plt.hist([data_background, photons['1'] ,photons['2'], photons['3'] ] , bins=35, color=['b', 'r'  ,'yellow' , 'orange']) #round(len(data_background)/5)     
-        # # plt.legend(['background','tweezer1','tweezer2','tweezer3'])  #, 
-        # # plt.hist([data_background, photons['4']  ] , bins=50, color=['b', 'r']) #round(len(data_background)/5)     
-        # # plt.legend(['background','tweezer1'])  #, 
-        # # 5 tweezers array
-        # plt.hist([data_background, photons['1'] ,photons['2'], photons['3'], photons['4'], photons['5'] ] , bins=35, color=['b', 'r'  ,'yellow' , 'orange','g','black']) #round(len(data_background)/5)     
-        # plt.legend(['BG','ROI1','ROI2','ROI3','ROI4','ROI5'])  #, 
-        # # array_photons = np.concatenate([photons['1'],photons['2'],photons['3'],photons['4'],photons['5']]) 
-        # # plt.hist([data_background, array_photons ] , bins=35, color=['b', 'r'  ]) #round(len(data_background)/5)     
-        # # plt.legend(['BG','Atoms'])  #, 
-        # plt.xlabel('photons')
-        # plt.ylabel('occurencies')
-        # # plt.yscale('log')
-        # plt.show()
-        
+    Tweezers_scan_tot(photons, 'Photo-Count of Fluo Signal')
+    data_background=photo_background
+    threshold = 20
+    two_ph_threshold =  100#65
+    nbin=50
 
 
-        
-        #One histogram for each tweezer+threshold percentage
+    #Combined histogram for the whole array first shot
 
-        plt.figure(200)
+    plt.figure()
+    # title='Histogram of Tweezer'
+    title=str(one_level_up+'\n first shot')
+    plt.title(title,fontsize=14)        
+    data_background=photo_background
+    # plt.xlim(-30,100)
+    array_photons = np.concatenate([photons['1'],photons['2'],photons['3'],photons['4'],photons['5'],photons['6'],photons['7'],photons['8'],photons['9']]) 
+    # array_photons = np.concatenate([photons['1'],photons['2'],photons['3']]) 
+    countsG, binsG, _ = plt.hist([data_background, array_photons ] , bins=nbin, color=['b', 'r'  ]) #round(len(data_background)/5)
+    if saving_data:
+        with open(histogram_data_csv, 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(['Histogram Type', 'Bin Center', 'Counts', 'Source'])
+            for b, c in zip((binsG[:-1] + binsG[1:]) / 2, countsG[0]):
+                writer.writerow(['Full Array - First Shot', b, c, 'BG'])
+            for b, c in zip((binsG[:-1] + binsG[1:]) / 2, countsG[1]):
+                writer.writerow(['Full Array - First Shot', b, c, 'Atoms'])
+        print("Histogram data saved to:", histogram_data_csv)
 
-        threshold = 12
+    plt.legend(['BG','Atoms'])  #,
+    #plt.axvline(x=threshold, color='red', linestyle='--')    
+    #plt.axvline(x=two_ph_threshold, color='red', linestyle='--')  
+    # Calculate the fraction of values above the threshold for the photon data
+    total_photons = len(array_photons)
+    # above_threshold = sum(1 for value in array_photons if value > threshold)
+    # fraction = above_threshold / total_photons if total_photons > 0 else 0
 
-        two_ph_threshold =  100#65
+    # above_threshold_values = array_photons[array_photons > threshold]
+    above_threshold_values = array_photons[(array_photons > threshold) & (array_photons < two_ph_threshold)]
+    fraction = len(above_threshold_values) / total_photons if total_photons > 0 else 0
 
-        fig, ((ax1, ax2, ax3, ax4, ax5,ax6,ax7,ax8,ax9)) = plt.subplots(9, 1, figsize=(16, 26))
+    below_threshold_values = array_photons[array_photons <= threshold]
 
-        # Define the axes in a list for easier iteration
-        axes = [ax1, ax2, ax3, ax4, ax5,ax6,ax7,ax8,ax9]
-        photon_keys = ['1', '2', '3', '4', '5','6','7','8','9']  # Corresponding photon keys
-        titles = [f"ROI {i+1}" for i in range(9)]  # ROI labels
-        
-        for ax, key, title in zip(axes, photon_keys, titles):
-            # Plot the histogram
-            counts, bins, _ = ax.hist([data_background, photons[key]], bins=35, color=['b', 'r'])
-            ax.axvline(x=threshold, color='red', linestyle='--')
-            ax.axvline(x=two_ph_threshold, color='red', linestyle='--')
-
-            # Calculate the fraction of values above the threshold for the photon data
-            total_photons = len(photons[key])
-            above_threshold = np.sum(np.fromiter((1 for value in photons[key] if value > threshold), dtype=int))
-            fraction = above_threshold / total_photons if total_photons > 0 else 0
-
-
-            # Annotate the fraction inside the plot (in a framed box)
-            ax.text(0.95, 0.95, f"Above Threshold: {fraction:.2%}", 
-                    transform=ax.transAxes, fontsize=12, ha='right', va='top',
-                    bbox=dict(boxstyle="round,pad=0.3", edgecolor="black", facecolor="white"))
-
-            # Add ROI label next to each plot
-            ax.text(-0.1, 0.5, title, 
-                    transform=ax.transAxes, fontsize=14, ha='right', va='center')
-
-
-            
-            ax.tick_params(axis='both', which='major', labelsize=12)  
-            ax.tick_params(axis='both', which='minor', labelsize=10)  
-        # plt.tight_layout()
-        plt.show()
-        
+    mean_below = np.mean(below_threshold_values) if len(below_threshold_values) > 0 else 0
+    std_below = np.std(below_threshold_values) if len(below_threshold_values) > 0 else 0
+    mean_above = np.mean(above_threshold_values) if len(above_threshold_values) > 0 else 0
+    std_above = np.std(above_threshold_values) if len(above_threshold_values) > 0 else 0
 
 
-        #Combined histogram for the whole array
+    # Annotate the fraction inside the plot
+    plt.text(0.95, 0.65, f"Above Threshold: {fraction:.2%}",
+        transform=plt.gca().transAxes, fontsize=12, ha='right', va='top',
+        bbox=dict(boxstyle="round,pad=0.3", edgecolor="black", facecolor="white"))
+    plt.text(0.95, 0.57, f"Mean Above: {mean_above:.2f}\nStd Above: {std_above:.2f}",
+        transform=plt.gca().transAxes, fontsize=12, ha='right', va='top',
+        bbox=dict(boxstyle="round,pad=0.3", edgecolor="black", facecolor="white"))
+    plt.text(0.95, 0.45, f"Mean Below: {mean_below:.2f}\nStd Below: {std_below:.2f}",
+        transform=plt.gca().transAxes, fontsize=12, ha='right', va='top',
+        bbox=dict(boxstyle="round,pad=0.3", edgecolor="black", facecolor="white"))
+    
+    plt.xlabel('photons')
+    plt.ylabel('occurencies')
+    # plt.yscale('log')
+    plt.show()
 
-        figure()
-        # title='Histogram of Tweezer'
-        title=str(one_level_up+'\n first shot')
-        plt.title(title,fontsize=14)        
-        data_background=photo_background
-        # plt.xlim(-30,100)
-        array_photons = np.concatenate([photons['1'],photons['2'],photons['3'],photons['4'],photons['5'],photons['6'],photons['7'],photons['8'],photons['9']]) 
-        # array_photons = np.concatenate([photons['1'],photons['2'],photons['3']]) 
-        plt.hist([data_background, array_photons ] , bins=35, color=['b', 'r'  ]) #round(len(data_background)/5)
-        plt.legend(['BG','Atoms'])  #,
-        plt.axvline(x=threshold, color='red', linestyle='--')    
-        plt.axvline(x=two_ph_threshold, color='red', linestyle='--')  
+    #One histogram for each tweezer+threshold percentage first shot
+    
+    fig, ((ax1, ax2, ax3, ax4, ax5,ax6,ax7,ax8,ax9)) = plt.subplots(9, 1, figsize=(16, 26))
+
+    # Define the axes in a list for easier iteration
+    axes = [ax1, ax2, ax3, ax4, ax5,ax6,ax7,ax8,ax9]
+    photon_keys = ['1', '2', '3', '4', '5','6','7','8','9']  # Corresponding photon keys
+    titles = [f"ROI {i+1}" for i in range(9)]  # ROI labels
+    
+    for i, (ax, key, title) in enumerate(zip(axes, photon_keys, titles)):
+        # Plot the histogram
+        counts, bins, _ = ax.hist([data_background, photons[key]], bins=binsG, color=['b', 'r'])
+
+        if saving_data:
+            bin_centers = (bins[:-1] + bins[1:]) / 2
+            with open(histogram_data_csv, 'a', newline='') as csvfile:
+                writer = csv.writer(csvfile)
+                for b, c in zip(bin_centers, counts[0]):
+                    writer.writerow([f"ROI {i+1} - First Shot", b, c, 'BG'])
+                for b, c in zip(bin_centers, counts[1]):
+                    writer.writerow([f"ROI {i+1} - First Shot", b, c, 'Atoms'])
+
+
+        ax.axvline(x=threshold, color='red', linestyle='--')
+        ax.axvline(x=two_ph_threshold, color='red', linestyle='--')
+
         # Calculate the fraction of values above the threshold for the photon data
-        total_photons = len(array_photons)
-        # above_threshold = sum(1 for value in array_photons if value > threshold)
-        # fraction = above_threshold / total_photons if total_photons > 0 else 0
-
-        # above_threshold_values = array_photons[array_photons > threshold]
-        above_threshold_values = array_photons[(array_photons > threshold) & (array_photons < two_ph_threshold)]
-        fraction = len(above_threshold_values) / total_photons if total_photons > 0 else 0
-
-        below_threshold_values = array_photons[array_photons <= threshold]
-
-        mean_below = np.mean(below_threshold_values) if len(below_threshold_values) > 0 else 0
-        std_below = np.std(below_threshold_values) if len(below_threshold_values) > 0 else 0
-        mean_above = np.mean(above_threshold_values) if len(above_threshold_values) > 0 else 0
-        std_above = np.std(above_threshold_values) if len(above_threshold_values) > 0 else 0
+        total_photons = len(photons[key])
+        above_threshold = np.sum(np.fromiter((1 for value in photons[key] if value > threshold), dtype=int))
+        fraction = above_threshold / total_photons if total_photons > 0 else 0
 
 
-        # Annotate the fraction inside the plot
-        plt.text(0.95, 0.65, f"Above Threshold: {fraction:.2%}",
-         transform=plt.gca().transAxes, fontsize=12, ha='right', va='top',
-         bbox=dict(boxstyle="round,pad=0.3", edgecolor="black", facecolor="white"))
-        plt.text(0.95, 0.57, f"Mean Above: {mean_above:.2f}\nStd Above: {std_above:.2f}",
-         transform=plt.gca().transAxes, fontsize=12, ha='right', va='top',
-         bbox=dict(boxstyle="round,pad=0.3", edgecolor="black", facecolor="white"))
-        plt.text(0.95, 0.45, f"Mean Below: {mean_below:.2f}\nStd Below: {std_below:.2f}",
-         transform=plt.gca().transAxes, fontsize=12, ha='right', va='top',
-         bbox=dict(boxstyle="round,pad=0.3", edgecolor="black", facecolor="white"))
-        
-        plt.xlabel('photons')
-        plt.ylabel('occurencies')
-        # plt.yscale('log')
-        plt.show()
+        # Annotate the fraction inside the plot (in a framed box)
+        ax.text(0.95, 0.95, f"Above Threshold: {fraction:.2%}", 
+                transform=ax.transAxes, fontsize=12, ha='right', va='top',
+                bbox=dict(boxstyle="round,pad=0.3", edgecolor="black", facecolor="white"))
+
+        # Add ROI label next to each plot
+        ax.text(-0.1, 0.5, title, 
+                transform=ax.transAxes, fontsize=14, ha='right', va='center')
 
         
-        #Calculate survival probability after Imaging
-        
-        # total_pairs = 0
-        # loss = 0
-        
-        # for ii in range (1,5 ):  #n_tweezer/2+0.5
-        #     var_start = atoms[str(ii)]
-        #     var_end = atoms[str(ii+ 6)]  #n_tweezer/2+0.5
-            
-        #     for start, end in zip (var_start, var_end):
+        ax.tick_params(axis='both', which='major', labelsize=12)  
+        ax.tick_params(axis='both', which='minor', labelsize=10)
+        if i < len(axes) - 1:
+            ax.tick_params(axis='x', which='both',
+                       bottom=False, top=False,
+                       labelbottom=False, labelleft=False) # Rimuove l'etichetta dell'asse x (se presente)  
+        axes[-1].set_xlabel("Photon Counts", fontsize=14)
+    # plt.tight_layout()
+    plt.show()
+              
+    # Calculate survival probability after Imaging
+    if second_shot:    
+        total_present = 0 
+        loss = 0 # Atoms that were and are no longer there
+        false_appearance = 0 # Atoms that were not there and appear later
+        total_positions = 0
+
+        for ii in range(1, n_tweezer+1):
+            var_start = atoms[str(ii)]
+            var_end = atoms[str(ii+ n_tweezer+1)]  #
                 
-        #         if start == 1:
-        #             total_pairs +=1
-        #             if end == 0:
-        #                 loss += 1
+            # for start, end in zip (var_start, var_end):
+            #     if start == 1:
+            #         total_pairs +=1
+            #         if end == 0:
+            #             loss += 1
+
+            for start, end in zip(var_start, var_end):
+                total_positions += 1
+                if start == 1:
+                    total_present += 1
+                    if end == 0:
+                        loss += 1
+                elif start == 0 and end == 1:
+                    false_appearance += 1
+
+
+        
+        survival = 1-loss / total_present if total_present > 0 else 0
+        survival_error = np.sqrt(survival * (1 - survival) / total_present)
+        stability = 1 - (loss + false_appearance) / total_positions if total_positions > 0 else 0
+        print(f"Survival (atoms that remained): {survival:.2f}")
+        print(f"False appearances (new atoms): {(false_appearance / total_positions):.2f}")
+        print(f"Stability probability (no loss or new atom): {stability:.2f}")
+        print(f"Survival (atoms that remained): {survival:.2f} ± {survival_error:.2f}")
+
+        # Calcolo della survival probability individuale
+        survival_per_tweezer = {}
+        for ii in range(1, n_tweezer + 1):
+            var_start = atoms[str(ii)]
+            var_end = atoms[str(ii + n_tweezer + 1)]
+
+            if len(var_start) != len(var_end):
+                print(f"Warning: Tweezer {ii} has mismatched lengths between shots.")
+                continue
+
+            present = 0
+            survived = 0
+
+            for s, e in zip(var_start, var_end):
+                if s == 1:
+                    present += 1
+                    if e == 1:
+                        survived += 1
+
+            if present > 0:
+                survival_ratio = survived / present
+            else:
+                survival_ratio = float('nan')  # Nessun atomo iniziale, non si può definire
+
+            survival_per_tweezer[ii] = survival_ratio
+
+        print("\n--- Survival Probability per Tweezer ---")
+        for t_id, prob in survival_per_tweezer.items():
+            print(f"Tweezer {t_id}: {prob:.2f}")
+
+
         # surv_prob = 1- loss / total_pairs if total_pairs > 0 else 0
 
         # print(f"Survival probability: {surv_prob:.2f}")
 
-        
-          
-        
-        #Combined histogram for the whole array for the second shot
-        # second_shot = 1
-        second_shot=df['second_shot']
-        
-        if second_shot:
-            print('ciao')
-            figure(1234)
-            title=str(one_level_up + '\n second shot')
-            plt.title(title,fontsize=14)        
-            data_background=photo_background
-            # plt.xlim(-30,100)
-            array_photons_2nd = np.concatenate([photons['11'],photons['12'],photons['13'],photons['14'],photons['15'],photons['16'],photons['17'],photons['18'],photons['19']])# 
-            plt.hist([data_background, array_photons_2nd ] , bins=35, color=['b', 'r'  ]) #round(len(data_background)/5)
-            plt.legend(['BG','Atoms'])  #,
-            plt.axvline(x=threshold, color='red', linestyle='--')    
-            plt.axvline(x=two_ph_threshold, color='red', linestyle='--')  
-            # Calculate the fraction of values above the threshold for the photon data
-            total_photons_2nd = len(array_photons_2nd)
-            # above_threshold = sum(1 for value in array_photons if value > threshold)
-            # fraction = above_threshold / total_photons if total_photons > 0 else 0
 
-            # above_threshold_values = array_photons[array_photons > threshold]
-            above_threshold_values_2nd = array_photons_2nd[(array_photons_2nd > threshold) & (array_photons_2nd < two_ph_threshold)]
-            fraction_2nd = len(above_threshold_values_2nd) / total_photons_2nd if total_photons_2nd > 0 else 0
+               
+    #Combined histogram for the whole array for the second shot
+    if second_shot:
+        plt.figure()
+        title=str(one_level_up + '\n second shot')
+        plt.title(title,fontsize=14)        
+        data_background_2nd=photo_background_2nd
+        # plt.xlim(-30,100)
+        array_photons_2nd = np.concatenate([photons['11'],photons['12'],photons['13'],photons['14'],photons['15'],photons['16'],photons['17'],photons['18'],photons['19']])# 
+        plt.hist([data_background_2nd, array_photons_2nd ] , bins=binsG, color=['b', 'r'  ]) #round(len(data_background)/5)
+        if saving_data:
+            bin_centers = (binsG[:-1] + binsG[1:]) / 2
+            countsBG = np.histogram(data_background_2nd, bins=binsG)[0]
+            countsAtoms = np.histogram(array_photons_2nd, bins=binsG)[0]
+            with open(histogram_data_csv, 'a', newline='') as csvfile:
+                writer = csv.writer(csvfile)
+                for b, c in zip(bin_centers, countsBG):
+                    writer.writerow(['Full Array - Second Shot', b, c, 'BG'])
+                for b, c in zip(bin_centers, countsAtoms):
+                    writer.writerow(['Full Array - Second Shot', b, c, 'Atoms'])
 
-            below_threshold_values_2nd = array_photons_2nd[array_photons_2nd <= threshold]
+        plt.legend(['BG','Atoms'])  #,
+        plt.axvline(x=threshold, color='red', linestyle='--')    
+        plt.axvline(x=two_ph_threshold, color='red', linestyle='--')  
+        # Calculate the fraction of values above the threshold for the photon data
+        total_photons_2nd = len(array_photons_2nd)
+        # above_threshold = sum(1 for value in array_photons if value > threshold)
+        # fraction = above_threshold / total_photons if total_photons > 0 else 0
+
+        # above_threshold_values = array_photons[array_photons > threshold]
+        above_threshold_values_2nd = array_photons_2nd[(array_photons_2nd > threshold) & (array_photons_2nd < two_ph_threshold)]
+        fraction_2nd = len(above_threshold_values_2nd) / total_photons_2nd if total_photons_2nd > 0 else 0
+
+        below_threshold_values_2nd = array_photons_2nd[array_photons_2nd <= threshold]
     
-            mean_below_2nd = np.mean(below_threshold_values_2nd) if len(below_threshold_values_2nd) > 0 else 0
-            std_below_2nd = np.std(below_threshold_values_2nd) if len(below_threshold_values_2nd) > 0 else 0
-            mean_above_2nd = np.mean(above_threshold_values_2nd) if len(above_threshold_values_2nd) > 0 else 0
-            std_above_2nd = np.std(above_threshold_values_2nd) if len(above_threshold_values_2nd) > 0 else 0
+        mean_below_2nd = np.mean(below_threshold_values_2nd) if len(below_threshold_values_2nd) > 0 else 0
+        std_below_2nd = np.std(below_threshold_values_2nd) if len(below_threshold_values_2nd) > 0 else 0
+        mean_above_2nd = np.mean(above_threshold_values_2nd) if len(above_threshold_values_2nd) > 0 else 0
+        std_above_2nd = np.std(above_threshold_values_2nd) if len(above_threshold_values_2nd) > 0 else 0
 
 
-            # Annotate the fraction inside the plot
-            plt.text(0.95, 0.65, f"Above Threshold: {fraction_2nd:.2%}",
-            transform=plt.gca().transAxes, fontsize=12, ha='right', va='top',
-            bbox=dict(boxstyle="round,pad=0.3", edgecolor="black", facecolor="white"))
-            plt.text(0.95, 0.57, f"Mean Above: {mean_above_2nd:.2f}\nStd Above: {std_above:.2f}",
-            transform=plt.gca().transAxes, fontsize=12, ha='right', va='top',
-            bbox=dict(boxstyle="round,pad=0.3", edgecolor="black", facecolor="white"))
-            plt.text(0.95, 0.45, f"Mean Below: {mean_below_2nd:.2f}\nStd Below: {std_below:.2f}",
-            transform=plt.gca().transAxes, fontsize=12, ha='right', va='top',
-            bbox=dict(boxstyle="round,pad=0.3", edgecolor="black", facecolor="white"))
-            # plt.text(0.95, 0.35, f"Survival probability: {surv_prob:.2f}",
-            # transform=plt.gca().transAxes, fontsize=12, ha='right', va='top',
-            # bbox=dict(boxstyle="round,pad=0.3", edgecolor="black", facecolor="white"))
+        # Annotate the fraction inside the plot
+        plt.text(0.95, 0.65, f"Above Threshold: {fraction_2nd:.2%}",
+        transform=plt.gca().transAxes, fontsize=12, ha='right', va='top',
+        bbox=dict(boxstyle="round,pad=0.3", edgecolor="black", facecolor="white"))
+        plt.text(0.95, 0.57, f"Mean Above: {mean_above_2nd:.2f}\nStd Above: {std_above_2nd:.2f}",
+        transform=plt.gca().transAxes, fontsize=12, ha='right', va='top',
+        bbox=dict(boxstyle="round,pad=0.3", edgecolor="black", facecolor="white"))
+        plt.text(0.95, 0.45, f"Mean Below: {mean_below_2nd:.2f}\nStd Below: {std_below_2nd:.2f}",
+        transform=plt.gca().transAxes, fontsize=12, ha='right', va='top',
+        bbox=dict(boxstyle="round,pad=0.3", edgecolor="black", facecolor="white"))
+        plt.text(0.95, 0.35, f"Survival probability (atoms that remained): {survival:.2f}",
+        transform=plt.gca().transAxes, fontsize=12, ha='right', va='top',
+        bbox=dict(boxstyle="round,pad=0.3", edgecolor="black", facecolor="white"))
+        plt.text(0.95, 0.25, f"False appearances (new atoms): {(false_appearance/total_positions):.2f}",
+        transform=plt.gca().transAxes, fontsize=12, ha='right', va='top',
+        bbox=dict(boxstyle="round,pad=0.3", edgecolor="black", facecolor="white"))
+
         
-            plt.xlabel('photons')
-            plt.ylabel('occurencies')
-            plt.show()
+        plt.xlabel('photons')
+        plt.ylabel('occurencies')
+        plt.show()
+
+        #one histogram for each tweezer second shot
+
+        fig, ((ax1, ax2, ax3, ax4, ax5, ax6, ax7, ax8, ax9)) = plt.subplots(9, 1, figsize=(16, 26))
+
+        axes = [ax1, ax2, ax3, ax4, ax5, ax6, ax7, ax8, ax9]
+        photon_keys = ['11', '12', '13', '14', '15', '16', '17', '18', '19']
+        titles = [f"ROI {i+1} (2nd shot)" for i in range(9)]
+
+        for i, (ax, key, title) in enumerate(zip(axes, photon_keys, titles)):
+        # for ax, key, title in zip(axes, photon_keys, titles):
+            counts, bins, _ = ax.hist([photo_background_2nd, photons[key]], bins=binsG, color=['b', 'r'])
+
+            if saving_data:
+                bin_centers = (bins[:-1] + bins[1:]) / 2
+                with open(histogram_data_csv, 'a', newline='') as csvfile:
+                    writer = csv.writer(csvfile)
+                    for b, c in zip(bin_centers, counts[0]):
+                        writer.writerow([f"ROI {i+1} - Second Shot", b, c, 'BG'])
+                    for b, c in zip(bin_centers, counts[1]):
+                        writer.writerow([f"ROI {i+1} - Second Shot", b, c, 'Atoms'])
+
+
+            ax.axvline(x=threshold, color='red', linestyle='--')
+            ax.axvline(x=two_ph_threshold, color='red', linestyle='--')
+
+            total_photons = len(photons[key])
+            above_threshold = np.sum((np.array(photons[key]) > threshold) & (np.array(photons[key]) < two_ph_threshold))
+            fraction = above_threshold / total_photons if total_photons > 0 else 0
+
+            ax.text(0.95, 0.95, f"Above Threshold: {fraction:.2%}", 
+                    transform=ax.transAxes, fontsize=12, ha='right', va='top',
+                    bbox=dict(boxstyle="round,pad=0.3", edgecolor="black", facecolor="white"))
+            ax.text(-0.1, 0.5, title, 
+                    transform=ax.transAxes, fontsize=14, ha='right', va='center')
+
+            ax.tick_params(axis='both', which='major', labelsize=12)
+            ax.tick_params(axis='both', which='minor', labelsize=10)
+            if i < len(axes) - 1:
+                ax.tick_params(axis='x', which='both',
+                       bottom=False, top=False,
+                       labelbottom=False, labelleft=False) # Rimuove l'etichetta dell'asse x (se presente)  
+            axes[-1].set_xlabel("Photon Counts", fontsize=14)
+        # plt.tight_layout()
+        plt.subplots_adjust(hspace=0.15)
+        plt.show()
+
 
         #End of second shot analysis
         
         
-    
-
-        bimodalfit=1
+    bimodalfit=1
         # threshold = 18 # Example threshold, replace with your actual value
 
+    if bimodalfit:
+        
+        # Define the Gaussian function
+        def gaussian(x, A, mu, sigma):
+            return A * np.exp(-((x - mu)**2) / (2 * sigma**2))
+        # Define the bimodal function (sum of two Gaussians)
 
-        if bimodalfit:
-            # Define the Gaussian function
-            def gaussian(x, A, mu, sigma):
-                return A * np.exp(-((x - mu)**2) / (2 * sigma**2))
+        def bimodal(x, A1, mu1, sigma1, A2, mu2, sigma2):
+            return gaussian(x, A1, mu1, sigma1) + gaussian(x, A2, mu2, sigma2)
+        
+        def gaussian_integral(A, mu, sigma, a, b):
+            """Compute the integral of a Gaussian between limits a and b."""
+            if a == -np.inf:
+                erf_a = -1
+            else:
+                erf_a = erf((a - mu) / (sigma * np.sqrt(2)))
 
-            # Define the bimodal function (sum of two Gaussians)
-            def bimodal(x, A1, mu1, sigma1, A2, mu2, sigma2):
-                return gaussian(x, A1, mu1, sigma1) + gaussian(x, A2, mu2, sigma2)
+            if b == np.inf:
+                erf_b = 1
+            else:
+                erf_b = erf((b - mu) / (sigma * np.sqrt(2)))
 
+            return A * sigma * np.sqrt(2 * np.pi) * 0.5 * (erf_b - erf_a)
+        
+        # Example histogram data (replace with your data)
+        hist, bin_edges = np.histogram(array_photons, bins=50, density=True)
+        
+        bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+        
+        # Initial guesses for A1, mu1, sigma1, A2, mu2, sigma2
+        p0 = [0.1, 0, 5, 0.2, 50, 10]
+        
+        # Fit the bimodal model
+        popt, pcov = curve_fit(bimodal, bin_centers, hist, p0=p0, maxfev=10000)
+        print('ciao')
+        # Extract parameters
+        A1, mu1, sigma1, A2, mu2, sigma2 = popt
 
-            def gaussian_integral(A, mu, sigma, a, b):
-                """Compute the integral of a Gaussian between limits a and b."""
-                if a == -np.inf:
-                    erf_a = -1
-                else:
-                    erf_a = erf((a - mu) / (sigma * np.sqrt(2)))
-
-                if b == np.inf:
-                    erf_b = 1
-                else:
-                    erf_b = erf((b - mu) / (sigma * np.sqrt(2)))
-
-                return A * sigma * np.sqrt(2 * np.pi) * 0.5 * (erf_b - erf_a)
-
-            # Example histogram data (replace with your data)
-            hist, bin_edges = np.histogram(array_photons, bins=50, density=True)
-            bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
-
-            # Initial guesses for A1, mu1, sigma1, A2, mu2, sigma2
-            p0 = [0.1, 0, 5, 0.2, 50, 10]
-
-            # Fit the bimodal model
-            popt, pcov = curve_fit(bimodal, bin_centers, hist, p0=p0)
-
-            # Extract parameters
-            A1, mu1, sigma1, A2, mu2, sigma2 = popt
-
-            # Threshold value
+        # Threshold value
             
-            # Integral of the left peak above the threshold
-            left_above_threshold = gaussian_integral(A1, mu1, sigma1, threshold, np.inf)
+        # Integral of the left peak above the threshold
+        left_above_threshold = gaussian_integral(A1, mu1, sigma1, threshold, np.inf)
 
-            # Integral of the right peak below the threshold
-            right_below_threshold = gaussian_integral(A2, mu2, sigma2, -np.inf, threshold)
+        # Integral of the right peak below the threshold
+        right_below_threshold = gaussian_integral(A2, mu2, sigma2, -np.inf, threshold)
 
-            # Combined error measure
-            separation_error = left_above_threshold + right_below_threshold
+        # Combined error measure
+        separation_error = left_above_threshold + right_below_threshold
 
-            print(f"Integral of left peak above threshold: {left_above_threshold:.4f}")
-            print(f"Integral of right peak below threshold: {right_below_threshold:.4f}")
-            print(f"Fidelity: {100-100*separation_error:.4f} %")
+        print(f"Integral of left peak above threshold: {left_above_threshold:.4f}")
+        print(f"Integral of right peak below threshold: {right_below_threshold:.4f}")
+        print(f"Fidelity: {100-100*separation_error:.4f} %")
             
-            figure(111)
-            # Plot the histogram and the fit
-            plt.hist(array_photons, bins=50, density=True, alpha=0.6, color='g', label='Histogram')
-            x = np.linspace(min(array_photons), max(array_photons), 1000)
-            plt.plot(x, bimodal(x, *popt), 'r-', label='Bimodal fit')
-            plt.plot(x, gaussian(x, A1, mu1, sigma1), 'b--', label='Gaussian 1')
-            plt.plot(x, gaussian(x, A2, mu2, sigma2), 'y--', label='Gaussian 2')
-            plt.axvline(threshold)
-            plt.legend()
-            plt.xlabel(f'Counts, Fidelity={100-100*separation_error:.2f} %')
-            plt.ylabel(f'Density,{separation_error:.2f}')
-            plt.title(title,fontsize=14)
-            plt.show()
+        plt.figure()
+        # Plot the histogram and the fit
+        plt.hist(array_photons, bins=50, density=True, alpha=0.6, color='g', label='Histogram')
+        x = np.linspace(min(array_photons), max(array_photons), 1000)
+        plt.plot(x, bimodal(x, *popt), 'r-', label='Bimodal fit')
+        plt.plot(x, gaussian(x, A1, mu1, sigma1), 'b--', label='Gaussian 1')
+        plt.plot(x, gaussian(x, A2, mu2, sigma2), 'y--', label='Gaussian 2')
+        plt.axvline(threshold)
+        plt.legend()
+        plt.xlabel(f'Counts, Fidelity={100-100*separation_error:.2f} %')
+        plt.ylabel(f'Density,{separation_error:.2f}')
+        title=str(one_level_up+'\n first shot')
+        plt.title(title,fontsize=14)
+        plt.show()
+
+        FluoAnalyser.save("threshold",)
 
 
 
