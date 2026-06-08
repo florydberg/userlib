@@ -1,4 +1,5 @@
 from lyse import *
+from lyse import Run
 from runmanager.remote import *
 from pylab import *
 import matplotlib.pyplot as plt
@@ -11,6 +12,10 @@ import analysislib
 from scipy.optimize import curve_fit, least_squares
 import time # for testing speed of program
 import datetime, time
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.optimize import curve_fit
+from scipy import ndimage
 ts=time.time()
 datetime.datetime.now()
 dt=datetime.datetime.now().date()
@@ -204,88 +209,233 @@ if True: #functions definition
             plt.show() 
             if saving_plots: save_imag(plt, 'tweez_fluo_'+ str(ii))
 
+    def gaussian_2d(xy, amplitude, xo, yo, sigma_x, sigma_y, theta, offset):
+        theta = theta * np.pi
+        x, y = xy
+        xo = float(xo)
+        yo = float(yo)
+        a = (np.cos(theta)**2) / (2 * sigma_x**2) + (np.sin(theta)**2) / (2 * sigma_y**2)
+        b = -(np.sin(2 * theta)) / (4 * sigma_x**2) + (np.sin(2 * theta)) / (4 * sigma_y**2)
+        c = (np.sin(theta)**2) / (2 * sigma_x**2) + (np.cos(theta)**2) / (2 * sigma_y**2)
+        return amplitude * np.exp(-(a * (x - xo)**2 + 2 * b * (x - xo) * (y - yo) + c * (y - yo)**2)) + offset
+    
+    def gaussian_2d_symmetric(coords, A, x0, y0, sigma, B):
+        x, y = coords
+        return A * np.exp(-((x - x0)**2 + (y - y0)**2) / (2 * sigma**2)) + B
+
+    def fit_gaussian_2d(image, simmetric=True):
+        # Coordinate griglia
+        y = np.arange(image.shape[0])
+        x = np.arange(image.shape[1])
+        x, y = np.meshgrid(x, y)
+
+        # Stime iniziali
+        A_init = image.max() - image.min()
+        B_init = image.min()
+        x0_init = np.sum(x * image) / np.sum(image)
+        y0_init = np.sum(y * image) / np.sum(image)
+        sigma_init = np.std(image)
+
+        
+
+        # Fit
+        if simmetric:
+            profile = gaussian_2d_symmetric
+            initial_guess = (A_init, x0_init, y0_init, sigma_init, B_init)
+        else:
+            profile = gaussian_2d
+            initial_guess = (A_init, x0_init, y0_init, sigma_init, sigma_init, 0, B_init)
+
+        popt, pcov = curve_fit(
+            profile,
+            (x.ravel(), y.ravel()),
+            image.ravel(),
+            p0=initial_guess
+        )
+
+        return popt, pcov
+    
+    def bin_data(data, binfactor):
+        # Get original shape
+        original_shape = np.array(data.shape)
+
+        # Check if the dimensions are divisible by binfactor
+        if np.any(original_shape % binfactor != 0):
+            # If not, crop the array to the nearest size that is divisible by binfactor
+            new_shape = original_shape - (original_shape % binfactor)
+            data = data[:new_shape[0], :new_shape[1]]
+        
+        # Calculate new shape
+        new_shape = (data.shape[0] // binfactor, binfactor,
+                    data.shape[1] // binfactor, binfactor)
+        
+        # Perform binning
+        binned_data = data.reshape(new_shape).sum(axis=(1, 3)) / (binfactor**2)
+        
+        return binned_data
+
 ######################
 saving_plots=True
 tweezROI=8
 waist=round(tweezROI/2)
 atom_presence_threshold=30
+pixel_dim=0.388 #um
+
 ######################
 plt.style.use("default")
-
-with Run(path).open('r+') as shot:
-    start_time = time.time()
-    data_frame=data(path)
-    ROI=data_frame['Orca_ROI']
-    
-    img={}
-    for i in ['TweezFluo']:    
-        shot_image=shot.get_image('Orca_Camera',str(i),'frame')  # Obtaining multiple images and averaging them:
-        if int(data_frame['n_loop'])>1: img[str(i)] = np.average(shot_image.astype(np.float32),axis=0)
-        else: img[str(i)]=shot_image.astype(np.float32)
-
-    FluoImag=img['TweezFluo']
-    FluoImag-=200 #offset removal
-    MOTray=50
-    plt.figure(1)
-    plt.title('Orca Fluo')
-    plt.imshow(FluoImag, cmap='plasma')
-    plt.colorbar()
-
-    if ROI=='full': #ROIS
-        MOT0=[2360,841]  
-        MOTArea=patches.Circle(MOT0, MOTray, linewidth=1, edgecolor='r', facecolor='none')
-        MotSpot=FluoImag[MOT0[1]-MOTray:MOT0[1]+MOTray, MOT0[0]-MOTray:MOT0[0]+MOTray]
-        plt.gca().add_patch(MOTArea)
-    elif ROI=='mot':
-        MOT0=[664,431] 
-        MOTArea=patches.Circle(MOT0, MOTray, linewidth=1, edgecolor='r', facecolor='none')
-        MotSpot=FluoImag[MOT0[1]-MOTray:MOT0[1]+MOTray, MOT0[0]-MOTray:MOT0[0]+MOTray]
-        plt.gca().add_patch(MOTArea)
-    elif ROI=='tweez':
-        MOTArea=patches.Circle(MOTray, MOTray, linewidth=1, edgecolor='r', facecolor='none')
-        MotSpot=FluoImag
-
-    plt.legend(['Tweezer Area'], loc ="lower right")
-    if saving_plots: save_imag(plt, 'orca_fluo' )
-    plt.show() 
-
-    Tray=6
-    T1=[53,31]
-    T2=[53,51]
-    T3=[53,71]
-    back=patches.Rectangle([MOTray,round(MOTray/4)],waist*2, waist*2, linewidth=1, edgecolor='b', facecolor='none')
-    TweezArea1=patches.Circle(T1, Tray, linewidth=1, edgecolor='r', facecolor='none')
-    TweezArea2=patches.Circle(T2, Tray, linewidth=1, edgecolor='r', facecolor='none')
-    TweezArea3=patches.Circle(T3, Tray, linewidth=1, edgecolor='r', facecolor='none')
-    TweezerSpot1=MotSpot[T1[1]-Tray:T1[1]+Tray, T1[0]-Tray:T1[0]+Tray]
-    TweezerSpot2=MotSpot[T2[1]-Tray:T2[1]+Tray, T2[0]-Tray:T2[0]+Tray]
-    TweezerSpot3=MotSpot[T3[1]-Tray:T3[1]+Tray, T3[0]-Tray:T3[0]+Tray]
-
-    if not data_frame['tweezers']:
-        MotPlot(MotSpot,0,50, GaussFit=True)
-    elif data_frame['tweezers']:
-        MotPlot(MotSpot,0,50)
-        # Tweezer Spot n 1
-        TweezerAnalysis(TweezerSpot1, 1, plotting=True, GaussFit=False)
-
-        # Tweezer Spot n 2
-        TweezerAnalysis(TweezerSpot2, 2, plotting=True, GaussFit=False)
-
-        # Tweezer Spot n 3
-        TweezerAnalysis(TweezerSpot3, 3, plotting=True, GaussFit=False)
+path=path
+try:
+    with Run(path).open('r+') as shot:
+        start_time = time.time()
+        data_frame=data(path)
+        ROI=data_frame['Orca_ROI']
+        second_shot = data_frame['second_shot']
         
-        shot.save_result('photo_background', sum(MotSpot[round(MOTray/4)-waist:round(MOTray/4)+waist, MOTray-waist:MOTray+waist])/10)
-# plt.figure()
-# plt.imshow(MotSpot, cmap='plasma',vmin=0, vmax=50) 
-# plt.rcParams.update({'font.size': 20})
-# # plt.title('Mot Spot')
-# n_ticks=7
-# x_values=np.round(linspace(0,(MotSpot.shape[0])*pixel_size*1000*1000*(n_ticks-1)/n_ticks, n_ticks))
-# x_ticks=np.arange(0, MotSpot.shape[0], MotSpot.shape[0]/n_ticks)
-# y_values=np.round(linspace(0,(MotSpot.shape[0])*pixel_size*1000*1000*(n_ticks-1)/n_ticks, n_ticks))
-# y_ticks=np.arange(0, MotSpot.shape[1], MotSpot.shape[0]/n_ticks)
-# plt.xticks(ticks=x_ticks, labels=x_values)
-# plt.yticks(ticks=y_ticks, labels=y_values)
-# plt.xlabel('y-axis (um)')
-# plt.ylabel('z-axis (um)')
-saving_script(path)
+        img={}
+        for i in ['TweezFluo']:    
+            shot_image=shot.get_image('Orca_Camera',str(i),'frame')  # Obtaining multiple images and averaging them:
+            if int(data_frame['n_loop'])>1: img[str(i)] = np.average(shot_image.astype(np.float32),axis=0)
+            else: img[str(i)]=shot_image.astype(np.float32)
+
+        FluoImag = img['TweezFluo']#[::-1, :]
+        FluoImag-=200 #offset removal
+        MOTray=50
+        plt.figure(1)
+        plt.title('Orca Fluo')
+        plt.imshow(FluoImag, cmap='plasma')
+        plt.colorbar()
+
+        if ROI=='full': #ROIS
+            MOT0=[2360,2300-841] 
+            MOTArea=patches.Circle(MOT0, MOTray, linewidth=1, edgecolor='r', facecolor='none')
+            MotSpot=FluoImag[MOT0[1]-MOTray:MOT0[1]+MOTray, MOT0[0]-MOTray:MOT0[0]+MOTray]
+            # plt.gca().add_patch(MOTArea)
+
+            C_FOV=[2900, 1100]
+            # C_FOV=[2444, 2300-860]
+            C_Y=C_FOV[1]
+            C_X=C_FOV[0]
+            
+            diff_lim_area=plt.Circle((C_X, C_Y), 200, linewidth=1, edgecolor='b', facecolor='none')
+            
+            plt.gca().add_patch(diff_lim_area)
+            if True:
+    
+                mot_hsize, mot_vsize = 1000, 1000
+                mot_hpos, mot_vpos = 550*4, 200*4
+
+                MOT_roi = patches.Rectangle(
+                    (mot_hpos, 2500-mot_vpos), mot_hsize, -mot_vsize,
+                    linewidth=2, edgecolor='orange', facecolor='none',
+                    label='MOT ROI'
+                )
+                plt.gca().add_patch(MOT_roi)
+
+                # -------- TWEEZER ROI (overlay) --------
+                tweez_hsize, tweez_vsize = 200, 200
+                tweez_hpos, tweez_vpos = 650*4, 225*4
+
+                Tweezer_roi = patches.Rectangle(
+                    (tweez_hpos, tweez_vpos), tweez_hsize, tweez_vsize,
+                    linewidth=2, edgecolor='cyan', facecolor='none',
+                    label='Tweezer ROI'
+                )
+                plt.gca().add_patch(Tweezer_roi)
+            plt.legend([ 'Diffraction Limited Area', "mot region", "tweezer region"], loc ="lower right")
+
+        elif ROI=='mot':
+            MOT0=[664,2300-431] 
+            MOTArea=patches.Circle(MOT0, MOTray, linewidth=1, edgecolor='r', facecolor='none')
+            MotSpot=FluoImag[MOT0[1]-MOTray:MOT0[1]+MOTray, MOT0[0]-MOTray:MOT0[0]+MOTray]
+            plt.gca().add_patch(MOTArea)
+        elif ROI=='tweez':
+            MOTArea=patches.Circle(MOTray, MOTray, linewidth=1, edgecolor='r', facecolor='none')
+            MotSpot=FluoImag
+
+
+        if saving_plots: save_imag(plt, 'orca_fluo' )
+
+        
+        # plt.legend(['Tweezer Area', 'FOV Area', 'Diffraction Limited Area'], loc ="lower right")
+
+        plt.xlabel(f"max at {np.max(FluoImag)}")
+        plt.show()  
+
+        Tray=6
+        T1=[53,31]
+        T2=[53,51]
+        T3=[53,71]
+        back=patches.Rectangle([MOTray,round(MOTray/4)],waist*2, waist*2, linewidth=1, edgecolor='b', facecolor='none')
+        
+        # TweezArea1=patches.Circle(T1, Tray, linewidth=1, edgecolor='r', facecolor='none')
+        # TweezArea2=patches.Circle(T2, Tray, linewidth=1, edgecolor='r', facecolor='none')
+        # TweezArea3=patches.Circle(T3, Tray, linewidth=1, edgecolor='r', facecolor='none')
+        # TweezerSpot1=MotSpot[T1[1]-Tray:T1[1]+Tray, T1[0]-Tray:T1[0]+Tray]
+        # TweezerSpot2=MotSpot[T2[1]-Tray:T2[1]+Tray, T2[0]-Tray:T2[0]+Tray]
+        # TweezerSpot3=MotSpot[T3[1]-Tray:T3[1]+Tray, T3[0]-Tray:T3[0]+Tray]
+        
+
+    if False: #find FOV
+        plt.figure()
+        # binfactor=4
+        # RX=FluoImag.shape[1]
+        # RY=FluoImag.shape[0]
+        # datafit= bin_data(FluoImag, binfactor)
+        # RXfit=int(RX/binfactor)
+        # RYfit=int(RY/binfactor)
+        # popt, pcov = fit_gaussian_2d(datafit)
+
+        # A, x0, y0, sigma, B = popt
+        [x0,y0]=C_FOV
+
+        sigma=1755.503
+
+        print("Center:")
+        print(f"x0 = {x0:.3f}")
+        print(f"y0 = {y0:.3f}")
+        print(f"sigma = {sigma:.3f}")
+
+        # Visualizzazione
+        plt.imshow(FluoImag, origin='lower')
+        plt.scatter(x0, y0, color='red', label='Centro stimato')
+        FOV_area=plt.Circle((C_X, C_Y), 1000, linewidth=1, edgecolor='y', facecolor='none')
+        plt.gca().add_patch(FOV_area)
+        plt.legend(["center","FOV area"])
+        plt.colorbar()
+        plt.show()
+
+
+    if False: #gaussian MOT fitting fro center detection
+        binfactor=10
+        RX=FluoImag.shape[1]
+        RY=FluoImag.shape[0]
+        datafit= bin_data(FluoImag, binfactor)
+        RXfit=int(RX/binfactor)
+        RYfit=int(RY/binfactor)
+        popt, pcov = fit_gaussian_2d(datafit, simmetric=False)
+        A, x0, y0, sigmax, sigmay, theta, B = popt
+
+        sigmax=abs(sigmax)
+        sigmay=abs(sigmay)
+        
+        print("Center:")
+        print(f"x0 = {x0:.3f}")
+        print(f"y0 = {y0:.3f}")
+        print(f"sigmax = {sigmax:.3f}")
+        print(f"sigmay = {sigmay:.3f}")
+        print(f"theta = {theta:.3f}")
+        print(f"B = {B:.3f}")
+        # Visualizzazione
+        plt.imshow(FluoImag, origin='lower', cmap="viridis")
+        # plt.scatter(x0*binfactor, y0*binfactor, color='red', label='Centro stimato')
+        # plt.legend()
+        plt.xlabel(f'center = ({(x0*binfactor-C_FOV[0])*pixel_dim:.3f} um, {(y0*binfactor-C_FOV[1])*pixel_dim:.3f} um), sigmax = {sigmax*binfactor*pixel_dim:.3f} um, sigmay = {sigmay*binfactor*pixel_dim:.3f} um)')
+        plt.colorbar()
+        plt.title("Mot Fluporescence with gaussian fit")
+        shot.save_result('centerx', (x0*binfactor-C_FOV[0])*pixel_dim)
+        shot.save_result('centery', (y0*binfactor-C_FOV[1])*pixel_dim)
+
+    saving_script(path)
+
+except Exception as e:
+    print("An error occurred during analysis:", e)

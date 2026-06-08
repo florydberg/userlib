@@ -115,7 +115,7 @@ if True: #functions definition
 
         return image_fft
     
-    def fit_gaussian(shot, value, RX, RY, data, scan_parameter, scan_unit, binfactor, N_2D, binning):
+    def fit_gaussian(shot, value, RX, RY, data, scan_parameter, scan_unit, binfactor, N_2D, binning, noise_cut=False):
         
         # Define a 2D Gaussian function
         def gaussian_2d(xy, amplitude, xo, yo, sigma_x, sigma_y, theta, offset):
@@ -140,23 +140,31 @@ if True: #functions definition
         XXX = xxxx.ravel(order='F')
         YYY = yyyy.ravel(order='F')
 
-        data[data<0]=0
+        data[data<0]=0      
+
+        data_p=data
+        if noise_cut==True:
+            for ii in range(0,150):
+                data[ii,ii]=0 #(1+150-ii)
+
 
         inty = np.sum(data, axis=1)
         intx = np.sum(data, axis=0)
         ampguess=min([np.max(data),np.max(intx)/(2*np.pi)**(1/2),np.max(inty)/(2*np.pi)**(1/2)]) #0.45
         
         # First Guess of Center
-        edge=50
+        edge=0
         x_0 = next(i for i in range(edge,len(intx)-edge) if intx[i] == max(intx[edge:len(intx)-edge]))
         y_0 = next(i for i in range(edge,len(inty)-edge) if inty[i] == max(inty[edge:len(inty)-edge]))
-
+        # print('guess lent(intx), x_0:',len(intx), x_0)
+        # print('guess lent(inty), y_0:',len(inty), y_0)
         print((x_0, len(inty)-y_0))
 
 
         initial_guess = (ampguess, x_0, y_0, 10, 10, 0.01, 0.01)  # Initial guess for amplitude, xo, yo, sigma_x, sigma_y, theta, offset
-        low = [0, 0, 0, 0, 0, 0, -10]
+        low = [0, RX/10, RY/10, 0, 0, 0, -10]
         upper = [1e10, RX-RX/10, RY-RY/10, 2*RX, 2*RY, 3.1415/2, 10]
+        print('initial_guess', initial_guess)
         bounds = [low, upper]
 
         def residuals(params, xy, data):
@@ -164,24 +172,21 @@ if True: #functions definition
 
         if op_gauss_fit_internal:
             try:
-                popt, _ = curve_fit(gaussian_2d, (X, Y), data.ravel(order='F'), p0=initial_guess, bounds=bounds)
+                popt, pcov = curve_fit(gaussian_2d, (X, Y), data.ravel(order='F'), p0=initial_guess, bounds=bounds)
             except:
+                print('fit failed')
                 popt = [0, 1, 1, 1, 1, 0, 0]
-            
-            # Extract the parameters
-
-            # data_ravel = data.ravel(order='F')
-            # result = least_squares(residuals, initial_guess, bounds=bounds, args=((X, Y), data_ravel), method='trf')
-            # popt = result.x
         else:
+            print('fit skipped')
             popt = [0, 1, 1, 1, 1, 0, 0]
         
         # Extract parameter
         amplitude, xo, yo, sigma_x, sigma_y, theta, offset = popt
         popt_s=amplitude, xo, yo, sigma_x, sigma_y, theta, 0
         Npeak = (amplitude)* pixArea * binfactor**2 / sigma
+        print('popt', popt )
         
-        if not (threshold_min<sigma_x<threshold_max and threshold_min<sigma_y<threshold_max) :
+        if not (threshold_min<sigma_x<threshold_max and threshold_min<sigma_y<threshold_max):
             amplitude=0  
             Npeak=0  
             offset=0
@@ -198,7 +203,6 @@ if True: #functions definition
         print("Theta: %s pi " % (round(theta * 100) / 100))
         print("offset: %s " % (round(offset* 100) / 100))
 
-
         # Generate the fitted Gaussian distribution
         fit_data = gaussian_2d((X, Y), *popt)
         fitdata = fit_data.reshape((RY, RX), order='F')
@@ -212,27 +216,33 @@ if True: #functions definition
 
         #########################  Plot the original data and the fitted Gaussian  #########################
         figure()
-        plt.figure(figsize=(40, 40))
+        plt.figure(figsize=(10, 8))
         plt.rcParams.update({'font.size': 14})
         # 2d image plot with profiles
         h, w = data.shape 
         h = h * 2
         w = w * 2
 
-        gs = gridspec.GridSpec(3, 3, width_ratios=[w * .2, w, w], height_ratios=[h * .2, h, h * .2])
+        gs = gridspec.GridSpec(3, 3, width_ratios=[w * .2, w, w], height_ratios=[h * .05, h, h * .2])
+        
+        ax_center = plt.subplot(gs[4])
+        ax_left   = plt.subplot(gs[3], sharey=ax_center)
+        ax_bottom = plt.subplot(gs[7], sharex=ax_center)
+        ax_right  = plt.subplot(gs[5], sharey=ax_center)
+        ax = [ax_left, ax_center, ax_bottom, ax_right]
 
-        ax = [plt.subplot(gs[3]), plt.subplot(gs[4]), plt.subplot(gs[7]), plt.subplot(gs[5])]
+        #ax = [plt.subplot(gs[3]), plt.subplot(gs[4]), plt.subplot(gs[7]), plt.subplot(gs[5])]
         bounds = [pixel_size*x.min(), pixel_size*x.max(), pixel_size*y.min(), pixel_size*y.max()]
         conv=pix*binfactor*1e3   #Convert the scales from pixels to mm, accounting for the pixel size in um and possible binning
 
-        ax[1].imshow(data, cmap='viridis', vmin=0, vmax=V_MAX, extent=( conv*x.min(), conv*x.max(),conv*y.min(), conv*y.max()))
+        ax[1].imshow(data_p, cmap='viridis', vmin=0, vmax=V_MAX/1.5, extent=( conv*x.min(), conv*x.max(),conv*y.min(), conv*y.max()))
         # figure.supxlabel('Time (s)', fontsize=14)
         # figure.supylabel('Amplitude', fontsize=14)
         ffit_data = gaussian_2d((XXX, YYY), *popt)
         print(len(xxx))
         ffitdata = ffit_data.reshape((RY*binning, RX*binning), order='F')
 
-        inty = np.sum(data, axis=1)
+        inty = np.sum(data_p, axis=1)
         gauy = np.sum(fitdata, axis=1)
         # ax[0].plot(inty[::-1], np.linspace(1, inty.shape, RX), 'b') 
         # ax[0].plot(gauy[::-1], np.linspace(1, inty.shape, RX), 'r')
@@ -241,7 +251,7 @@ if True: #functions definition
 
 
 
-        intx = np.sum(data, axis=0)
+        intx = np.sum(data_p, axis=0)
         gaux = np.sum(fitdata, axis=0)
         # ax[2].plot(intx, 'b')
         # ax[2].plot(gaux, 'r')
@@ -253,12 +263,12 @@ if True: #functions definition
         sigma_y=sigma_y*pix*binfactor
         sigma_z=sigma_y
 
-        #n_3D=fitN_of_atoms/(sigma_x*sigma_y*sigma_z*(2*np.pi)**(3/2))*1e-6 #in cm^3
-        n_3D=Npeak/(sqrt(2*np.pi)*sigma_z*pixArea*binfactor**2)*1e-6 #in cm^3
+        #n_=fitN_of_atoms/(sigma_x*sigma_y*sigma_z*(2*np.pi)**(3/2))*1e-6 #in cm^3
+        n_3D = Npeak/(sqrt(2*np.pi)*sigma_z*pixArea*binfactor**2)*1e-6 #in cm^3
 
         
 
-        ax[3].imshow(fitdata_shifted, cmap='viridis', vmin=0, vmax=V_MAX,  extent=( conv*x.min(), conv*x.max(),conv*y.min(), conv*y.max())) 
+        ax[3].imshow(fitdata_shifted, cmap='viridis', vmin=0, vmax=V_MAX/1.5,  extent=( conv*x.min(), conv*x.max(),conv*y.min(), conv*y.max())) 
         # ax[3].imshow(fitdata_shifted, cmap='viridis', vmin=0, vmax=V_MAX,  extent=( pixel_size*x.max(),x.min(),  pixel_size*y.max(),y.min())) 
         plt.title('Fitted number of atoms = {}'.format("{:.2e}".format(fitN_of_atoms)), fontsize=10)
         picname = " @ " + str(round(value,3)) +' '+ scan_unit +' of '+ scan_parameter
@@ -271,6 +281,9 @@ if True: #functions definition
         save_imag(plt, "abs_imaging")
         sigma_awg = (sigma_x+sigma_y)/2
         plt.tight_layout()
+        plt.subplots_adjust(wspace=0.2, hspace=0.2)
+        #plt.colorbar(ax[3].images[0], ax=ax[3], fraction=0.046, pad=0.04)
+
         plt.show()
 
         shot.save_result('number_of_atoms', fitN_of_atoms)
@@ -280,10 +293,9 @@ if True: #functions definition
         shot.save_result('waisty', sigma_y)
         shot.save_result('centerx', xo*pix*binfactor*1e6)
         shot.save_result('centery', (RY - yo)*pix*binfactor*1e6)
+        # shot.save_result('fit_err', np.sqrt(np.diag(pcov)) )
 
         print('fitted results saved')
-
-        print()
 
         n_ticks=5
 
@@ -295,21 +307,47 @@ if True: #functions definition
 
         # y_ticks=np.arange(0, data.shape[1], data.shape[0]/n_ticks)
 
-        x_values=np.round(linspace(0,(data.shape[0])*conv*(n_ticks-1)/n_ticks, n_ticks),2)
+        x_values=np.round(linspace(0,(data.shape[0])*conv*(n_ticks-1)/n_ticks, n_ticks),0)
         x_ticks=np.arange(0, data.shape[0], data.shape[0]/n_ticks)
-        y_values=np.round(linspace(0,(data.shape[0])*conv*(n_ticks-1)/n_ticks, n_ticks),2)
+        y_values=np.round(linspace(0,(data.shape[0])*conv*(n_ticks-1)/n_ticks, n_ticks),0)
         y_ticks=np.arange(0, data.shape[1], data.shape[0]/n_ticks)
 
+        # print(x_ticks)
 
-        if True:
+
+        if False:
+            from matplotlib import cm
+            from matplotlib.colors import ListedColormap
+            # Get the base colormap (reversed ocean)
+            # base_cmap = cm.get_cmap('ocean_r')
+            base_cmap = matplotlib.colormaps["ocean_r"]
+
+            # Define exponential scaling (e.g., gamma = 2 makes darks darker, brights brighter)
+            gamma = 0.5
+            x = np.linspace(0, 1, 256)
+            x_exp = (x ** gamma)**2  # exponential remapping
+
+            # Apply the remapping
+            new_colors = base_cmap(x_exp)
+            exp_cmap = ListedColormap(new_colors, name=f'ocean_r_exp{gamma}')
+
+            # --- Test visualization ---
+            gradient = np.linspace(0, 1, 256).reshape(1, -1)
+            plt.figure(figsize=(6, 1))
+            # plt.imshow(gradient, aspect='auto', cmap=exp_cmap)
+
             plt.figure()
-            plt.imshow(data, cmap='viridis', vmin=0, vmax=V_MAX)
+            plt.imshow(data, cmap=exp_cmap, vmin=0, vmax=V_MAX*3)
+
             cbar = plt.colorbar()
-            cbar.ax.tick_params(labelsize=44)
-            plt.xticks(ticks=x_ticks, labels=x_values, fontsize=46)
-            plt.yticks(ticks=y_ticks, labels=y_values, fontsize=46)
+            cbar.ax.tick_params(labelsize=30)
+            cbar.set_label('Optical Density', fontsize=30)
+
+            plt.xticks(ticks=x_ticks, labels=x_values, fontsize=30)
+            plt.yticks(ticks=y_ticks, labels=y_values[::-1], fontsize=30)
             plt.xlabel('mm', fontsize=46)
             plt.ylabel('mm',fontsize=46)
+            plt.axis("on")
             plt.show() 
 
         if False:
@@ -428,37 +466,9 @@ if True: #functions definition
         plt.savefig(one_level_up + '/' + img_name +  '_' + picname + ".png")
         print(picname + ' saved')
 
-if True:# ROI Selection
-    # P0=(70,10)   # Starting point for the atoms ROI
-    # RX=920
-    # RY=920
-    # P0=(0,0)   # Starting point for the atoms ROI
-    # RX=1000
-    # RY=1000
-
-   
-    P0=(100,250)   # Starting point for the atoms ROI
-    RX=800
-    RY=800
-    # P0=(190,150)   # Starting point for the atoms ROI
-    # RX=500
-    # RY=500  
-
-    DX=(P0[0], P0[0]+RX)
-    DY=(P0[1], P0[1]+RY)
-
-    p0=P0# Starting point for the correction area 
-    rX=80
-    rY=80
-
-    dX=(p0[0], p0[0]+rX)
-    dY=(p0[1], p0[1]+rY)
-
-    b0=(500,400)    # Starting point for the Probe area
-    ray=400       
 ######################
 
-scan_parameter='Red_MOT_Frq'
+scan_parameter='Red_MOT_Frq_fin'
 scan_unit='MHz'
 
 op_plotting = False #extra images
@@ -469,91 +479,131 @@ binfactor=2
 op_gauss_fit = True
 op_gauss_fit_internal = 1
 
-threshold_min=2
-threshold_max=500
+noise_cut=True
+
+threshold_min=3
+threshold_max=200
 ######################
+try:
+    with Run(path).open('r+') as shot:
+        start_time = time.time()
+        data_frame=data(path)
 
-with Run(path).open('r+') as shot:
-    start_time = time.time()
-    data_frame=data(path)
+        globals_rm = shot.get_globals()
+        mot_blue = globals_rm['mot_blue']
+        mot_red = globals_rm['mot_red'] 
+        mot_red_sf= globals_rm['mot_red_sf']
 
-    j=0
-    img={}
-    for i in ['Atoms', 'Probe', 'Background']:
+        ### ROI selection based on MOT type nested v
+        if True:# mot_blue:
+            if mot_red:
+                if mot_red_sf:
+                    P0=(500,500)   # Starting point for the atoms ROIxxxxx previous (270,600) 
+                    RX=400 #300
+                    RY=400 #300 
+                else:
+                    P0=(350,330)   # Starting point for the atoms ROIxxxxx previous (200,400)
+                    RX=400
+                    RY=400
+            else:
+                P0=(250,350)   # Starting point for the atoms ROI
+                RX=800
+                RY=800
+            DX=(P0[0], P0[0]+RX)
+            DY=(P0[1], P0[1]+RY)
 
-        MOT=patches.Rectangle(P0, RX, RY, linewidth=1, edgecolor='r', facecolor='none') 
-        corr=patches.Rectangle(p0, rX, rY, linewidth=1, edgecolor='b', facecolor='none')
-        BEAM=patches.Circle(b0, ray, linewidth=1, edgecolor='y', facecolor='none')
-    
-        shot_image=shot.get_image('Basler_Camera_abs',str(i),'tiff')  # Obtaining multiple images and averaging them:
-        if int(data_frame['n_loop'])>1: img[str(i)] = np.average(shot_image.astype(np.float32),axis=0)
-        else: img[str(i)]=shot_image.astype(np.float32)
+            p0=P0# Starting point for the correction area 
+            rX=80
+            rY=80
 
-        if op_plotting: plot_single_image(MOT, corr, BEAM, img, i)
-      
-    
-    if op_plotting:display_absorb_trio(img)
+            dX=(p0[0], p0[0]+rX)
+            dY=(p0[1], p0[1]+rY)
 
-    up=(img['Atoms']-img['Background'])
-    print('Image dimensions = '+ str(up.shape))
-    down=(img['Probe']-img['Background'])
-
-    # TODO optional place to put Fourier filtering on up and down
-
-    down[down<=1] = 1 
-    up[up<=1] = 1
-
-    i_c=intensity_correction(up, down, dX, dY)
-    print('intensity correction', i_c)
-    down=down*i_c
-
-    if op_plotting: plot_up_down(up, down, data_frame[scan_parameter], scan_parameter, scan_unit, P0, RX, RY)
-
-    optical_density = -1 *np.log((up/down))
-    if op_FFTfilter:
-        optical_density = image_fft(optical_density)
-    #OD = optical_density[np.ix_(range(DY[0],DY[1]),range(DX[0],DX[1]))
-    OD = optical_density[np.ix_(range(DY[0],DY[1]),range(DX[0],DX[1]))]
+            b0=(500,400)    # Starting point for the Probe area
+            ray=400 
 
 
-    if op_plotting:
-        plt.figure()
-        plt.imshow(OD, cmap='viridis', vmin=0, vmax=0.5 )
-        plt.colorbar()
-        plt.title('Optical Density w/o Fringes')
-        plt.show()
+        j=0
+        img={}
+        for i in ['Atoms', 'Probe', 'Background']:
 
-    end_time = time.time()
-    elapsed_time = end_time - start_time
-    print(f"Elapsed time: {elapsed_time:.6f} seconds")
+            MOT=patches.Rectangle(P0, RX, RY, linewidth=1, edgecolor='r', facecolor='none') 
+            corr=patches.Rectangle(p0, rX, rY, linewidth=1, edgecolor='b', facecolor='none')
+            BEAM=patches.Circle(b0, ray, linewidth=1, edgecolor='y', facecolor='none')
+        
+            shot_image=shot.get_image('Basler_Camera_abs',str(i),'tiff')  # Obtaining multiple images and averaging them:
+            # shot_image=shot.get_image('Basler_Camera_abs',str(i),'tiff')  # Obtaining multiple images and averaging them:
+            if int(data_frame['n_loop'])>1: img[str(i)] = np.average(shot_image.astype(np.float32),axis=0)
+            else: img[str(i)]=shot_image.astype(np.float32)
+
+            if op_plotting: plot_single_image(MOT, corr, BEAM, img, i)
+        
+        
+        if op_plotting:display_absorb_trio(img)
+
+        up=(img['Atoms']-img['Background'])
+        print('Image dimensions = '+ str(up.shape))
+        down=(img['Probe']-img['Background'])
+
+        # TODO optional place to put Fourier filtering on up and down
+
+        down[down<=1] = 1 
+        up[up<=1] = 1
+
+        i_c=intensity_correction(up, down, dX, dY)
+        print('intensity correction', i_c)
+        down=down*i_c
+
+        if op_plotting: plot_up_down(up, down, data_frame[scan_parameter], scan_parameter, scan_unit, P0, RX, RY)
+
+        optical_density = -1 *np.log((up/down))
+        if op_FFTfilter:
+            optical_density = image_fft(optical_density)
+        #OD = optical_density[np.ix_(range(DY[0],DY[1]),range(DX[0],DX[1]))
+        OD = optical_density[np.ix_(range(DY[0],DY[1]),range(DX[0],DX[1]))]
+        # OD[:,:330] = 0  # Set rows 100 to 200 to zero
 
 
-    n_2D = OD/sigma
-    N_2D = n_2D*pixArea
-    
-    if op_binning:
-        datafit= bin_data(OD, binfactor)
-        RXfit=int(RX/binfactor)
-        RYfit=int(RY/binfactor)
-    else:
-        datafit=OD
-        binfactor=1
-        RXfit=RX
-        RYfit=RY
+        if op_plotting:
+            plt.figure()
+            plt.imshow(OD, cmap='viridis', vmin=0, vmax=0.5 )
+            plt.colorbar()
+            plt.title('Optical Density w/o Fringes')
+            plt.show()
 
-    nn_2D = datafit/sigma
-    NN_2D = nn_2D*pixArea*binfactor**2
-    NN_2D[NN_2D<0]=0
-    Ntot_sum = np.sum(NN_2D) # Total number of atoms in the cloud from images
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        print(f"Elapsed time: {elapsed_time:.6f} seconds")
 
-    print('atoms', Ntot_sum )
-    print(f"First-guess number of atoms in the cloud: {Ntot_sum:.2e}")
-    shot.save_result('sum_of_atoms', Ntot_sum)
-    
-    if op_gauss_fit:
-        fit_gaussian(shot, data_frame[scan_parameter], RXfit, RYfit, datafit, scan_parameter, scan_unit, binfactor, N_2D, binfactor)
+        n_2D = OD/sigma
+        N_2D = n_2D*pixArea
+        
+        if op_binning:
+            datafit= bin_data(OD, binfactor)
+            RXfit=int(RX/binfactor)
+            RYfit=int(RY/binfactor)
+        else:
+            datafit=OD
+            binfactor=1
+            RXfit=RX
+            RYfit=RY
 
-    shot.save_result('scan_parameter', scan_parameter)
-    shot.save_result('scan_unit', scan_unit)
+        nn_2D = datafit/sigma
+        NN_2D = nn_2D*pixArea*binfactor**2
+        NN_2D[NN_2D<0]=0
+        Ntot_sum = np.sum(NN_2D) # Total number of atoms in the cloud from images
 
-saving_script(path)
+        print('atoms', Ntot_sum)
+        print(f"First-guess number of atoms in the cloud: {Ntot_sum:.2e}")
+        shot.save_result('sum_of_atoms', Ntot_sum)
+        
+        if op_gauss_fit:
+            fit_gaussian(shot, data_frame[scan_parameter], RXfit, RYfit, datafit, scan_parameter, scan_unit, binfactor, N_2D, binfactor, noise_cut)
+
+        shot.save_result('scan_parameter', scan_parameter)
+        shot.save_result('scan_unit', scan_unit)
+        print('max OD = '+ str(np.amax(OD)))
+
+    saving_script(path)
+except Exception as e:
+    print("An error occurred during analysis:", e)
