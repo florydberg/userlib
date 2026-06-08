@@ -1,14 +1,15 @@
 from labscript import *
 ######################
+
 p=0 #Pulseblaster
-a=0 #AWG
+awg=1 #AWG
 f=1 #FPGA
 se=0 #secondary FPGA
 mb=1 #MogLabsBlue
 mr=1 #MogLabsRed
 ca=0 #Camera Andor
 cb_abs=1 #Camera Basler for Absorption
-cb_fluo=1 #Camera Basler for Fluorescence
+cb_fluo=0 #Camera Basler for Fluorescence
 cb_extra=0 #extra basler on the objective
 co=1 #Camera Orca
 
@@ -53,7 +54,6 @@ if f:
         DigitalOut(name='treD_MOT_gate', parent_device=DO0, connection=str(2))
         DigitalOut(name='ImagingBeam_gate', parent_device=DO0, connection=str(3))
         DigitalOut(name='ImagingTweezBeam_gate', parent_device=DO0, connection=str(4))
-
     DigitalOut(name='coilsMosfet', parent_device=DO0, connection=str(5))   
     DigitalOut(name='Tweezer_switch', parent_device=DO0, connection=str(6))
     if not co:
@@ -62,20 +62,19 @@ if f:
         DigitalOut(name='Basler_Camera_abs_trigger', parent_device=DO0, connection=str(8))  
     if not mr:
         DigitalOut(name='QRFRed_trigger', parent_device=DO0, connection=str(9))
-        DigitalOut(name='RED_switch', parent_device=DO0, connection=str(10))
+        DigitalOut(name='Tweezers_gate', parent_device=DO0, connection=str(10))
         DigitalOut(name='RedMOT_gate', parent_device=DO0, connection=str(11))
         DigitalOut(name='Free_gate', parent_device=DO0, connection=str(12))
         DigitalOut(name='Sisyphus_gate', parent_device=DO0, connection=str(13))
-        
     awg_trigger=DigitalOut(name='awg_trigger', parent_device=DO0, connection=14)
     IGBT_close=DigitalOut(name='IGBT_close', parent_device=DO0, connection=str(15))
 
     DO2=DigitalChannels(name='DO2'  , parent_device=main_board, connection='0x05', rack=0, max_channels = 16)
-
-    DigitalOut(name='Red_commonSwitch', parent_device=DO2, connection=str(0))
-    DigitalOut(name='Red_multiFrq', parent_device=DO2, connection=str(1))
-    DigitalOut(name='Red_singleFrq', parent_device=DO2, connection=str(2))
+    DigitalOut(name='Free_gate_01', parent_device=DO2, connection=str(0))
+    DigitalOut(name='RedMOT_multiFrq_gate', parent_device=DO2, connection=str(1))
+    DigitalOut(name='RedMOT_singleFrq_gate', parent_device=DO2, connection=str(2))
     DigitalOut(name='Shutter_Blue', parent_device=DO2, connection=str(3))
+    DigitalOut(name='Shutter_ImagingBlue', parent_device=DO2, connection=str(5))
 
     if not cb_fluo:
         DigitalOut(name='Basler_Camera_fluo_trigger', parent_device=DO2, connection=str(4))
@@ -84,25 +83,25 @@ if f:
     # for i in range(5,16):
     #     DigitalOut(name='pokemon'+str(i+1), parent_device=DO2, connection=str(i))
 
-    ########################                         Floating                               ########################
-    if False:
-        AnalogChannels(name='AO1', parent_device=test_board, rack=0, max_channels = 2)
-        AnalogOut     (name='Gandalf', parent_device=AO1, connection='0x01')
-        AnalogOut     (name='Saruman', parent_device=AO1, connection='0x02')
     ########################                         Grnd Ref                               ######################### 
     AO0=AnalogChannels(name='AO0'   , parent_device=main_board, rack=0, max_channels = 4)
-    
     AnalogOut     (name='BigCoilsI', parent_device=AO0, connection='0x08')
     AnalogOut     (name='CompCoilsI_X', parent_device=AO0, connection='0x09')
     AnalogOut     (name='CompCoilsI_Y', parent_device=AO0, connection='0x0A')
     AnalogOut     (name='CompCoilsI_Z', parent_device=AO0, connection='0x0B')
 
     AO1=AnalogChannels(name='AO1'   , parent_device=main_board, rack=0, max_channels = 4)
-    
     AnalogOut     (name='BigCoilsV', parent_device=AO1, connection='0x18')
-    AnalogOut     (name='Pippo', parent_device=AO1, connection='0x19')
-    AnalogOut     (name='Franco', parent_device=AO1, connection='0x1A')
+    AnalogOut     (name='Setpoint_imaging', parent_device=AO1, connection='0x19')
+    AnalogOut     (name='Test', parent_device=AO1, connection='0x1A')
     AnalogOut     (name='Zio', parent_device=AO1, connection='0x1B')
+
+    ########################                         Floating                               ########################
+    if False:
+        AnalogChannels(name='AO1', parent_device=test_board, rack=0, max_channels = 2)
+        AnalogOut     (name='Gandalf', parent_device=AO1, connection='0x01')
+        AnalogOut     (name='Saruman', parent_device=AO1, connection='0x02')
+    
     if False:
         DigitalChannels(name='DO1', parent_device=main_board, connection='0x05', rack=0, max_channels=16)
         for i in range(16):
@@ -116,7 +115,6 @@ if f:
         secondary = FPGA_board(name='test_board', ip_address='192.168.1.11', ip_port=DEFAULT_PORT, bus_rate=1.0, num_racks=1, 
                            trigger_device=parent,
                            worker_args={'inputs': {'start trigger'  : ('input 0', 'low level')}}) 
-
 
         AnalogChannels(name='AO2'   , parent_device=test_board, rack=0, max_channels = 4)
         AnalogOut     (name='Goku', parent_device=AO2, connection='0x08')
@@ -149,15 +147,16 @@ if mb:
         MOGLabs_QRF(name='QRF_Blue', parent_device=QRF_trigger_1, addr='192.168.1.102', port=7802)
 
     dueD_MOT=QRF_DDS(name='dueD_MOT', parent_device=QRF_Blue, connection='channel 0', 
-            table_mode=False,                         digital_gate={'device':DO0, 'connection': 1})
+            table_mode=False, trigger_each_step=True, digital_gate={'device':DO0, 'connection': 1})
+    dueD_MOT_trigger=dueD_MOT_gate
     treD_MOT=QRF_DDS(name='treD_MOT', parent_device=QRF_Blue, connection='channel 1', 
             table_mode=False, trigger_each_step=True, digital_gate={'device':DO0, 'connection': 2})
     treD_MOT_trigger=treD_MOT_gate
-    ImagingBeam=QRF_DDS(name='ImagingBeam', parent_device=QRF_Blue, connection='channel 3', 
-            table_mode=False, trigger_each_step=True, digital_gate={'device':DO0, 'connection': 3})
-    ImagingBeam_trigger=ImagingBeam_gate
-    ImagingTweezBeam=QRF_DDS(name='ImagingTweezBeam', parent_device=QRF_Blue, connection='channel 2', 
+    ImagingBeam=QRF_DDS(name='ImagingBeam', parent_device=QRF_Blue, connection='channel 2', 
             table_mode=False, trigger_each_step=True, digital_gate={'device':DO0, 'connection': 4})
+    ImagingBeam_trigger=ImagingBeam_gate
+    ImagingTweezBeam=QRF_DDS(name='ImagingTweezBeam', parent_device=QRF_Blue, connection='channel 3', 
+            table_mode=False, trigger_each_step=True, digital_gate={'device':DO0, 'connection': 3})
     ImagingTweezBeam_trigger=ImagingTweezBeam_gate
 
 if mr:
@@ -170,7 +169,8 @@ if mr:
         QRF_Red=MOGLabs_QRF(name='QRF_Red', parent_device=QRF_trigger_2, addr='192.168.1.103', port=7802)
 
     Tweezers=QRF_DDS(name='Tweezers', parent_device=QRF_Red, connection='channel 0', 
-            table_mode=False,                         digital_gate={'device':DO0, 'connection': 10})
+            table_mode=False, trigger_each_step=True, digital_gate={'device':DO0, 'connection': 10})
+    Tweezers_trigger=Tweezers_gate
     RedMOT=QRF_DDS(name='RedMOT', parent_device=QRF_Red, connection='channel 1', 
             table_mode=True, trigger_each_step=True, digital_gate={'device':DO0, 'connection': 11})
     RedMOT_trigger=RedMOT_gate
@@ -262,7 +262,7 @@ if cb_abs:
     from labscript_devices.PylonCamera.labscript_devices import PylonCamera
     
     #example of use: Basler_Camera.expose(t=0.45,'exposure1')
-    Basler_Camera_abs = PylonCamera('Basler_Camera_abs',parent_device=DO0, parentless=False, connection=8,
+    Basler_Camera_abs = PylonCamera('Basler_Camera_abs', parent_device=DO0, parentless=False, connection=8,
             serial_number=24799497,
             minimum_recovery_time=36e-3,
             trigger_duration=10,
@@ -276,8 +276,10 @@ if cb_abs:
 
                 'Width': 1400,
                 'Height': 1400,
-                'OffsetX': 1700,
-                'OffsetY': 800,
+                # # 'OffsetX': 1700,
+                # # 'OffsetY': 800,
+                'OffsetX': 1500,
+                'OffsetY': 1000,
                 'CenterX': False,
                 'CenterY': False,
                 'PixelFormat': 'Mono12',
@@ -319,7 +321,7 @@ if cb_fluo:
             serial_number=24867935,
             minimum_recovery_time=36e-3,
             trigger_duration=10,
-            stop_acquisition_timeout='inf',
+            stop_acquisition_timeout=5,
             exception_on_failed_shot=False,
             camera_attributes = {
                 'ExposureMode': 'Timed',
@@ -364,6 +366,63 @@ if cb_fluo:
 
             )   
 
+if cb_extra:
+    from labscript_devices.PylonCamera.labscript_devices import PylonCamera
+    
+    #example of use: Basler_Camera.expose(t=0.45,'exposure1')
+    Basler_Camera_extra = PylonCamera('Basler_Camera_extra',parent_device=DO2, parentless=False, connection=8,
+            serial_number=24867937,
+            minimum_recovery_time=36e-3,
+            trigger_duration=10,
+            stop_acquisition_timeout=5,
+            exception_on_failed_shot=False,
+            camera_attributes = {
+                'ExposureMode': 'Timed',
+                'ExposureTime':  500, #in us  >432
+                'AutoExposureTimeUpperLimit':10000000,
+                'AcquisitionFrameRate':29,
+
+                # 'Width': 1000,
+                # 'Height': 1000,
+                # 'OffsetX': 1800,
+                # 'OffsetY': 1000,
+                'Width': 3036,
+                'Height': 3036,
+                'OffsetX': 0,
+                'OffsetY': 0,
+                'CenterX': False,
+                'CenterY': False,
+                'PixelFormat': 'Mono12',
+
+                # 'TriggerSelector':'FrameStart',
+                'TriggerMode': 'On',
+                'TriggerSource':'Line3',
+                # 'timeoutMs':1,
+                # 'timeoutHandling':0,
+            
+
+                'LineSelector':"Line4",
+                'LineMode':"Output",
+                'LineSource':"ExposureActive",
+
+                'Gain': 6,
+                'ShutterMode':'GlobalResetRelease',
+                'BslLightControlTriggerMode':"FlashWindow"
+
+
+            #     'AcquisitionFrameRateEnable': False,
+            #     'AcquisitionFrameRate': 28.99979700142099,
+            #     'DeviceLinkThroughputLimitMode': 'On',
+            #     'DeviceLinkThroughputLimit': 360000000,
+            },
+
+             manual_mode_camera_attributes = {
+                'TriggerSource':'Software',
+                'TriggerMode':'Off'
+            },
+
+            )   
+
 if co:
     from user_devices.DCAMCamera.labscript_devices  import DCAMCamera
 
@@ -371,6 +430,7 @@ if co:
                             connection=7,
                             serial_number='000548',
                             parentless=False,
+                            stop_acquisition_timeout=240.0,
                             camera_attributes = {
                                 'TRIGGER GLOBAL EXPOSURE': 2.0,                                
                                 'EXPOSURE TIME':0.25, # 0.0082944, #sec
@@ -447,13 +507,37 @@ if co:
                             ) # ref file:///C:/Users/florydberg01/Documents/Orca-settings/propC15550-20UP_en.html
        
 ############################################################################################################### AWG
-if a:
-    from user_devices.SpectrumAWG.labscript_devices import SpectrumAWG, AWGOutput
+if awg:
+    from user_devices.SpectrumAWG.labscript_devices import SpectrumAWG, AWGOutput, AWG_IO
 
     # # Create the AWG device
-    awg = SpectrumAWG('awg', device_path="/dev/spcm0", timeout=5000, generation_mode='sequence', memory_segments=10, sample_rate=1e8)
-    Vertical=AWGOutput("Vertical", awg, "0", main_board, 'software', 2000) #ext0
-    Horizontal=AWGOutput("Horizontal", awg, "1", main_board, 'software', 2000)
+    Awg_sampleRate=1.25e9
+    awg = SpectrumAWG('awg', device_path="/dev/spcm0", timeout=5000, generation_mode='sequence', memory_segments=2000, sample_rate=Awg_sampleRate)
+    Vertical=AWGOutput("Vertical", awg, "1", main_board, trigger_connection= 'awg_trigger', channel_amplitude = 2000)
+    Horizontal=AWGOutput("Horizontal", awg, "0", main_board, trigger_connection = 'awg_trigger', channel_amplitude = 2000)
+    # awg_end_flag = Trigger('awg_end_flag', awg, 'X0')  # X0 = multipurpose I/O line
+
+############################################################################################################### Wait Monitor
+if False:
+    WaitMonitor('reordering', 
+                # flag that pulses after a wait
+                awg, 'x0', 
+                # counter that monitors the times the above flag goes high
+                awg, 'ext1',
+                # software timed output that retriggers the master
+                # pseudoclock if the wait hits the timeout
+                awg, 'stopCard',
+                )
+else:
+    WaitMonitor('reordering', 
+                # flag that pulses after a wait
+                main_board, 'output 0', 
+                # counter that monitors the times the above flag goes high
+                main_board, 'input 0',
+                # software timed output that retriggers the master
+                # pseudoclock if the wait hits the timeout
+                main_board, 'sync out',
+                )
 
 #################################################################################
  # ATTENTION: start() and stop(1) cannot be missing! time for stop must be >0. #
@@ -508,8 +592,8 @@ if __name__ == '__main__':
         print('Device info:', dev.ask('info'))
 
         dev.cmd('MODE,1,  NSB')
-        dev.cmd('FREQ,1,80')
-        dev.cmd('POW, 1, 25')
+        dev.cmd('FREQ,1, 80.0')
+        dev.cmd('POW, 1, 25.0')
 
         dev.cmd('MODE,2,  NSB')
         dev.cmd('FREQ,2, 70.0')

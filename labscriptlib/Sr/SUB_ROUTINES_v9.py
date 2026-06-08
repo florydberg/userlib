@@ -17,6 +17,7 @@ from scipy.signal import hilbert
 from PIL import Image
 import os
 
+
 if True: # Time Constants
     t=0
     dt=main_board.time_step # 1 us
@@ -52,6 +53,8 @@ def import_GLOBALS(settings_path): #init of globals and times
     for i in runmanager.remote.get_globals():
         # print(i)
         GLOBALS[str(i)]=eval(i)*units[str(i)]
+
+
     return GLOBALS
 
 shot_settings_path='F:\\Experiments\\Sr\\SrParameters.h5'
@@ -62,14 +65,6 @@ if awg: # === AWG Tweezer Embedding ===
     import numpy as np
     import csv
     from scipy.signal import hilbert
-
-    CF = { #correction factor protecting AODs for overpower
-        1: 0.5,
-        2: 0.7,
-        3: 0.84,
-        4: 0.95,
-        5: 1.0
-    }
 
     aod_range_on_camera = 1850 # um
     #for uniformity in the current setup:
@@ -96,8 +91,8 @@ if awg: # === AWG Tweezer Embedding ===
         points_dict = {}
         edges_list = []
         ranging = aod_range_on_camera/2 * zooming  # µm
-        geometry_path_name = str(GLOBALS['geometry_path']+".h5")
-        with h5py.File(geometry_path_name, 'r') as f:
+        geometry_path = str(GLOBALS['geometry_path']+".h5")
+        with h5py.File(geometry_path, 'r') as f:
             coords = f['points'][:]
             index = 0
             for x, y in coords:
@@ -277,7 +272,485 @@ if awg: # === AWG Tweezer Embedding ===
 
         return steps
 
-  
+    def generate_samples(schedule, dtt, duration, cutting, pos_to_freq_func, move_type, direction, starting_point, linear_ramp , oblique_mode = False,):
+        samples = []
+        last_time = schedule[0]['t'] * 1e-6
+        sequence_offset = schedule[0]['x']
+        last_amp = Temperature_to_RF(schedule[0]['A'])
+        last_freq = pos_to_freq_func(starting_point)
+        
+        segment_lenght = max(step['x'] for step in schedule) + max((-step['x']) for step in schedule)
+        AWG_max=32767
+        max_amp = max(abs(step['A']) for step in schedule)
+        norm_factor = AWG_max / max_amp if max_amp else AWG_max
+
+        phase_accum = 0
+        fs = len(dtt) / duration
+        freq_bins = np.fft.rfftfreq(len(dtt), d=1/fs)
+        inv_gauss = LUT_Tweezer.GaussCorrection(move_type, freq_bins)
+
+        ii=0
+
+        # print(len(schedule))
+        for step in schedule[0:]:
+            time = step['t'] * 1e-6
+            
+            if linear_ramp: # linear ramp
+                # amp = max_amp
+                amp = Temperature_to_RF(step['A'])
+                pos = starting_point + direction * (segment_lenght/(len(schedule)-1)*(ii))
+                freq = pos_to_freq_func(pos)
+            
+                # print(segment_lenght)
+                # print(f"{segment_lenght/len(schedule)*ii } um step")
+                # print(f"{pos} um coordinate")
+                # print(f"{ii+1} / {len(schedule)}")
+                # print(f"{freq} Hz ")
+                ii+=1
+            else:
+                amp = Temperature_to_RF(step['A'])
+                # amp = max_amp
+                pos = starting_point + direction * (step['x'] - sequence_offset)
+                # print(f"{step['x']} um data value")
+                # print(f"{pos} um target coordinate")
+
+                # print(f"{time},")
+                freq = pos_to_freq_func(pos)
+
+            segment_dtt = dtt[(dtt >= last_time) & (dtt < time)]
+
+            if len(segment_dtt) > 1:
+
+                dt = segment_dtt[1] - segment_dtt[0]
+                freq_interp = np.interp(segment_dtt, [last_time, time], [last_freq, freq])
+
+                # Frequency-dependent amplitude correction
+                freq_indices = np.searchsorted(freq_bins, freq_interp, side='left')
+                freq_indices = np.clip(freq_indices, 0, len(inv_gauss) - 1)
+
+                amp_interp = np.interp(segment_dtt, [last_time, time], [last_amp, amp])
+                amp_interp *= norm_factor
+
+                Gauss_corr = inv_gauss[freq_indices] if GLOBALS['Gauss_corr'] else 1
+                LUT_corr = LUT_Tweezer.get_amp_correction(freq_interp, axis=move_type) if GLOBALS['LUT_corr'] else 1
+
+                # print(f"Target amp value = {amp}")
+
+                # print(f"Gauss correction = {np.max(Gauss_corr)}")
+                # print(f"LUT correction = [{np.max(LUT_corr)}, {np.min(LUT_corr)}]")
+                # print(f"Tweezer power correction = {Tweezer_intensity_corr}")
+
+
+                amp_interp *= Gauss_corr * LUT_corr 
+                Twintensity_corr = Tweezer_intensity_corr
+                if oblique_mode:
+                    # print((amp_interp / AWG_max)** 0.25 )
+                    amp_interp = (amp_interp / AWG_max) ** 0.5 * AWG_max
+                    Twintensity_corr **= 0.5
+
+                # print(f"last value = {amp_interp}")
+
+                phase = phase_accum + 2 * np.pi * np.cumsum(freq_interp) * dt
+                phase_accum = phase[-1]
+
+                segment_samples = np.int16(np.array(amp_interp * np.sin(phase) * Twintensity_corr)) 
+                samples.extend(segment_samples)
+                
+            last_time, last_amp, last_freq = time, amp, freq
+
+        # Tail segment
+        segment_dtt = dtt[(dtt >= last_time) & (dtt < duration)]
+        cut_length = 0
+        if len(segment_dtt) > 1:
+            dt = segment_dtt[1] - segment_dtt[0]
+            if cutting:
+                last_amp = 0
+                cut_length = len(segment_dtt)
+            amp_tail = np.full_like(segment_dtt, last_amp * norm_factor)
+            freq_tail = np.full_like(segment_dtt, last_freq)
+            phase = phase_accum + 2 * np.pi * np.cumsum(freq_tail) * dt
+            segment_samples = np.int16(amp_tail * np.sin(phase))
+            samples.extend(segment_samples)
+
+        return samples, cut_length
+
+    def standing_wave(frequencies, amplitudes, phases, num_samples, duration, print_crest_factor=False):
+        frequencies = np.asarray(frequencies)
+        amplitudes = np.asarray(amplitudes)
+        phases = np.asarray(phases)
+        dtt = np.linspace(0, duration, num_samples, endpoint=False)
+        signal = sum(a * np.sin(2 * np.pi * f * dtt + p) for f, a, p in zip(frequencies, amplitudes, phases))
+        peak = np.abs(signal).max()
+        max_a = np.abs(amplitudes).max()
+        if peak:
+            signal *= 32767 / peak / 100 * max_a
+        if print_crest_factor:
+            crest = 32767 / np.sqrt(np.mean(signal ** 2))
+            print(f"Crest factor: {crest:.3f}")
+        return np.int16(signal)
+
+    def standing_wave_equalized(frequencies, num_samples, duration, print_crest_factor=False):
+        fs = num_samples / duration
+        freq_bins = np.fft.rfftfreq(num_samples, d=1/fs)
+        spectrum = np.zeros(len(freq_bins), dtype=np.complex128)
+        for f in frequencies:
+            idx = np.argmin(np.abs(freq_bins - f))
+            spectrum[idx] = 1.0
+        signal = np.fft.irfft(spectrum, n=num_samples)
+        peak = np.max(np.abs(signal))
+        if peak:
+            signal *= 32767 / peak
+        if print_crest_factor:
+            crest = 32767 / np.sqrt(np.mean(signal ** 2))
+            print(f"Crest factor: {crest:.2f}")
+        return np.int16(signal)
+
+    def standing_wave_inverse_gaussian(move_type, frequencies, num_samples, duration, print_crest_factor=False):
+        fs = num_samples / duration
+        freq_bins = np.fft.rfftfreq(num_samples, d=1/fs)
+        inv_gauss = LUT_Tweezer.GaussCorrection(move_type, freq_bins)
+        spectrum = np.zeros(len(freq_bins), dtype=np.complex128)
+        for f in frequencies:
+            idx = np.argmin(np.abs(freq_bins - f))
+            Gauss_corr = inv_gauss[idx] if GLOBALS['Gauss_corr'] else 1
+            LUT_corr = LUT_Tweezer.get_amp_correction(f, axis=move_type) if GLOBALS['LUT_corr'] else 1
+            spectrum[idx] = Gauss_corr *LUT_corr
+            # print(inv_gauss[idx])
+        signal = np.fft.irfft(spectrum, n=num_samples) 
+        peak = np.max(np.abs(signal))
+        if peak:
+            signal *= 32767 / peak * global_amp_max_corr
+        if print_crest_factor:
+            crest = 32767 / np.sqrt(np.mean(signal ** 2))
+            print(f"Crest factor: {crest:.2f}")
+        return np.int16(signal)
+
+    def standing_wave_LUT(move_type, frequencies, num_samples, duration, print_crest_factor=False):
+        fs = num_samples / duration
+        freq_bins = np.fft.rfftfreq(num_samples, d=1/fs)
+        inv_gauss = LUT_Tweezer.GaussCorrection(move_type, freq_bins)
+        spectrum = np.zeros(len(freq_bins), dtype=np.complex128)
+        for f in frequencies:
+            idx = np.argmin(np.abs(freq_bins - f))
+            Gauss_corr = inv_gauss[idx] if GLOBALS['Gauss_corr'] else 1
+            LUT_corr = LUT_Tweezer.get_amp_correction(f, axis=move_type) if GLOBALS['LUT_corr'] else 1
+            spectrum[idx] = Gauss_corr *LUT_corr
+            # print(inv_gauss[idx])
+        signal = np.fft.irfft(spectrum, n=num_samples) 
+        peak = np.max(np.abs(signal))
+        if peak:
+            signal *= 32767 / peak * global_amp_max_corr
+        if print_crest_factor:
+            crest = 32767 / np.sqrt(np.mean(signal ** 2))
+            print(f"Crest factor: {crest:.2f}")
+        return np.int16(signal * Tweezer_intensity_corr) 
+    
+    # --- Main Control Function ---
+    def movingTweezer(tt, Pi, Pf, linear_ramp=False):
+        move_duration = GLOBALS['move_duration']
+        cutting = GLOBALS['cutting']
+        csv_path = f"T{int(move_duration)}.csv"
+        schedule = read_tweezer_csv(csv_path)
+
+        start_point = points_dict[f'P{Pi}']
+        end_point = points_dict[f'P{Pf}']
+        step_label = f"move_{Pi}_{Pf}"
+
+
+        move_type, direction, offset = detect_move_type(start_point, end_point)
+        pos_to_freq_func = get_pos_to_freq_func(move_type)
+
+        duration = (schedule[-1]['t'] - schedule[0]['t']) * 1e-6
+        num_samples = int(np.round(duration * sample_rate / 4096) * 4096) + 4096
+        duration = num_samples / sample_rate
+        dtt = np.linspace(0, duration, num_samples, endpoint=False)
+
+        if move_type in ['horizontal', 'vertical']:
+            samples, cut_len = generate_samples(schedule, dtt, duration, cutting,pos_to_freq_func, move_type, direction, offset, linear_ramp)
+            axis = Horizontal if move_type == 'horizontal' else Vertical
+            axis.pass_sample(tt, samples, step_label)
+
+            static_axis = Vertical if move_type == 'horizontal' else Horizontal
+            static_coord = end_point[1] if move_type == 'horizontal' else end_point[0]
+            freq = Ver_position_to_frequency(static_coord) if move_type == 'horizontal' else Hor_position_to_frequency(static_coord)
+            sample_static = standing_wave_inverse_gaussian('vertical' if move_type == 'horizontal' else 'horizontal',[freq], num_samples, duration)
+            if cutting:
+                sample_static[-cut_len:] = 0
+            static_axis.pass_sample(tt, sample_static, step_label)
+
+        elif move_type == 'oblique':
+            short_oblique = 1
+            short_oblique = 0.7071
+            samples_H, _ = generate_samples(schedule, dtt, duration, cutting,Hor_position_to_frequency, 'horizontal', direction[0] * short_oblique, offset[0], linear_ramp, oblique_mode=True)
+            samples_V, _ = generate_samples(schedule, dtt, duration, cutting,Ver_position_to_frequency, 'vertical', direction[1] * short_oblique, offset[1], linear_ramp, oblique_mode=True)
+            Horizontal.pass_sample(tt, samples_H, step_label)
+            Vertical.pass_sample(tt, samples_V, step_label)
+        
+        return duration * usec
+
+    def standingTweezer(tt, Points, amplitude, duration):
+        """
+        Generate a composite standing wave signal for multiple tweezers,
+        each defined by its point index in Points.
+
+        Parameters:
+            tt: Time or AWG context object.
+            Points: list or int — indices into points_dict (e.g., 1 or [1, 5, 18, 0]).
+            amplitude: scalar or list — amplitude(s) in percent (single or per-point).
+            duration: duration in microseconds.
+        """
+        if isinstance(Points, int):
+            Points = [Points]
+        if isinstance(amplitude, (int, float)):
+            amplitude = [amplitude] * len(Points)
+
+        sample_duration = duration * 1e-6
+        norm_num_samples = int(np.round(sample_duration * sample_rate / 4096) * 4096) + 4096
+        norm_sample_duration = norm_num_samples / sample_rate
+
+        # Get positions
+        xs = []
+        ys = []
+        for point in Points:
+            x, y = points_dict[f'P{point}']
+            xs.append(x)
+            ys.append(y)
+
+        # Convert positions to frequencies
+        fxs = [Hor_position_to_frequency(x) for x in xs]
+        fys = [Ver_position_to_frequency(y) for y in ys]
+
+        # Generate composite signals
+        sample_Hor = standing_wave_LUT('horizontal', fxs, norm_num_samples, norm_sample_duration)
+        sample_Ver = standing_wave_LUT('vertical', fys, norm_num_samples, norm_sample_duration)
+
+        # Pass signals (single composite wave per axis)
+        Horizontal.pass_sample(tt, sample_Hor, f'standing_{Points}')
+        Vertical.pass_sample(tt, sample_Ver, f'standing_{Points}')
+
+        return duration * usec
+    
+    def shiftingTweezerLine(tt, Points, amplitude, linear_ramp=False):
+        """
+        Generate a composite shifting wave signal for a line of tweezers,
+        moving its orthogonal position along.
+
+        Parameters:
+            tt: Time or AWG context object.
+            Points: list or int — indices into points_dict (e.g., 1 or [1, 5, 18, 0]).
+            amplitude: scalar or list — amplitude(s) in percent (single or per-point).
+            duration: duration in microseconds.
+            linear_ramp: bool — whether to use linear ramping.
+        """
+        if isinstance(Points, int):
+            Points = [Points]
+        if isinstance(amplitude, (int, float)):
+            amplitude = [amplitude] * len(Points)
+
+        # Get positions
+        xs = []
+        ys = []
+        for point in Points:
+            x, y = points_dict[f'P{point}']
+            xs.append(x)
+            ys.append(y)
+
+        # Convert positions to frequencies
+        if np.unique(ys).size == 1:
+            move_type = 'vertical'
+            offset = ys[0]
+            static_frq = [Hor_position_to_frequency(x) for x in xs]
+        elif np.unique(xs).size == 1:  
+            move_type = 'horizontal'
+            offset = xs[0]
+            static_frq = [Ver_position_to_frequency(y) for y in ys]
+        else:
+            raise ValueError("Points must form a straight line (same x or same y).")
+        
+
+        move_duration = GLOBALS['move_duration']
+        cutting = GLOBALS['cutting']
+        csv_path = f"T{int(move_duration)}.csv"
+        schedule = read_tweezer_csv(csv_path)
+
+        step_label = f"move_line_{move_type}"
+
+        direction = +1
+        pos_to_freq_func = get_pos_to_freq_func(move_type)
+
+        duration = (schedule[-1]['t'] - schedule[0]['t']) * 1e-6
+        num_samples = int(np.round(duration * sample_rate / 4096) * 4096) + 4096
+        duration = num_samples / sample_rate
+        dtt = np.linspace(0, duration, num_samples, endpoint=False)
+
+        ##########################################################################################
+
+        if move_type in ['horizontal', 'vertical']:
+
+            samples, cut_len = generate_samples(schedule, dtt, duration, cutting, pos_to_freq_func, move_type, direction, offset, linear_ramp)
+            shifting_axis = Horizontal if move_type == 'horizontal' else Vertical
+            shifting_axis.pass_sample(tt, samples, step_label)
+
+            ######################################################################################
+
+            static_axis = Vertical if move_type == 'horizontal' else Horizontal
+            sample_static = standing_wave_inverse_gaussian('vertical' if move_type == 'horizontal' else 'horizontal', static_frq, num_samples, duration)
+            if cutting:
+                sample_static[-cut_len:] = 0
+            static_axis.pass_sample(tt, sample_static, step_label)
+
+        return duration * usec
+    
+    def movingstandingTweezer(tt, standingPoints, movingPi, movingPf, movingAmplitude, movingduration): #TODO: not right sampling
+        """
+        Generate a composite AWG signal where:
+        - Several tweezers remain at fixed positions (standingPoints)
+        - One tweezer moves from movingPi to movingPf in the same duration
+
+        Parameters:
+            tt: Time or AWG context object.
+            standingPoints: list or int — indices into points_dict for static tweezers.
+            movingPi: int — index of the moving point (start).
+            movingPf: int — index of the moving point (end).
+            movingAmplitude: float — amplitude in percent.
+            movingduration: duration in microseconds.
+        """
+
+        # Ensure lists
+        if isinstance(standingPoints, int):
+            standingPoints = [standingPoints]
+        if isinstance(movingAmplitude, (int, float)):
+            movingAmplitude = [movingAmplitude] * len(standingPoints)
+
+        # Normalize duration to AWG constraints
+        sample_duration = movingduration * 1e-6
+        norm_num_samples = int(np.round(sample_duration * sample_rate / 4096) * 4096) + 4096
+        norm_sample_duration = norm_num_samples / sample_rate
+        dtt = np.linspace(0, norm_sample_duration, norm_num_samples, endpoint=False)
+
+        # ===== Standing part =====
+        # Get static positions
+        xs = []
+        ys = []
+        for point in standingPoints:
+            x, y = points_dict[f'P{point}']
+            xs.append(x)
+            ys.append(y)
+
+        # Convert to static frequencies
+        fxs = [Hor_position_to_frequency(x) for x in xs]
+        fys = [Ver_position_to_frequency(y) for y in ys]
+
+        # Generate standing signals for each axis
+        standing_H = standing_wave_LUT('horizontal', fxs, norm_num_samples, norm_sample_duration)
+        standing_V = standing_wave_LUT('vertical', fys, norm_num_samples, norm_sample_duration)
+
+        # ===== Moving part =====
+        start_point = points_dict[f'P{movingPi}']
+        end_point = points_dict[f'P{movingPf}']
+        move_type, direction, offset = detect_move_type(start_point, end_point)
+        pos_to_freq_func = get_pos_to_freq_func(move_type)
+
+        # Load move schedule from CSV
+        csv_path = f"T{int(movingduration)}.csv"
+        schedule = read_tweezer_csv(csv_path)
+
+        # Generate moving samples
+        if move_type in ['horizontal', 'vertical']:
+            moving_samples, _ = generate_samples(schedule, dtt, norm_sample_duration, GLOBALS['cutting'],
+                                                pos_to_freq_func, move_type, direction, offset, linear_ramp=GLOBALS['linear_ramp_moving'])
+            moving_samples = np.array(moving_samples, dtype=np.int16)
+
+            # Ensure same length
+            if len(moving_samples) != len(standing_H):
+                print(f"Warning: Length mismatch between moving samples and standing wave. "
+                      f"Adjusting to minimum length: {min(len(moving_samples), len(standing_H))}")
+                min_len = min(len(moving_samples), len(standing_H))
+                moving_samples = moving_samples[:min_len]
+                standing_H = standing_H[:min_len]
+                standing_V = standing_V[:min_len]
+
+            # Add moving signal to correct axis
+            if move_type == 'horizontal':
+                final_H = np.int16(np.clip(standing_H + moving_samples, -32768, 32767))
+                final_V = standing_V
+            else:
+                final_V = np.int16(np.clip(standing_V + moving_samples, -32768, 32767))
+                final_H = standing_H
+
+        elif move_type == 'oblique':
+            # Oblique needs separate horizontal & vertical movement
+            short_oblique = 0.7071
+            moving_H, _ = generate_samples(schedule, dtt, norm_sample_duration, GLOBALS['cutting'],
+                                        Hor_position_to_frequency, 'horizontal', direction[0] * short_oblique,
+                                        offset[0], linear_ramp=GLOBALS['linear_ramp_moving'], oblique_mode=True)
+            moving_V, _ = generate_samples(schedule, dtt, norm_sample_duration, GLOBALS['cutting'],
+                                        Ver_position_to_frequency, 'vertical', direction[1] * short_oblique,
+                                        offset[1], linear_ramp=GLOBALS['linear_ramp_moving'], oblique_mode=True)
+            final_H = np.int16(np.clip(standing_H + moving_H, -32768, 32767))
+            final_V = np.int16(np.clip(standing_V + moving_V, -32768, 32767))
+
+        # print(f"Moving from {start_point} to {end_point} with type {move_type}")
+
+        # print(f"{final_H.shape} samples for horizontal,"
+        #       f"{final_V.shape} samples for vertical")
+
+        # ===== Send signals to AWG =====
+        Horizontal.pass_sample(tt, final_H, f'move_{movingPi}_{movingPf}')
+        Vertical.pass_sample(tt, final_V, f'move_{movingPi}_{movingPf}')
+
+        return movingduration * usec
+
+    def AllTheWay(tt, Pi, move_type):
+        move_duration = 1e-5
+        cutting = GLOBALS['cutting']
+        schedule = read_tweezer_csv(None)
+
+        start_point = points_dict[f'P{Pi}']
+        step_label = f"move_{Pi}_{move_type}"
+
+        # print(start_point)
+
+        nn = 0 if move_type == 'horizontal' else 1
+        offset = start_point[nn]
+        direction=+1
+        pos_to_freq_func = get_pos_to_freq_func(move_type)
+
+        duration = move_duration
+        num_samples = int(np.round(duration * sample_rate / 4096) * 4096) + 4096
+        duration = num_samples / sample_rate
+        dtt = np.linspace(0, duration, num_samples, endpoint=False)
+
+        if move_type in ['horizontal', 'vertical']:
+            samples, cut_len = generate_samples(schedule, dtt, duration, cutting, pos_to_freq_func, move_type, direction, offset, linear_ramp=True)
+            axis = Horizontal if move_type == 'horizontal' else Vertical
+
+            axis.pass_sample(tt, samples, step_label)
+
+            static_axis = Vertical if move_type == 'horizontal' else Horizontal
+            static_coord = start_point[1]  if move_type == 'horizontal' else start_point[0]
+            freq = Ver_position_to_frequency(static_coord) if move_type == 'horizontal' else Hor_position_to_frequency(static_coord)
+
+            sample_static = standing_wave_inverse_gaussian('vertical' if move_type == 'horizontal' else 'horizontal',[freq], num_samples, duration)
+            if cutting:
+                sample_static[-cut_len:] = 0
+            static_axis.pass_sample(tt, sample_static, step_label)   
+
+        return move_duration*usec
+
+    def all_moves_loading(tt, reordering_mode):
+        """
+        Generate all possible moves for the tweezers. 
+        """
+        if reordering_mode:
+            for move in edges_list:
+                tt += movingTweezer(tt, move[0], move[1], linear_ramp=False)
+                tt+=dt
+                tt += movingTweezer(tt, move[1], move[0], linear_ramp=False)
+                tt+=dt
+                print("all paths loaded")
+        return tt
+    
 if True: #Envelope of ttl and analog
 
     def TABLE_MODE_ON(channel_name, tt): 
@@ -330,36 +803,29 @@ if True: #Envelope of ttl and analog
     def MOT_Blue3D_AOM_power(tt, value):
         return
 
-    def MOT_Red3D_AOM_TTL(tt, control=True, mode='singleFrq'):
+    def MOT_Red3D_AOM_TTL(tt, control=True):
         if control:
-            if mode=='singleFrq':
-                MOT_Red3D_multiFrq_TTL(tt, False)
-                tt+=dt
-                MOT_Red3D_singleFrq_TTL(tt, True)
-                tt+=dt
-                RedMOT_gate.go_high(tt)  #QRF MOGLABS
-            if mode=='multiFrq':
-                MOT_Red3D_multiFrq_TTL(tt, True)
-                tt+=dt
-                MOT_Red3D_singleFrq_TTL(tt, False) 
+            RedMOT_gate.go_high(tt)  #QRF MOGLABS
         else:
-            RedMOT_gate.go_low(tt)
-            tt+=dt
-            MOT_Red3D_multiFrq_TTL(tt, False) 
-            tt+=dt
-            MOT_Red3D_singleFrq_TTL(tt, False)
+            RedMOT_gate.go_low(tt) 
+
+    def MOT_Red3D_Switch_TTL(tt, control=True):
+        if control:
+            Red_commonSwitch.go_high(tt) #RF switch
+        else:
+            Red_commonSwitch.go_low(tt) 
 
     def MOT_Red3D_multiFrq_TTL(tt, control=True):
         if control:
-            RedMOT_multiFrq_gate.go_high(tt) 
+            Red_multiFrq.go_high(tt) 
         else:
-            RedMOT_multiFrq_gate.go_low(tt) 
+            Red_multiFrq.go_low(tt) 
 
     def MOT_Red3D_singleFrq_TTL(tt, control=True):
         if control:
-            RedMOT_singleFrq_gate.go_high(tt)
+            Red_singleFrq.go_high(tt)
         else:
-            RedMOT_singleFrq_gate.go_low(tt) 
+            Red_singleFrq.go_low(tt) 
 
     def Sisyphus_AOM_TTL(tt, control=True):
         if control:
@@ -506,9 +972,7 @@ if True: # === MOTs ===
         MOT_Blue3D_AOM_TTL(tt, False)
         tt+=dt
         MOT_Blue3D_Shutter_TTL(tt-1*msec, True)
-        tt+=dt
-        MOT_Blue3D_AOM_TTL(tt, True)
-        
+
         tt+=dt
         COILSmain_Current(tt,0)
         tt+=1*usec
@@ -1031,7 +1495,7 @@ if True: # === MOTs ===
         MOT_Red3D_multiFrq_TTL(tt, False)
         tt+=dt
         # MOT_Red3D_AOM_TTL(tt, True)        #Single frequency mot
-        NEW_TABLE_LINE('RedMOT', tt, GLOBALS['Red_MOT_Frq_fin']/1e6, GLOBALS['Red_MOT_Pow_fin'])
+        NEW_TABLE_LINE('RedMOT', tt, GLOBALS['Red_MOT_Frq']/1e6, GLOBALS['Red_MOT_Pow'])
         tt+=3*dt
         MOT_Red3D_singleFrq_TTL(tt, True)     
 
@@ -1040,7 +1504,7 @@ if True: # === MOTs ===
 
         # COILSmain_Current(tt, GLOBALS['coils_current_ctrl_red']*1.2)  
         # tt+=dt
-        # NEW_TABLE_LINE('RedMOT', tt, GLOBALS['Red_MOT_Frq_fin']/1e6, GLOBALS['Red_MOT_Pow_fin'])
+        # NEW_TABLE_LINE('RedMOT', tt, GLOBALS['Red_MOT_Frq']/1e6, GLOBALS['Red_MOT_Pow'])
         # NEW_TABLE_LINE('RedMOT', tt, 75.455, 21.5)
         # tt+=3*dt
         
@@ -1148,7 +1612,7 @@ if True: # === MOTs ===
 
 
         return tt
-    
+
     def take_absorbImaging(tt, beam_duration):
         trigger_delay=100*usec+5*usec #100 for camera activation + 5 as safety buffer
         Basler_Camera_abs_readout=4*120*msec # was at 120ms with small ROI, when enlarged changed to 200ms, still had issues capturing, changed to 480 and no issue
@@ -1167,49 +1631,6 @@ if True: # === MOTs ===
 
         Basler_Camera_abs.expose(tt-trigger_delay,'Background', frametype='tiff')
 
-        tt+=Basler_Camera_abs_readout 
-
-        return tt
-    
-    def take_absorbImaging_new(tt, beam_duration):
-        trigger_delay=100*usec+5*usec #100 for camera activation + 5 as safety buffer
-        Basler_Camera_abs_readout=4*120*msec # was at 120ms with small ROI, when enlarged changed to 200ms, still had issues capturing, changed to 480 and no issue
-
-        tt-=3.9*ms
-        Setpoint_imaging.constant(tt-10*ms,-1) #turning off AOM
-        tt+=5*us
-        Shutter_ImagingBlue.go_high(tt-3*ms) 
-        tt+=dt  
-        Setpoint_imaging.constant(tt+2.9*ms,GLOBALS['ImagingAbs_SetPoint'])   
-        
-        BlueImaging_AOM_TTL(tt, True)
-        BlueImaging_AOM_TTL(tt+beam_duration, False)
-        tt+=Basler_Camera_abs.expose(tt-trigger_delay,'Atoms', frametype='tiff')
-        tt+=GLOBALS['AbsImgPulse_duration']+4*ms
-        Setpoint_imaging.constant(tt+1*us,-1) #turning off AOM
-        
-        Shutter_ImagingBlue.go_low(tt+5*us)
-        tt+=10*ms
-        Setpoint_imaging.constant(tt+1*us,5)
-        tt+=20*ms
-        Setpoint_imaging.constant(tt-10*ms,-1) #turning off AOM
-        tt+=5*us
-        Shutter_ImagingBlue.go_high(tt-3*ms) 
-    
-        Setpoint_imaging.constant(tt+2.9*ms,GLOBALS['ImagingAbs_SetPoint'])# turning on the AOM with the external setpoint considering delay
-        
-        BlueImaging_AOM_TTL(tt, True)
-        BlueImaging_AOM_TTL(tt+beam_duration, False)
-        tt+=Basler_Camera_abs.expose(tt-trigger_delay,'Probe', frametype='tiff')
-        tt+=GLOBALS['AbsImgPulse_duration']+4*ms
-        Setpoint_imaging.constant(tt+1*us,-1) #turning off AOM
-
-        Shutter_ImagingBlue.go_low(tt+5*us)
-        tt+=10*ms
-        Setpoint_imaging.constant(tt+1*us,5)
-
-        tt+=Basler_Camera_abs_readout 
-        Basler_Camera_abs.expose(tt-trigger_delay,'Background', frametype='tiff')
         tt+=Basler_Camera_abs_readout 
 
         return tt
@@ -1255,32 +1676,26 @@ if True: # === MOTs ===
         return tt
 
     def set_MOGLABS_ready(tt):
-        # G_Imaging_Frq=GLOBALS['Imaging_Frq']/1e6
+        G_Imaging_Frq=GLOBALS['Imaging_Frq']/1e6
         G_ImagingFluo_Frq=GLOBALS['ImagingFluo_Frq']/1e6
         G_dueD_MOT_Frq=GLOBALS['dueD_MOT_Frq']/1e6
         G_treD_MOT_Frq=GLOBALS['treD_MOT_Frq']/1e6
-        G_Red_MOT_Frq=GLOBALS['Red_MOT_Frq_fin']/1e6
+        G_Red_MOT_Frq=GLOBALS['Red_MOT_Frq']/1e6
         G_ImagingTweez_Frq=GLOBALS['ImagingTweez_Frq']/1e6
         G_Sisyphus_Frq=GLOBALS['Sisyphus_Frq']/1e6
         G_Tweezers_Frq=GLOBALS['Tweezers_Frq']/1e6
             
-        # G_Imaging_Pow=GLOBALS['Imaging_Pow']
+        G_Imaging_Pow=GLOBALS['Imaging_Pow']
         G_ImagingFluo_Pow=GLOBALS['ImagingFluo_Pow']
         G_treD_MOT_Pow=GLOBALS['treD_MOT_Pow']
-        G_Red_MOT_Pow=GLOBALS['Red_MOT_Pow_fin']
+        G_Red_MOT_Pow=GLOBALS['Red_MOT_Pow']
         G_ImagingTweez_Pow=GLOBALS['ImagingTweez_Pow']
         G_dueD_MOT_Pow=GLOBALS['dueD_MOT_Pow']    
         G_Sisyphus_Pow=GLOBALS['Sisyphus_Pow']
         G_Tweezers_Pow=GLOBALS['Tweezers_Pow']
 
-
         # RedMOT.DDS.setfreq(tt, G_Red_MOT_Frq*1e3)  ##################### VERY VERY  BAD THINGS TO CIRCUMVENT DRIVER BUG  TODO: FIX removing 1e3or2 ask Andre #################
         # RedMOT.DDS.setamp(tt, G_Red_MOT_Pow*1e2)
-
-        if GLOBALS['table_red']: 
-            RedMOT_gate.go_high(tt+dt)
-            RedMOT_gate.go_low(tt+2*dt)
-
 
         # ImagingBeam.DDS.setfreq(tt, G_Imaging_Frq*1e3)
         # ImagingBeam.DDS.setamp(tt, G_Imaging_Pow*1e2)
@@ -1397,26 +1812,5 @@ if True: # === MOTs ===
         tt+=exposure_time
 
         BlueImagingTweez_AOM_TTL(tt, False)
-
-        return tt
-    
-    def standby(tt):
-    #     MOT_Red3D_Switch_TTL(tt, False)       
-    #     MOT_Red3D_singleFrq_TTL(tt, False)
-    #     MOT_Red3D_multiFrq_TTL(tt, False)    
-    # 
-        # MOT_Blue3D_Shutter_TTL(tt-1*msec, False)      
-        # tt+=1*msec
-        # MOT_Blue3D_AOM_TTL(tt, True)
-        # tt+=dt
-        # MOT_Blue2D_AOM_TTL(tt, True)
-        
-
-        # COILSmain_Voltage(tt, 0)
-        # tt+=dt
-        # COILSmain_Current(tt,0)
-        # tt+=1*usec
-        # COILSmain_SwitchON_TTL(tt, False)
-        # tt+=dt
 
         return tt

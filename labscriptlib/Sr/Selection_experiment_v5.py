@@ -31,12 +31,14 @@ if True: ## Selects ##
     if co:
         Orca_Camera.camera_attributes['EXPOSURE TIME']=GLOBALS['FluoImaging_duration']*1e-6
         if GLOBALS['Orca_ROI']=='full':
+            Orca_preparation_time=1*ms
             Orca_Camera.camera_attributes['SUBARRAY MODE']=2
             Orca_Camera.camera_attributes['SUBARRAY HSIZE']=4096.0
             Orca_Camera.camera_attributes['SUBARRAY VSIZE']=2304.0
             Orca_Camera.camera_attributes['SUBARRAY HPOS']=0
             Orca_Camera.camera_attributes['SUBARRAY VPOS']=0
         elif GLOBALS['Orca_ROI']=='mot':
+            Orca_preparation_time=0.5*ms
             Orca_Camera.camera_attributes['SUBARRAY MODE']=2 ##add +=1ms to ORCA delay
             Orca_Camera.camera_attributes['SUBARRAY HSIZE']=1500 #x
             Orca_Camera.camera_attributes['SUBARRAY VSIZE']=1500 #y
@@ -44,6 +46,7 @@ if True: ## Selects ##
             Orca_Camera.camera_attributes['SUBARRAY VPOS']=50*4
             0*4
         elif GLOBALS['Orca_ROI']=='tweez':
+            Orca_preparation_time=100*us
             Orca_Camera.camera_attributes['SUBARRAY MODE']=2
             Orca_Camera.camera_attributes['SUBARRAY HSIZE']=100 #x
             Orca_Camera.camera_attributes['SUBARRAY VSIZE']=100 #y
@@ -52,8 +55,7 @@ if True: ## Selects ##
             
 
 start()
-Twizzi_Switch_TTL(t, True)    
-t+=standingTweezer(t, 'all', amplitude=100, duration = 20)*150000
+# Basler_Camera_extra.expose(t,'Fluo', frametype='tiff')
 t+=dt
 TABLE_MODE_ON('RedMOT', t)
 t+=dt
@@ -280,7 +282,7 @@ for i in range(0,GLOBALS['n_loop']):
         if sel_camera_fluo=='andor': 
             # Andor camera needs 20 ms to clean sensor from previously collected light
             # Andor camera is controlled by Andor Solis
-            andor_trigger_delay=20*us # it was originally at 100us but below under 'sel_abs_image' it is 20us so we (Vlad and Shawn) set it here to 20us
+            andor_trigger_delay=20*us + Orca_preparation_time # it was originally at 100us but below under 'sel_abs_image' it is 20us so we (Vlad and Shawn) set it here to 20us
             Andor_Camera_fluo_readout=(1024*1024/1e6*sec+1024*2.2*usec)+100*msec # Horizontal readout + vertical shift times + buffer
             Orca_Camera_trigger.go_high(t-andor_trigger_delay)
             Orca_Camera_trigger.go_low(t-andor_trigger_delay+100*usec)
