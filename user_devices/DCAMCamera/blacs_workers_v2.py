@@ -17,17 +17,7 @@ from labscript_utils import dedent
 import sys
 import numpy as np
 import threading
-import zmq
-import pickle
 
-context = zmq.Context()
-socket = context.socket(zmq.PUB)
-socket.bind("tcp://*:5556")
-
-def publish_image(image: np.ndarray):
-    print("Publishing image to ZMQ...")
-    msg = pickle.dumps(image, protocol=pickle.HIGHEST_PROTOCOL)
-    socket.send(msg)
 
 take_and_save=True
 
@@ -383,8 +373,7 @@ class DCAMCameraWorker(IMAQdxCameraWorker):
                 self.camera._abort_acquisition = False
                 return
             new_images=self.camera.grab(bufferNo=i)
-
-            publish_image(new_images)
+            
             images.append(new_images)
             self.save_image_now(new_images, index=i)
 
