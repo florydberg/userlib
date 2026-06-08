@@ -1,21 +1,10 @@
 # First own code to run the spectrum card
 # Marvin 08.03.2024
 
-from numpy.random import random
-import numpy
-from .pyspcm import *
-from .spcm_tools import *
+from pyspcm import *
+from spcm_tools import *
 import ctypes
 import numpy as np
-import py_header.regs as spcm
-
-CF = { #correction factor protecting AODs for overpower
-    1: 0.5,
-    2: 0.7,
-    3: 0.84,
-    4: 0.9,
-    5: 1.0
-}
 
 def align_to_16(value):
     return ((value + 15) // 16) * 16
@@ -61,7 +50,7 @@ class SpectrumCard:
         self.hCard = spcm_hOpen(create_string_buffer(self.device_path.encode()))
         if not self.hCard:
             print("no card found...\n")
-            exit(1)
+            # exit(1)
         # get card type name and serial number from driver
         qwValueBufferLen = 20
         pValueBuffer = pvAllocMemPageAligned(qwValueBufferLen)
@@ -970,6 +959,7 @@ class SpectrumCard:
         spcm_dwSetParam_i32(self.hCard, SPC_M2CMD, M2CMD_DATA_STARTDMA | M2CMD_DATA_WAITDMA)
         print("... data has been transferred to board memory.")
 
+
     def seq_set_sequence_step(self, step_index, segment_index, next_step, loop_count, end_loop_condition='always', last_step=False):
         """
         Configures a single step in the sequence memory.
@@ -1060,94 +1050,6 @@ class SpectrumCard:
         spcm_dwSetParam_i32(self.hCard, SPC_M2CMD, M2CMD_DATA_STARTDMA | M2CMD_DATA_WAITDMA)
         print("... data has been transferred to board memory.")
 
-    def dds_static(self, core, frequency, amplitude, phase = None):
-        """
-        Generates a multi-tone signal using Direct Digital Synthesis (DDS) and transfers it to the card.
-
-        Parameters:
-        - channel: The channel number for the DDS.
-        - frequencies: A list of frequencies for the sine waves.
-        - amplitudes: A list of amplitudes for the sine waves. Must be the same length as frequencies.
-        - phases: A list of phases for the sine waves. Must be the same length as frequencies.
-
-        """
-        if phase is None:
-            phase=numpy.random.uniform(0,360)
-
-        if core in range(0, 21):
-            spcm_dwSetParam_d64(self.hCard, SPC_DDS_CORE0_AMP + core, amplitude / 100)
-            spcm_dwSetParam_d64(self.hCard, SPC_DDS_CORE0_PHASE + core, phase)
-            spcm_dwSetParam_d64(self.hCard, SPC_DDS_CORE0_FREQ + core, MEGA(frequency))
-            print("core number ", core, " set to: frequency ", frequency, "MHz; amplitude: ", amplitude, "%; phase: ", phase, "degrees.")
-            
-        else:
-            raise ValueError("Invalid core number. Must be 0<20.")
-        self.handle_error()  
-
-    def dds_slope(self, core, frequency_per_sec, amplitude):
-        """
-        Generates a multi-tone signal using Direct Digital Synthesis (DDS) with slope control and transfers it to the card.
-        Parameters:
-        - channel: The channel number for the DDS.
-        - frequency_per_sec: The frequency slope in MHz/s.
-        - amplitude: The amplitude for the sine wave in percentage (0-100%).
-        """
-
-        if core in range(0, 21):
-            # spcm_dwSetParam_d64(self.hCard, SPC_DDS_CORE0_AMP + core, amplitude / 100)
-            spcm_dwSetParam_d64(self.hCard, SPC_DDS_CORE0_FREQ_SLOPE + core,  MEGA(frequency_per_sec))
-            print("core number ", core, " set: frequency slope at ", frequency_per_sec, "MHz/s; amplitude: ", amplitude, "%")
-        else:
-            raise ValueError("Invalid core number. Must be 0<20.")
-        self.handle_error() 
-
-    def trigger_dds(self, trigger_time=1):
-        spcm_dwSetParam_i32 (self.hCard, SPC_DDS_CMD, SPCM_DDS_CMD_EXEC_AT_TRG);
-        # print("Trigger time set to:", trigger_time, "seconds.")
-
-    def dds_setup(self, step, trigger_time=1):
-        if step==0:
-            print("Setting up DDS cores and triggers.")
-            spcm_dwSetParam_i64(self.hCard, SPC_DDS_CORES_ON_CH1, SPCM_DDS_CORE8 | SPCM_DDS_CORE9 |SPCM_DDS_CORE10 | SPCM_DDS_CORE11 | SPCM_DDS_CORE20)
-
-            # spcm_dwSetParam_i32 (self.hCard, SPC_DDS_TRG_SRC, SPCM_DDS_TRG_SRC_NONE);
-            # spcm_dwSetParam_i32 (self.hCard, SPC_DDS_TRG_SRC, SPCM_DDS_TRG_SRC_TIMER);
-            
-            if True:
-                spcm_dwSetParam_i32 (self.hCard, SPC_DDS_TRG_SRC, SPCM_DDS_TRG_SRC_CARD);
-                print("Trigger set.") 
-            else:
-                spcm_dwSetParam_d64 (self.hCard, SPC_DDS_TRG_TIMER, trigger_time);
-                print("Trigger time set to:", trigger_time, "seconds.") 
-            
-        elif step==1:
-            # spcm_dwSetParam_i32 (self.hCard, SPC_DDS_CMD, SPCM_DDS_CMD_EXEC_NOW);
-            print("Writing DDS settings to card...")
-            spcm_dwSetParam_i32(self.hCard, SPC_DDS_CMD, SPCM_DDS_CMD_WRITE_TO_CARD); 
-            # spcm_dwSetParam_i32 (self.hCard, SPC_DDS_CMD, SPCM_DDS_CMD_EXEC_NOW);
-
-    def prova(self):
-        spcm_dwSetParam_i32 (self.hCard, SPC_DDS_TRG_SRC, SPCM_DDS_TRG_SRC_TIMER);
-        spcm_dwSetParam_d64 (self.hCard, SPC_DDS_TRG_TIMER, 0.1);
-
-        # // Initial 110 MHz frequency
-        spcm_dwSetParam_d64 (self.hCard, SPC_DDS_CORE0_AMP, 1);
-        spcm_dwSetParam_d64 (self.hCard, SPC_DDS_CORE0_PHASE, 0);
-        spcm_dwSetParam_d64 (self.hCard, SPC_DDS_CORE0_FREQ, MEGA(110));
-        spcm_dwSetParam_i32 (self.hCard, SPC_DDS_CMD, SPCM_DDS_CMD_EXEC_AT_TRG);
-
-        # // slope from 110 MHz to 120 MHz (10 MHz change in 100 ms = 100 MHz change in 1 second)
-        spcm_dwSetParam_d64 (self.hCard, SPC_DDS_CORE0_FREQ_SLOPE, MEGA(100));
-        spcm_dwSetParam_i32 (self.hCard, SPC_DDS_CMD, SPCM_DDS_CMD_EXEC_AT_TRG);
-
-        # // Final 120 MHz frequency
-        spcm_dwSetParam_d64 (self.hCard, SPC_DDS_CORE0_FREQ, MEGA(120));
-        spcm_dwSetParam_d64 (self.hCard, SPC_DDS_CORE0_FREQ_SLOPE, 0);
-        spcm_dwSetParam_i32 (self.hCard, SPC_DDS_CMD, SPCM_DDS_CMD_EXEC_AT_TRG);
-
-        # // Write all commands to card
-        spcm_dwSetParam_i32 (self.hCard, SPC_DDS_CMD, SPCM_DDS_CMD_WRITE_TO_CARD); 
-
 def generate_single_tone(frequency, num_samples, sample_rate = 1.25e9 ):
     """
     Generates a single tone (sine wave) signal with a specified frequency, number of samples, and sample rate.
@@ -1191,7 +1093,7 @@ def generate_manual_tone(frequency, amplitude, num_samples,  sample_rate = 1.25e
     # print(f"Number of samples: {num_samples}")
     # Generate time values
     t = np.linspace(0, duration, num_samples, endpoint=False)
-    amp=amplitude/100*0.5 # % #0.5 to prevent overpower on AOD
+    amp=amplitude/100 # %
     
     return np.int16(amp*np.sin(2 * np.pi * frequency * t)* 32767 ) # Normalize the signal to the range [-32767, 32767] to prevent overflow when casting to int16
 
@@ -1223,24 +1125,18 @@ def generate_multi_tone(frequencies, amplitudes, phases, num_samples, sample_rat
     # print(amplitudes)
     # print(phases)
 
-    ii=0
-
     # Accumulate sine waves for each frequency and amplitude pair
     for frequency, amplitude, phase in zip(frequencies, amplitudes, phases):
         # print(f'frequency {frequency}')
-        frequency += np.random.uniform(0,1)/10
-        phase_opt = 2*np.random.uniform(0,1) * np.pi * ii / len(frequencies) 
-        # print(f"frequency {frequency} and optimized phase {phase_opt}")
-        signal += amplitude * np.sin(2 * np.pi * frequency * t + phase_opt)
-        ii+=1
-    N=len(frequencies)
+        signal += amplitude * np.sin(2 * np.pi * frequency * t + phase)
+
     # Normalize the signal to the range [-32767, 32767] to prevent overflow when casting to int16
     # Find the peak value
     peak_value = np.abs(signal).max()
     max_value = np.abs(amplitudes).max()
     if peak_value > 0:
         # Normalize signal
-        normalization_factor = 32767 / peak_value /100*max_value #100 'cause amplitude value is in %
+        normalization_factor = 32767 / peak_value /100*max_value*0 #100 'cause amplitude value is in %
         signal = signal * normalization_factor
 
     if print_crest_factor:
@@ -1248,4 +1144,3 @@ def generate_multi_tone(frequencies, amplitudes, phases, num_samples, sample_rat
         # print(f"Crest factor of signal: {crest_factor:.3f}")
 
     return np.int16(signal)
-

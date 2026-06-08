@@ -1,83 +1,12 @@
-# Modified by Andre FloRydberg 16/7/2025
+# Modified by Andre FloRydberg 11/2024
 from labscript import Device, Output, Trigger, LabscriptError, config, set_passed_properties
 import numpy as np
 import math
 
-class AWG_IO(Output):
-    description = 'Arbitrary Waveform Output with Sequence End Flag'
-
-    def __init__(self, name, parent_device, connection, trigger_device, trigger_connection=None, channel_amplitude=2000, **kwargs):
-        self.trigger_edge_type = "rising"
-        if trigger_connection is None:
-            trigger_connection = parent_device.name + '_seq_end_flag'
-
-        parent_device.set_property(f"channel_amplitude_{connection}", channel_amplitude, "connection_table_properties")
-
-        super().__init__(name, parent_device, connection, limits=None, unit_conversion_class=None,
-                         unit_conversion_parameters=None, default_value=None, **kwargs)
-
-        # Trigger for end-of-sequence flagging
-        if isinstance(trigger_device, Trigger):
-            if trigger_device.trigger_edge_type != "rising":
-                raise LabscriptError(
-                    f"Trigger edge type for {name} is 'rising', but existing Trigger {trigger_device.name} has '{trigger_device.trigger_edge_type}'"
-                )
-            self.trigger_device = trigger_device
-        elif trigger_device is not None:
-            self.trigger_device = Trigger(name + "_seq_end_flag", trigger_device, trigger_connection, trigger_edge_type="rising")
-
-    def add_instruction(self, time, instruction, units=None):
-        if time in self.instructions:
-            raise LabscriptError(f"{self.name} already has an instruction at t={time}!")
-        return super().add_instruction(time, instruction, units)
-
-    def flag_sequence_end(self, time):
-        if self.trigger_device is not None:
-            self.trigger_device.trigger(time, duration=50e-6)
-
-    def calculate_num_samples(self, sample_duration):
-        num_samples = np.round(sample_duration * self.parent_device.sample_rate / 4096) * 4096
-        return num_samples
-
-    def generate_single_tone(self, t, sample_duration, frequency, label=None):
-        num_samples = self.calculate_num_samples(sample_duration)
-        fundamental_frequency = np.round(1 / sample_duration)
-        if frequency < fundamental_frequency:
-            raise LabscriptError(f"{self.name} @ t={t}: Frequency {frequency} Hz < resolution {fundamental_frequency} Hz")
-        self.add_instruction(t, (num_samples, frequency, label))
-
-    def generate_multiple_tones(self, t, sample_duration, frequencies, amplitudes=None, phases=None, label=None):
-        num_samples = self.calculate_num_samples(sample_duration)
-        frequencies = np.array(frequencies)
-
-        if amplitudes is None:
-            amplitudes = np.ones(len(frequencies))
-        if phases is None:
-            phases = np.pi * np.random.rand(len(frequencies))
-
-        fundamental_frequency = np.round(1 / sample_duration)
-        freq_sorted = np.sort(frequencies)
-        if np.any(frequencies < fundamental_frequency) or np.any(np.diff(freq_sorted) < fundamental_frequency):
-            raise LabscriptError(f"{self.name} @ t={t}: Frequencies or their differences below resolution {fundamental_frequency} Hz")
-        if not (len(frequencies) == len(amplitudes) == len(phases)):
-            raise LabscriptError(f"{self.name} @ t={t}: Frequency, amplitude, and phase lists must match in length")
-
-        self.add_instruction(t, (num_samples, *frequencies, *amplitudes, *phases, label))
-
-    def do_checks(self):
-        for t, instruction in self.instructions.items():
-            num_samples = instruction[0]
-            if num_samples > self.parent_device.max_sample_size:
-                raise LabscriptError(f"{self.name} @ t={t}: num_samples {num_samples} exceeds max {self.parent_device.max_sample_size}")
-            if num_samples <= 0:
-                min_len_ns = 4096 / self.parent_device.sample_rate * 1e9
-                raise LabscriptError(f"{self.name} @ t={t}: num_samples <= 0. Min length is {min_len_ns:.0f} ns")
-   
-
 class AWGOutput(Output):
     description = 'Arbitray Waveform Output'
 
-    def __init__(self, name, parent_device, connection, trigger_device, trigger_connection=None, channel_amplitude=2000, **kwargs):
+    def __init__(self, name, parent_device, connection, trigger_device, trigger_connection, channel_amplitude, **kwargs):
         """ Create Output channel for AWG.
         
         Parameters
@@ -95,12 +24,8 @@ class AWGOutput(Output):
         channel_amplitude : int
             Maximal (positive and negative) amplitude of channel output in mV.
         """
-        self.trigger_edge_type="rising"
-        if trigger_connection is None:
-           trigger_connection = parent_device.name +'_trigger'
-
+        
         parent_device.set_property(f"channel_amplitude_{connection}", channel_amplitude, "connection_table_properties")
-
         super().__init__(name, parent_device, connection, limits=None, unit_conversion_class=None, unit_conversion_parameters=None, default_value=None, **kwargs)
         if isinstance(trigger_device, Trigger):
             if "rising" != trigger_device.trigger_edge_type:
@@ -111,24 +36,13 @@ class AWGOutput(Output):
         elif trigger_device is not None:
             # Instantiate a trigger object to be our parent:
             self.trigger_device = Trigger(name+"_trigger", trigger_device, trigger_connection, trigger_edge_type="rising")
-            print('Trigger edge type for %s is \'%s\', ' % (name, self.trigger_edge_type) + 
-                    'Trigger object %s ' % trigger_device.name +
-                    'has edge type \'%s\' ' % self.trigger_device.trigger_edge_type +
-                    'trigger connection is \'%s\'' % self.trigger_device.connection)
 
     def add_instruction(self, time, instruction, units=None):
-        # print(f"Actual instruction: {self.instructions}")
         if time in self.instructions:
             raise LabscriptError(f"Spectrum AWG aleady has another instruction programmed at t={time}!")
-        # print(f"instruction: {instruction}")
         
         if self.trigger_device is not None:
-            # print(f'triggering {self.trigger_device.name} at {time}')
             self.trigger_device.trigger(time,duration=50e-6)
-            # self.trigger_device.go_high(time)
-            # self.trigger_device.go_low(time+50e-6)
-            # awg_trigger.go_high(time)           #TODO:FIX IT AS dynamical call
-            # awg_trigger.go_low(time+50e-6)
 
         return super().add_instruction(time, instruction, units)
 
@@ -137,7 +51,7 @@ class AWGOutput(Output):
         # With the (maximal) sample rate of 1.25GHz, this means the sample duration has minimal
         # steps of 3.2769µs.
         num_samples = np.round(sample_duration*self.parent_device.sample_rate/4096)*4096
-        # print('sample rate = ' +str(self.parent_device.sample_rate))
+        print('sample rate = ' +str(self.parent_device.sample_rate))
         return num_samples
 
     def generate_single_tone(self, t, sample_duration, frequency, label=None):
@@ -181,7 +95,7 @@ class AWGOutput(Output):
         """
         num_samples = self.calculate_num_samples(sample_duration)
         frequencies = np.array(frequency)
-        # print(f"frequencies are {frequencies}")
+        print(f"frequencies are {frequencies}")
         # print(len(frequencies))
         if amplitudes is None:
             amplitudes = np.ones(len(frequencies))
@@ -202,60 +116,6 @@ class AWGOutput(Output):
         
         self.add_instruction(t, (num_samples,*frequencies,*amplitudes, *phases, label))
 
-    def generate_standing_tweezer(self, t, sample_duration, frequency, amplitudes=None, phases=None, label=None):
-        """
-        Parameters
-        ----------
-        t : float
-            Time.
-        sample_duration : float
-            Duration of sample (that gets repeated), in seconds.
-        frequencies : 
-            Iterable of frequencies for each tone
-        amplitude : (optional)
-            Relative amplitude of each tone. If None, all have the same amplitude.
-        phase : (optional)
-            Phase for each tone. If None, all tones of zero (the same) phase.
-        label : str, optional
-            Description of the instruction
-        """
-        num_samples = self.calculate_num_samples(sample_duration)
-        frequencies = np.array(frequency)
-        # print(f"frequencies are {frequencies}")
-        # print(len(frequencies))
-        if amplitudes is None:
-            amplitudes = np.ones(len(frequencies))
-        if phases is None:
-            phases = np.zeros(len(frequencies))
-            # TODO: for equally spaced frequencies using phases = np.pi*np.arange(len(frequencies))**2/len(frequencies)# are good values.
-            phases= np.pi*np.random.rand(len(frequencies))
-            
-
-        # Check frequency resolution
-        freq_sorted = np.sort(frequencies)
-        fundamental_frequency = np.round(1/sample_duration)
-        if np.any(frequencies<fundamental_frequency) or np.any((freq_sorted[1:]-freq_sorted[:-1])<fundamental_frequency):
-            raise LabscriptError(f"Frequency or difference of '{self.name}' at t={t} ({frequency}MHz) is smaller than the resolution ({fundamental_frequency:.0f}Hz), change frequency or sample size/duration.")
-
-        if not len(frequencies)==len(amplitudes)==len(phases):
-            raise LabscriptError(f"Instruction for '{self.name}' at t={t} must have a frequency, amplitude and phase for all tones or none.")
-        
-        self.add_instruction(t, (num_samples,*frequencies,*amplitudes, *phases, label))
-
-    def pass_sample(self, t, sample_data, label):
-        """
-        Parameters
-        ----------
-        t : float
-            Time.
-        sample_data : float
-            Duration of sample (that gets repeated), in seconds.
-        label : str
-            Description of the instruction
-        """
-       
-        self.add_instruction(t, (len(sample_data), sample_data, label))
-    
     def do_checks(self):
         for t,instruction in self.instructions.items():
             if instruction[0]>self.parent_device.max_sample_size:
@@ -331,33 +191,12 @@ class SpectrumAWG(Device):
 
             change_times = output.get_change_times()
             group.require_group(output.connection)
-            group[output.connection].require_group("sample")
             group[output.connection].require_group("labels")
 
             for i,t in enumerate(np.sort(change_times)):
-
-                if output.instructions[t][-1].startswith("move_"):
-                    # Join the list of strings into one string before saving as attribute
-                    sample_list = output.instructions[t][1:-1]
-
-
-                    group[output.connection].attrs[str(i)] = output.instructions[t][0]
-                    group[output.connection]["sample"].attrs[str(i)] = sample_list
+                group[output.connection].attrs[str(i)] = output.instructions[t][:-1]
+                if output.instructions[t][-1] is not None:
                     group[output.connection]["labels"].attrs[str(i)] = output.instructions[t][-1]
-
-                elif output.instructions[t][-1].startswith("standing_"):
-                    # Join the list of strings into one string before saving as attribute
-                    sample_list = output.instructions[t][1:-1]
-
-
-                    group[output.connection].attrs[str(i)] = output.instructions[t][0]
-                    group[output.connection]["sample"].attrs[str(i)] = sample_list
-                    group[output.connection]["labels"].attrs[str(i)] = output.instructions[t][-1]
-
-                else:
-                    group[output.connection].attrs[str(i)] = output.instructions[t][:-1]
-                    if output.instructions[t][-1] is not None:
-                        group[output.connection]["labels"].attrs[str(i)] = output.instructions[t][-1]
 
         
 if __name__=="__main__":
