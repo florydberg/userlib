@@ -15,7 +15,7 @@ if True: ## Selects ##
     sel_mot_red = GLOBALS['mot_red']
     sel_mot_red_sf = GLOBALS['mot_red_sf']
     sel_tweezer = GLOBALS['tweezers']
-
+    sel_tweezer_always_on = GLOBALS['tweezers_always_on']
     sel_fluo_image = GLOBALS['imaging_fluo']
     sel_abs_image = GLOBALS['imaging_abs']
 
@@ -42,21 +42,30 @@ if True: ## Selects ##
 
         Orca_Camera.camera_attributes['SUBARRAY MODE'] = 1
 
-    elif GLOBALS['Orca_ROI'] == 'mot':
+    elif GLOBALS['Orca_ROI'] == 'tweez':
         # Orca_preparation_time=0.5*ms
-        Orca_Camera.camera_attributes['SUBARRAY HSIZE'] = 1500
-        Orca_Camera.camera_attributes['SUBARRAY VSIZE'] = 1500
-        Orca_Camera.camera_attributes['SUBARRAY HPOS'] = 400 * 4
-        Orca_Camera.camera_attributes['SUBARRAY VPOS'] = 200 * 4
+        Orca_Camera.camera_attributes['SUBARRAY HSIZE'] = 50*2
+        Orca_Camera.camera_attributes['SUBARRAY VSIZE'] = 50*2
+        Orca_Camera.camera_attributes['SUBARRAY HPOS'] = 2096
+        Orca_Camera.camera_attributes['SUBARRAY VPOS'] = 940
 
         Orca_Camera.camera_attributes['SUBARRAY MODE'] = 2 ##add +=1ms to ORCA delay
 
-    elif GLOBALS['Orca_ROI'] == 'tweez':
+    elif GLOBALS['Orca_ROI'] == 'mot':
         ##add +=1ms to ORCA delay
-        Orca_Camera.camera_attributes['SUBARRAY HSIZE'] = 100*2
-        Orca_Camera.camera_attributes['SUBARRAY VSIZE'] = 100*2
-        Orca_Camera.camera_attributes['SUBARRAY HPOS'] = 650 * 4
-        Orca_Camera.camera_attributes['SUBARRAY VPOS'] = 220*4
+        Orca_Camera.camera_attributes['SUBARRAY HSIZE'] = 240 # 120*2
+        Orca_Camera.camera_attributes['SUBARRAY VSIZE'] = 240 # 120*2
+        Orca_Camera.camera_attributes['SUBARRAY HPOS'] =  1160 #1960
+        Orca_Camera.camera_attributes['SUBARRAY VPOS'] =  820 #840
+
+        Orca_Camera.camera_attributes['SUBARRAY MODE'] = 2
+
+    elif GLOBALS['Orca_ROI'] == 'test':
+        ##add +=1ms to ORCA delay
+        Orca_Camera.camera_attributes['SUBARRAY HSIZE'] = 240*2
+        Orca_Camera.camera_attributes['SUBARRAY VSIZE'] = 240*2
+        Orca_Camera.camera_attributes['SUBARRAY HPOS'] = 640 * 4 - 120
+        Orca_Camera.camera_attributes['SUBARRAY VPOS'] = 230*4 - 120
 
         Orca_Camera.camera_attributes['SUBARRAY MODE'] = 2
             
@@ -72,22 +81,33 @@ set_MOGLABS_ready(t)
 t+=dt
 t=set_CompCoils(t, "ON")
 MOT_Blue3D_Shutter_TTL(t, True)   
-t+=dt +500*ms #+ Orca_preparation_time
+# t+=dt +500*ms #+ Orca_preparation_time
+t+=dt +0*ms #set to 10 ms to check
 
 
 
-t+=200*msec #check why this delay is needed
-Shutter_ImagingBlue.go_high(t) #reformat
+
+# t+=200*msec #check why this delay is needed
+t+=0*msec #set to 10 ms to check
+Shutter_ImagingBlue.go_low(t) 
 
 for i in range(0,GLOBALS['n_loop']):
 
     t+=5*dt
     COILScomp_SwitchON_TTL(t, True)
-    set_CompCoils(t+5*us, "ON")    
+    set_CompCoils(t+5*us, "ON")  
     # MOT_Red3D_Switch_TTL(t, True)      #Global rf switch. obsolete
     t+=dt
-    Tweezers_AOM_TTL(t,True)
-    Sisyphus_AOM_TTL(t,False)
+    Tweezers_AOM_TTL(t, True) #TODO: fix awg trigger
+    t+=dt
+    if sel_tweezer_always_on:
+        Twizzi_Switch_TTL(t, False)
+    else:
+        Twizzi_Switch_TTL(t, True)
+    t+=dt
+    Re707_AOM_TTL(t, True)
+    t+=dt
+    Re679_AOM_TTL(t, True)
     t+=dt
 
     if shieldSingle:
@@ -104,8 +124,8 @@ for i in range(0,GLOBALS['n_loop']):
         t+=dt
         # MOT_Red3D_AOM_TTL(t, True, mode='multiFrq')
         # MOT_Red3D_AOM_TTL(t+GLOBALS['loadTime_BlueMOT'], False)
-        MOT_Red3D_multiFrq_TTL(t, True) 
-        MOT_Red3D_singleFrq_TTL(t, False)         
+        MOT_Red3D_multiFrq_TTL(t, True)
+        MOT_Red3D_singleFrq_TTL(t, False)        
         MOT_Red3D_multiFrq_TTL(t+GLOBALS['loadTime_BlueMOT'], False) 
 
     ##### BLUE MOT #################
@@ -126,6 +146,14 @@ for i in range(0,GLOBALS['n_loop']):
         t+=1*usec # the switch needs a 1 usec delay from the power supply switch-off
         COILSmain_SwitchON_TTL(t, False)
         t+=3*dt
+        MOT_Blue3D_AOM_TTL(t+1.6*msec, True)
+
+        if not GLOBALS['repumpers_always_on']:
+            t+=dt
+            Re707_AOM_TTL(t, False)
+            t+=dt
+            Re679_AOM_TTL(t, False)
+            t+=dt
         
         fluo_delay=10*msec
 
@@ -190,61 +218,87 @@ for i in range(0,GLOBALS['n_loop']):
         COILSmain_Current(t, 0)
         t+=dt 
         COILSmain_SwitchON_TTL(t, False)
-        t+=dt
+        # if GLOBALS['blow_atoms']:
+        #     set_CompCoils_QuantizationAxis(t+dt+dt, "ON", GLOBALS['QuantizAxis_ramp_duration'], v_step_size=0.01)
+
+        if GLOBALS['QuantumAxis']: 
+            t += set_CompCoils_QuantizationAxis(t+dt, "ON", GLOBALS['QuantizAxis_ramp_duration'])
+            if sel_tweezer:
+                t+=15*msec
 
         if sel_tweezer:
+
             fluo_delay=10*msec
             ##### Tweezers loading #################
             t-=GLOBALS['TweezerLoading_duration']
+
+            Twizzi_Switch_TTL(t, False)
+            t+=dt
+            # t-=500*ms
             awg_trigger.go_high(t) # Trigger the AWG to start the sequence
             awg_trigger.go_low(t + 2*usec) # Trigger the AWG to start the sequence
-            Twizzi_Switch_TTL(t, True)  
-            tweezer_duration=GLOBALS['TweezerLoading_duration']
-            awg_trigger.go_high(t+tweezer_duration) # Trigger the AWG to start the sequence
-            awg_trigger.go_low(t +tweezer_duration + 2*usec) # Trigger the AWG to start the sequence
+            Tweezers_AOM_TTL(t+dt, True)
+
             t+=GLOBALS['TweezerLoading_duration']
-            
+            #set_CompCoils(t+5*us, "OFF")    
+
+            start_tweezer_time=t
+            # Tweezers_AOM_TTL(t+dt, False)
+
+            t+=4*dt 
+
+            # Bfiled_test(t+dt, "ON")
+       
+            t+=4*dt 
             #cooling before first image (lots of atoms)
 
             # NEW_TABLE_LINE('Sisyphus', t, GLOBALS['Sisyphus_Frq']/1e6, GLOBALS['Sisyphus_Pow'])
-            NEW_TABLE_LINE('Sisyphus', t, (GLOBALS['Red_MOT_Frq_fin']+0.5*GLOBALS['Sisyphus_Frq'])/1e6, GLOBALS['Sisyphus_Pow'])
-            t+=dt
-            t+=5*dt
-            Sisyphus_AOM_TTL(t,True)
-            t+=GLOBALS['TweezerCooling_duration']
-            Sisyphus_AOM_TTL(t,False)
-            # t+=100*ms
+            t += NEW_TABLE_LINE('Sisyphus', t, (GLOBALS['Red_MOT_Frq_fin']+0.5*GLOBALS['Sisyphus_Frq'])/1e6, GLOBALS['Sisyphus_Pow'], GLOBALS['TweezerCooling_duration']) #trigger half time to avoid interplay between 
+            # t += 1000*usec
+
+
 
             if GLOBALS['LAC']: 
-                ImagingBeam.DDS.setfreq(t, GLOBALS['ImagingFluo_Frq']/1e6*1e3)
-                ImagingBeam.DDS.setamp(t, GLOBALS['blue_LAC_Pow']*1e2)
+                # ImagingBeam.DDS.setfreq(t, GLOBALS['ImagingTweez_Frq']/1e6*1e3)
+                # ImagingBeam.DDS.setamp(t, GLOBALS['blue_LAC_Pow']*1e2)
                 t+=dt
-                BlueImaging_AOM_TTL(t,True) #blue cathalyzing
-                t+=dt
+                # BlueImaging_AOM_TTL(t,True) #blue cathalyzing
+                
+
                 t+=5*dt
                 # NEW_TABLE_LINE('Sisyphus', t, GLOBALS['LAC_Frq']/1e6, GLOBALS['LAC_Pow'])
-                NEW_TABLE_LINE('Sisyphus', t, (GLOBALS['Red_MOT_Frq_fin']+0.5*GLOBALS['LAC_Frq'])/1e6, GLOBALS['LAC_Pow'])
+                t+=NEW_TABLE_LINE('Sisyphus', t, (GLOBALS['Red_MOT_Frq_fin']+0.5*GLOBALS['LAC_Frq'])/1e6, GLOBALS['LAC_Pow'], GLOBALS['LAC_duration'])
+                t+=10*dt
+                # t+=dt
+                # # Sisyphus_AOM_TTL(t,True)
+                # t+=3*dt
+                # t+=GLOBALS['LAC_duration']
+                # t+=3*dt
+                # BlueImaging_AOM_TTL(t,False)
                 t+=dt
-                Sisyphus_AOM_TTL(t,True)
-                t+=3*dt
-                t+=GLOBALS['LAC_duration']
-                t+=3*dt
-                BlueImaging_AOM_TTL(t,False)
-                t+=dt
-                Sisyphus_AOM_TTL(t,False)
-            # TABLE_MODE_OFF('Sisyphus', t)
+                # Sisyphus_AOM_TTL(t,False)
+            t+=4*dt 
+            TABLE_MODE_OFF('Sisyphus', t)
             t+=dt
 
-            NEW_TABLE_LINE('Sisyphus', t, (GLOBALS['Red_MOT_Frq_fin']+0.5*GLOBALS['SisyphusImg_Frq'])/1e6, GLOBALS['SisyphusImg_Pow'])
+            
             t+=GLOBALS['holdTime_fluoImg'] #to not see mot fluo # wait for the fluo imaging to evaluate the trap lifetime
+            t+=10*dt
+            
 
 
     ##### ALL OFF #################  IMAGING SECTION STARTS HERE
     if not sel_tweezer:
         t += GLOBALS['TOF']  # wait for time of flight
-    
+        if GLOBALS['blow_atoms']:
+            t+=NEW_TABLE_LINE('Sisyphus', t, (GLOBALS['Red_MOT_Frq_fin']+0.5*GLOBALS['Sisyphus_Frq'])/1e6, GLOBALS['Sisyphus_Pow'],2*ms)
+            Sisyphus_AOM_TTL(t,True)
+            Sisyphus_AOM_TTL(t+dt,False)
+            TABLE_MODE_OFF('Sisyphus', t+5*dt)
+
+        
     if sel_fluo_image:
-        if not sel_abs_image: # if no absorption imaging, we can use the same beam for fluorescence, otherwise we can change the frequency and power for fluorescence 
+        if not sel_abs_image and not sel_tweezer: # if no absorption imaging, we can use the same beam for fluorescence, otherwise we can change the frequency and power for fluorescence 
             ImagingBeam.DDS.setfreq(t, GLOBALS['ImagingFluo_Frq']/1e6*1e3)
             ImagingBeam.DDS.setamp(t, GLOBALS['ImagingFluo_Pow']*1e2)
             ImagingTweezBeam.DDS.setfreq(t,GLOBALS['ImagingFluo_Frq']/1e6*1e3)
@@ -257,15 +311,29 @@ for i in range(0,GLOBALS['n_loop']):
         t-=t_ahead_fluoimag ########### TIME MACHINE  ############################ for Fluorescence
 
         # Ramp selected compensation coils to value that sets Quantization axis for imaging
-        if GLOBALS['QuantumAxis'] and sel_tweezer:set_CompCoils_QuantizationAxis(t-GLOBALS['QuantizAxis_ramp_duration'], "ON", GLOBALS['QuantizAxis_ramp_duration'], v_step_size=0.01)
+
 
         if sel_imaging_beam=="abs":
             if sel_tweezer:
+                if not GLOBALS['repumpers_always_on']:
+                    t+=dt
+                    # Re707_AOM_TTL(t, True)
+                    # t+=dt
+                    # Re679_AOM_TTL(t, True)
+                    t+=dt
+                ImagingBeam.DDS.setfreq(t,GLOBALS['ImagingTweez_Frq']/1e6*1e3)
+                ImagingBeam.DDS.setamp(t, GLOBALS['ImagingTweez_Pow']*1e2)
+                print(GLOBALS['ImagingTweez_Frq'])
+
                 delta_imaging=GLOBALS['FluoImgPulse_Dt']
                 delta_cooling=GLOBALS['FluoImgCooling_Dt']
                 tt=t
                 Sisyphus_AOM_TTL(t,True)
-                print(f"Start Sisyphus: {t} us")
+                Sisyphus_AOM_TTL(t+dt,False)
+                print(f"Start imaging Sisyphus: {t} us")
+                NEW_TABLE_LINE('Sisyphus', t, (GLOBALS['Red_MOT_Frq_fin']+0.5*GLOBALS['SisyphusImg_Frq'])/1e6, GLOBALS['SisyphusImg_Pow'], GLOBALS['FluoImaging_duration'] )
+
+                
                 while tt-t < GLOBALS['FluoImaging_duration']:
                     if GLOBALS['FluoCoolingPulsing']:  #alternating cooling during fluorescence
                         NEW_TABLE_LINE('Sisyphus', tt+dt, (GLOBALS['Red_MOT_Frq_fin']+0.5*GLOBALS['SisyphusImg_Frq'])/1e6, GLOBALS['SisyphusImg_Pow'])
@@ -277,10 +345,18 @@ for i in range(0,GLOBALS['n_loop']):
                     tt+=delta_imaging
                     BlueImaging_AOM_TTL(tt, False)
 
-                NEW_TABLE_LINE('Sisyphus', t+ GLOBALS['FluoImaging_duration'], (GLOBALS['Red_MOT_Frq_fin']+0.5*GLOBALS['SisyphusImg_Frq'])/1e6, GLOBALS['SisyphusImg_Pow'])
-                TABLE_MODE_OFF('Sisyphus', t+ GLOBALS['FluoImaging_duration']+delta_cooling)  #solution that turns off sysiphus beam
-                
-                print(f"End Sisyphus: {tt} us")
+                TABLE_MODE_OFF('Sisyphus', tt)  #solution that turns off Sisyphus beam
+                tt+=4*dt 
+
+                #Sisyphus_AOM_TTL(t+dt+ GLOBALS['FluoImaging_duration']+delta_cooling,False)
+                if not GLOBALS['repumpers_always_on']:
+                    tt+=dt
+                    # Re707_AOM_TTL(tt, False)
+                    # tt+=dt
+                    # Re679_AOM_TTL(tt, False)
+                    tt+=dt
+
+                # print(f"End Sisyphus: {tt} us")
                 print(f"FluoImaging_duration: {GLOBALS['FluoImaging_duration']} us")
             else:
                 if not sel_abs_image:
@@ -339,33 +415,43 @@ for i in range(0,GLOBALS['n_loop']):
             Basler_Camera_extra.expose(t+500*usec+5*usec,'Fluo', frametype='tiff')
             t+=Orca_Camera.expose(t-orca_trigger_delay-Orca_Labscript_delay,'TweezFluo', trigger_duration=10, saving=True)+orca_trigger_delay+Orca_Labscript_delay #+5 for sync with fluo
 
+
         t+=GLOBALS['FluoImaging_duration'] + camera_readout
+
         t+=t_ahead_fluoimag ############### TIME MACHINE  ############################
-        if GLOBALS['QuantumAxis'] and sel_tweezer:set_CompCoils_QuantizationAxis(t, "OFF", GLOBALS['QuantizAxis_ramp_duration'] )
+
 
     
     if GLOBALS['second_shot']:
-        NEW_TABLE_LINE('Sisyphus', t-Orca_Camera_fluo_readout-GLOBALS['FluoImaging_duration']-orca_trigger_delay-Orca_Labscript_delay, (GLOBALS['Red_MOT_Frq_fin']+0.5*GLOBALS['SisyphusImg_Frq'])/1e6, GLOBALS['SisyphusImg_Pow'])
-        t+=dt
-        Sisyphus_AOM_TTL(t-Orca_Camera_fluo_readout-GLOBALS['FluoImaging_duration']-orca_trigger_delay-Orca_Labscript_delay,True)
-        t+=dt
-        # Sisyphus_AOM_TTL(t,False)
-        t+=dt
-        NEW_TABLE_LINE('Sisyphus', t, (GLOBALS['Red_MOT_Frq_fin']+0.5*GLOBALS['SisyphusImg_Frq_2nd'])/1e6, GLOBALS['SisyphusImg_Pow'])
-        tt=t
-        Sisyphus_AOM_TTL(t,True)
 
-        TABLE_MODE_OFF('Sisyphus', t + GLOBALS['FluoImaging_duration'])
-        Sisyphus_AOM_TTL(t+GLOBALS['FluoImaging_duration']+5*dt,False)
-        while tt-t < GLOBALS['FluoImaging_duration']/10:
-            delta_cooling=GLOBALS['FluoImgCooling_Dt']
-            tt+=delta_cooling
+        tt = t - Orca_Camera_fluo_readout - GLOBALS['FluoImaging_duration'] - orca_trigger_delay - Orca_Labscript_delay + 100*ms
+        t0=tt
+
+        Sisyphus_AOM_TTL(tt,True)
+        Sisyphus_AOM_TTL(tt+dt,False)
+        print(f"Start imaging Sisyphus: {tt} us")
+        # NEW_TABLE_LINE('Sisyphus', tt, (GLOBALS['Red_MOT_Frq_fin']+0.5*GLOBALS['Sisyphus_Frq'])/1e6, GLOBALS['Sisyphus_Pow'], GLOBALS['FluoImaging_duration'] )
+        NEW_TABLE_LINE('Sisyphus', tt, (GLOBALS['Red_MOT_Frq_fin']+0.5*GLOBALS['SisyphusImg_Frq'])/1e6, GLOBALS['SisyphusImg_Pow'])
+
+        t+=Orca_Camera.expose(tt+5*msec,'second-shot', trigger_duration=10, saving=True)+orca_trigger_delay+Orca_Labscript_delay #+5 for sync with fluo
+
+        while tt-t0 < GLOBALS['FluoImaging_duration']:
+            if GLOBALS['FluoCoolingPulsing']:  #alternating cooling during fluorescence
+                NEW_TABLE_LINE('Sisyphus', tt+dt, (GLOBALS['Red_MOT_Frq_fin']+0.5*GLOBALS['SisyphusImg_Frq'])/1e6, GLOBALS['SisyphusImg_Pow'])
+                tt+=delta_cooling
+                TABLE_MODE_OFF('Sisyphus', tt) 
+            else:
+                tt+=delta_cooling
             BlueImaging_AOM_TTL(tt+dt,True)
-            delta_imaging=GLOBALS['FluoImgPulse_Dt']
             tt+=delta_imaging
             BlueImaging_AOM_TTL(tt, False)
-        # t+=Orca_Camera.expose(t-2*Orca_Labscript_delay,'second-shot', trigger_duration=10, saving=True)+orca_trigger_delay+Orca_Labscript_delay
-        t+=Orca_Camera.expose(t+5*msec-orca_trigger_delay-Orca_Labscript_delay,'second-shot', trigger_duration=10, saving=True)+orca_trigger_delay+Orca_Labscript_delay #+5 for sync with fluo
+
+        TABLE_MODE_OFF('Sisyphus', tt)  #solution that turns off Sisyphus beam
+        tt+=4*dt
+
+        second_shot_duration=tt-t0
+        print(f"second shot duration {second_shot_duration}")
+        t+=second_shot_duration
         
 
     if sel_abs_image:
@@ -373,8 +459,8 @@ for i in range(0,GLOBALS['n_loop']):
             t-=t_ahead_fluoimag+orca_trigger_delay+Orca_Labscript_delay+GLOBALS['FluoImaging_duration'] + Orca_Camera_fluo_readout
         ImagingBeam.DDS.setfreq(t,GLOBALS['ImagingAbs_Frq']/1e6*1e3)
         ImagingBeam.DDS.setamp(t, GLOBALS['ImagingAbs_Pow']*1e2)
-        ImagingTweezBeam.DDS.setfreq(t,GLOBALS['Imaging_Frq']/1e6*1e3)
-        ImagingTweezBeam.DDS.setamp(t, GLOBALS['Imaging_Pow']*1e2)
+        ImagingTweezBeam.DDS.setfreq(t,GLOBALS['ImagingTweez_Frq']/1e6*1e3)
+        ImagingTweezBeam.DDS.setamp(t, GLOBALS['ImagingTweez_Pow']*1e2)
         # BlueImagingTweez_AOM_TTL(t, True)
         # BlueImagingTweez_AOM_TTL(t+GLOBALS['AbsImgPulse_duration']+dt, False)
 
@@ -406,14 +492,33 @@ for i in range(0,GLOBALS['n_loop']):
             t=take_absorbImaging(t, GLOBALS['AbsImgPulse_duration'])
 
     t+=500*us
-    t+=250*ms
-    Twizzi_Switch_TTL(t, False)
-    Tweezers_AOM_TTL(t+dt,False)
+    # 2*t+=250*ms #removed to meke the sequence faster... to be checked, why is this here?
+    # Twizzi_Switch_TTL(t, False)
+    if sel_tweezer_always_on:
+        t+=+dt
+        # Tweezers_AOM_TTL(t,True)
+        # t+=+dt
+        # Twizzi_Switch_TTL(t+dt, False)
+    else:
+        t+=+dt
+        # Tweezers_AOM_TTL(t,False)
+        t+=+dt
+        Twizzi_Switch_TTL(t+dt, True)
+    awg_trigger.go_high(t) # Trigger the AWG to start the sequence
+    awg_trigger.go_low(t + 2*usec) # Trigger the AWG to start the sequence
     t+=3*ms
     #################  IMAGING SECTION ENDS HERE
+    if not GLOBALS['repumpers_always_on']:
+        t+=dt
+        Re707_AOM_TTL(t, False)
+        t+=dt
+        Re679_AOM_TTL(t, False)
+        t+=dt
+    if GLOBALS['QuantumAxis']: t += set_CompCoils_QuantizationAxis(t, "OFF", GLOBALS['QuantizAxis_ramp_duration'] )
 
 t=standby(t)
-
-MOT_Blue3D_AOM_TTL(t, True) #re-open blue mot aom after switch off 
+Shutter_ImagingBlue.go_high(t) 
+t+=dt
+# MOT_Blue3D_AOM_TTL(t, True) #re-open blue mot aom after switch off 
 
 stop(t+GLOBALS['stop_buffering_time'])
