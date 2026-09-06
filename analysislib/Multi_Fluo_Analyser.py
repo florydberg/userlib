@@ -12,8 +12,10 @@ import datetime, time
 import seaborn as sns
 import pandas as pd
 import matplotlib.ticker as ticker
+
 ts=time.time()
 dt=datetime.datetime.now().date()
+dtf = datetime.datetime.now()
 
 # Define the Gaussian function
 def gaussian(x, a, x0, sigma, offset):
@@ -98,7 +100,6 @@ def plot_heatmap(mean_values, param1_scan, param2_scan, title=""):
     Plot heatmap from bin-indexed mean_values.
     """
 
-    # Build DataFrame safely (NO duplicates possible)
     df = (
         pd.Series(mean_values, name="Mean")
         .unstack()
@@ -106,21 +107,21 @@ def plot_heatmap(mean_values, param1_scan, param2_scan, title=""):
         .sort_index(axis=1)
     )
 
-    # Replace indices with physical scan values
     df.index = param1_scan[df.index]
     df.columns = param2_scan[df.columns]
 
-    # Plot
     plt.figure(figsize=(8, 5))
     plt.rcParams.update({'font.size': 20})
 
-    sns.heatmap( df, cmap="viridis", linewidths=0.5)
+    ax = sns.heatmap(df, cmap="viridis", linewidths=0.5)
 
     plt.xlabel(para2_name + ' (' + para2_unit + ')')
     plt.ylabel(para1_name + ' (' + para1_unit + ')')
-    plt.title(title)
-    # plt.set_yticks(plt.get_yticks())
-    # plt.set_yticklabels([f"{y:.2f}" for y in plt.get_yticks()])
+    plt.title(title + " - " + dataset_label )
+
+    ax.set_xticklabels([f"{x:.2f}" for x in df.columns])
+    ax.set_yticklabels([f"{y:.1f}" for y in df.index])
+
     plt.tight_layout()
     plt.show()
 
@@ -158,16 +159,15 @@ def duo_scan(
         mean_values,
         param1_scan=param1_scan,
         param2_scan=param2_scan,
-        title=title
+        title=title + " - " + dataset_label
     )
 
     return mean_values, std_values, error_values
 
 def mean_scan_duo(values, title):
-    param1_scan = np.linspace(72.6,72.8,21) # in kHz
-    param2_scan = np.linspace(22,30,9)
-    # param2_scan = np.linspace(26,30,5)
-    # param1_scan = np.linspace(0,360,10)
+
+    # param1_scan = np.linspace(-3,3,31)
+    # param2_scan = np.linspace(-3,3,31)
     # param2_scan = parameter2
     # param1_scan = parameter1
 
@@ -179,7 +179,7 @@ def mean_scan_duo(values, title):
         parameter2=parameter2,
         param1_scan=param1_scan,
         param2_scan=param2_scan,
-        title=title
+        title=title + " - " + dataset_label
     )
     print("Heatmap data saved to heatmap_data.csv")
 
@@ -189,16 +189,15 @@ def save_imag(plt, name):
     picname = name
     if duo:
         img_name = (f"{dt}_{run_str}_{para1_name}_{para2_name}")
-        # img_name=str(dt) + '_' + str(datetime.datetime.now().hour) + str(datetime.datetime.now().minute) + str(datetime.datetime.now().second)  + '_' + para1_name + '_' + para2_name
     else:
         img_name = (f"{dt}_{run_str}_{para1_name}")
-        # img_name=str(dt)  + '_' + str(datetime.datetime.now().hour)+ str(datetime.datetime.now().minute) +  str(datetime.datetime.now().second)  + '_' + para1_name
-    plt.savefig(two_levels_up+ '/' + img_name +  '_' + picname + ".png")
+    plt.savefig(two_levels_up+ '/' + img_name +  '_' + picname + ".png") 
     print(picname + ' saved')
 
 
 ################################### 
 duo=0
+
 saving_plots=True
 saving_location=True
 fit_TOF_waist = True
@@ -206,12 +205,14 @@ n_order=1000 # order of digits in parameter values
 saving_data=True
 fit_gaussian1= False
 
-para1_name='coils_current_ctrl_red' #'n_shot'
-para1_unit= 'V'    #'s' 
+para1_name='Sisyphus_Frq' #'n_shot'
+para1_unit= 'MHz'    #'s' 
 if duo:
-    para2_name='Red_MOT_Pow_fin'
-    para2_unit='dbm'
+    para2_name='LAC_duration'
+    para2_unit='s'
 
+param1_scan = np.linspace(-5,0,21) # in kHz
+param2_scan = np.linspace(1,10,10)
 ###################################################################################
 try: #initialization
 
@@ -222,8 +223,12 @@ try: #initialization
     unique_runs = sorted(runs.unique())
     run_str = "_".join(f"{r:04d}" for r in unique_runs)
     print(run_str)
+    if len(unique_runs) == 1:
+        dataset_label = f"dataset {unique_runs[0]:04d}"
+    else:
+        dataset_label = f"dataset {unique_runs[0]:04d}-{unique_runs[-1]:04d}"
 
-    FluoAnalyser= df['FluoAnalyser']
+    FluoAnalyser= df['FluoAnalyser_9tweez']
     # AbAnalyser= df['AbsorbAnalyser_old']
     means={}
     maxs={}
@@ -247,65 +252,67 @@ try: #initialization
     # waistavg=tuple(AbAnalyser['waistavg'])
     # waistx=tuple(AbAnalyser['waistx'])
     # waisty=tuple(AbAnalyser['waisty'])
-    centerz=tuple(FluoAnalyser['centerx'])
-    centery=tuple(FluoAnalyser['centery'])
+    itw1=tuple(FluoAnalyser['tw1_integral'])
+    itw2=tuple(FluoAnalyser['tw2_integral'])
+    itw3=tuple(FluoAnalyser['tw3_integral'])
+    itw4=tuple(FluoAnalyser['tw4_integral'])
+    itw5=tuple(FluoAnalyser['tw5_integral'])
+    itw6=tuple(FluoAnalyser['tw6_integral'])
+    itw7=tuple(FluoAnalyser['tw7_integral'])
+    itw8=tuple(FluoAnalyser['tw8_integral'])
+    itw9=tuple(FluoAnalyser['tw9_integral'])
+
+    itw=itw1+itw2+itw3+itw4+itw5+itw6+itw7+itw8+itw9
+
+
+    ihalo=tuple(FluoAnalyser['Halo_integral'])
 
     # parameter=np.array(df[parameter_name])
     # parameter=np.multiply(parameter,1/1000)
 
     if True: #print list of shots in the characterization
+        list_name = str(dt) + '_' + dtf.strftime("%H") + dtf.strftime("%M") + dtf.strftime("%S") + '_' +dtf.strftime("%f") + '_' + para1_name
         if duo:
-            list_name=str(dt)  + '_' + str(datetime.datetime.now().hour)+ str(datetime.datetime.now().minute) +  str(datetime.datetime.now().second)  + '_' + para1_name + '_' + para2_name
-        else:
-            list_name=str(dt)  + '_' + str(datetime.datetime.now().hour)+ str(datetime.datetime.now().minute) +  str(datetime.datetime.now().second)  + '_' + para1_name
+            list_name += '_' + para2_name
         list_path=paths[-1]
         one_level_up = os.path.dirname(list_path)
         two_levels_up = os.path.dirname(one_level_up)
         print(two_levels_up)
-
-
         file_name=list_name+'.csv'
 
-        # with open(two_levels_up+ '/' + file_name, 'a', newline='') as csv_file:
-        #     writer = csv.writer(csv_file)
-        #     for ii in paths:
-        #         # print(ii)
-        #         writer.writerow([ii])
-        
-
-    """ list_name=str(dt)  + '_' + str(datetime.datetime.now().hour)+ str(datetime.datetime.now().minute) +  str(datetime.datetime.now().second)  + '_' + parameter_name
-    list_path=paths[-1]
-    one_level_up = os.path.dirname(list_path)
-    two_levels_up = os.path.dirname(one_level_up)
-    print(two_levels_up)
-    
-    file_name=list_name+'.csv'
-
-    with open(two_levels_up+ '/' + file_name, 'a', newline='') as csv_file:
-        writer = csv.writer(csv_file)
-        for ii in paths:
-            # print(ii)
-            writer.writerow([ii]) """
 
     ###############################################################################################
-
     if duo:
-        print('duo analysis')
-        mean_scan_duo(number_of_atoms,'Number of atoms')
-        # mean_scan_duo(peak_density,'Peak density')
-        img_name=str(dt) + '_' + str(datetime.datetime.now().hour) + str(datetime.datetime.now().minute) + str(datetime.datetime.now().second)  
-        img_name+='_' + para1_name + '_' + para2_name + '_density'
-        df.to_csv(two_levels_up+ '/' + img_name + '.csv', index=False)
+        img_name= str(dt) + '_' + dtf.strftime("%H") + dtf.strftime("%M") + dtf.strftime("%S") + '_' +dtf.strftime("%f") + '_' + para1_name + '_' + para2_name
+    if duo:
+        print('duo analysis Tw3')
+        value = tuple(elem_1 // elem_2 for elem_1, elem_2 in zip(itw, ihalo))
 
-        print('duo analysis')
-        mean_scan_duo(peak_density,'Peak density')
-        img_name=str(dt) + '_' + str(datetime.datetime.now().hour) + str(datetime.datetime.now().minute) + str(datetime.datetime.now().second)  
+        mean_scan_duo(itw3,'Tweezer Sum integral')
+        # mean_scan_duo(peak_density,'Peak density')
+        df.to_csv(two_levels_up+ '/' + img_name + '_tw3' + '.csv', index=False)
+
+        print('duo analysis Halo')
+        mean_scan_duo(ihalo,'Halo  integral')
         img_name+='_' + para1_name + '_' + para2_name + '_density'
-        df.to_csv(two_levels_up+ '/' + img_name + '.csv', index=False)      
+        df.to_csv(two_levels_up+ '/' + img_name + '_halo' + '.csv', index=False)      
 
 
     else:
         print('single analysis')
+
+        # #Peak density plot
+        # plt.figure(figsize=(5, 4))
+
+        # x, y, stdev, std_error = data_mean(parameter1, peak_density)
+        # peakks=y
+        # std_peakks=std_error
+        # xs, ys, stdevs, std_errors = data_mean(parameter1, sum_of_atoms)
+
+        # title='Peak density'
+        # plt.title(title,fontsize=25)
+        # plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+')',fontsize=30)
+        # plt.ylabel(title,fontsize=30)
 
         # #Peak density plot
         # plt.figure(figsize=(5, 4))
@@ -550,38 +557,149 @@ try: #initialization
         # Print the fitted parameters
         # print(f"Fitted parameters: amplitude = {a_fit}, mean = {x0_fit}, sigma = {sigma_fit}")
 
-        title='Center along z'
-        figure()
-        x, y, stdev, std_error = data_mean(parameter1, centerz)
-        plt.title(title,fontsize=25)
-        plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+')')
-        # plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+')'+'\n'+ f"Fitted parameters: peak = {round((a_fit+offset)/1e6,2)} M, x_0 = {round(x0_fit,2)}, sigma_x = {round(sigma_fit,2)}")
-        # plt.errorbar(x, y, stdev, fmt='-bo', ecolor='gray',capsize=5)
-        plt.errorbar(x, y, yerr=std_error, fmt='--go', ecolor='k',capsize=5)
-        # plt.plot(x, gaussian(x, *params), color='red', label='Gaussian fit')
-        # plt.errorbar(xs, ys, std_errors, fmt='-co', ecolor='c',capsize=5)
-        # plt.legend(['Fitted','Raw'])
-        # plt.legend(['Fitted'])
-        save_imag(plt, title)
-
+        # figure(figsize=(10, 1))
+        # title='Tweez ROI integral'
+        # x, y, stdev, std_error = data_mean(parameter1, itw1)
+        # plt.title(title,fontsize=25)
+        # plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+')')
+        # # plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+')'+'\n'+ f"Fitted parameters: peak = {round((a_fit+offset)/1e6,2)} M, x_0 = {round(x0_fit,2)}, sigma_x = {round(sigma_fit,2)}")
+        # # plt.errorbar(x, y, stdev, fmt='-bo', ecolor='gray',capsize=5)
+        # plt.errorbar(x, y, yerr=std_error, fmt='--ko', ecolor='k',capsize=5)
+        # # plt.plot(x, gaussian(x, *params), color='red', label='Gaussian fit')
+        # # plt.errorbar(xs, ys, std_errors, fmt='-co', ecolor='c',capsize=5)
+        # # plt.legend(['Fitted','Raw'])
+        # # plt.legend(['Fitted'])
+        # x, y, stdev, std_error = data_mean(parameter1, itw2)
+        # plt.errorbar(x, y, yerr=std_error, fmt='--bo', ecolor='b',capsize=5)
+        # x, y, stdev, std_error = data_mean(parameter1, itw3)
+        # plt.errorbar(x, y, yerr=std_error, fmt='--ro', ecolor='r',capsize=5)
+        # x, y, stdev, std_error = data_mean(parameter1, itw4)
+        # plt.errorbar(x, y, yerr=std_error, fmt='--go', ecolor='g',capsize=5)
+        # x, y, stdev, std_error = data_mean(parameter1, itw5)
+        # plt.errorbar(x, y, yerr=std_error, fmt='--co', ecolor='c',capsize=5)
+        # x, y, stdev, std_error = data_mean(parameter1, itw6)
+        # plt.errorbar(x, y, yerr=std_error, fmt='--mo', ecolor='m',capsize=5)
+        # x, y, stdev, std_error = data_mean(parameter1, itw7)
+        # plt.errorbar(x, y, yerr=std_error, fmt='--yo', ecolor='y',capsize=5)
+        # x, y, stdev, std_error = data_mean(parameter1, itw8)
+        # plt.errorbar(x, y, yerr=std_error, fmt='--o', color='purple', ecolor='purple',capsize=5)
+        # x, y, stdev, std_error = data_mean(parameter1, itw9)
+        # plt.errorbar(x, y, yerr=std_error, fmt='--o',color='brown', ecolor='brown',capsize=5)
         
-        figure()
-        x, y, stdev, std_error = data_mean(parameter1, centery)
-        # plt.ylabel()
-        plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+')')
+        # save_imag(plt, title)
 
+        #plot the mean
+        ys = []
+        errors = []
 
-        title='Center along y'
-        plt.title(title,fontsize=25)
-        plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+')')
-        # plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+')'+'\n'+ f"Fitted parameters: peak = {round((a_fit+offset)/1e6,2)} M, x_0 = {round(x0_fit,2)}, sigma_x = {round(sigma_fit,2)}")
-        # plt.errorbar(x, y, stdev, fmt='-bo', ecolor='gray',capsize=5)
-        plt.errorbar(x, y, yerr=std_error, fmt='--ro', ecolor='k',capsize=5)
-        # plt.plot(x, gaussian(x, *params), color='red', label='Gaussian fit')
-        # plt.errorbar(xs, ys, std_errors, fmt='-co', ecolor='c',capsize=5)
-        # plt.legend(['Fitted','Raw'])
-        # plt.legend(['Fitted'])
-        save_imag(plt, title)
+        for itw in [itw1, itw2, itw3, itw4, itw5, itw6, itw7, itw8, itw9]:
+            x, y, stdev, std_error = data_mean(parameter1, itw)
+            ys.append(y)
+            errors.append(std_error)
+
+        ys = np.array(ys)
+        errors = np.array(errors)
+
+        # media delle 9 curve
+        y_mean = np.mean(ys, axis=0)
+
+        # deviazione standard tra le 9 curve
+        y_std = np.std(ys, axis=0, ddof=1)
+
+        # errore standard della media
+        y_sem = y_std / np.sqrt(ys.shape[0])
+
+        # figure(figsize=(10, 2))
+        title = 'Tweez ROI integral mean'
+
+        # plt.title(title, fontsize=25)
+        # plt.xlabel(f'{parameter_name} ({para1_unit})')
+
+        # plt.errorbar(
+        #     x,
+        #     y_mean,
+        #     yerr=y_sem,
+        #     fmt='--ko',
+        #     ecolor='k',
+        #     capsize=5
+        # )
+
+        # save_imag(plt, title)
+
+        fig, axes = plt.subplots(2, 1, figsize=(10, 6), sharex=True)
+
+        # ---------- TOP: all individual tweezers ----------
+        ax = axes[0]
+        title = 'Tweez ROI integral '
+
+        ax.set_title(title+dataset_label, fontsize=20)
+        ax.set_xlabel(f'{parameter_name} ({para1_unit})')
+
+        colors = ['k', 'b', 'r', 'g', 'c', 'm', 'y', 'purple', 'brown']
+        itws = [itw1, itw2, itw3, itw4, itw5, itw6, itw7, itw8, itw9]
+
+        ys = []
+        errors = []
+
+        for itw, color in zip(itws, colors):
+            x, y, stdev, std_error = data_mean(parameter1, itw)
+            
+            ax.errorbar(
+                x, y,
+                yerr=std_error,
+                fmt='--o',
+                color=color,
+                ecolor=color,
+                capsize=5
+            )
+            
+            ys.append(y)
+            errors.append(std_error)
+
+        # ---------- BOTTOM: mean ----------
+        ax2 = axes[1]
+        title_mean = 'Tweez ROI integral mean'
+
+        ys = np.array(ys)
+
+        y_mean = np.mean(ys, axis=0)
+        y_std = np.std(ys, axis=0, ddof=1)
+        y_sem = y_std / np.sqrt(ys.shape[0])
+
+        ax2.set_title(title_mean, fontsize=20)
+        ax2.set_xlabel(f'{parameter_name} ({para1_unit})')
+
+        ax2.errorbar(
+            x,
+            y_mean,
+            yerr=y_sem,
+            fmt='--ko',
+            ecolor='k',
+            capsize=5
+        )
+
+        # ---------- layout & save ----------
+        plt.tight_layout()
+        save_imag(plt, 'Tweez_ROI_combined')
+        
+        # figure()
+        # x, y, stdev, std_error = data_mean(parameter1, centery)
+        # # plt.ylabel()
+        # plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+')')
+
+        # figure()
+        # title='Halo integral'
+        # x, y, stdev, std_error = data_mean(parameter1, ihalo)
+        # plt.title(title,fontsize=25)
+        # plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+')')
+        # # plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+')'+'\n'+ f"Fitted parameters: peak = {round((a_fit+offset)/1e6,2)} M, x_0 = {round(x0_fit,2)}, sigma_x = {round(sigma_fit,2)}")
+        # # # plt.errorbar(x, y, stdev, fmt='-bo', ecolor='gray',capsize=5)
+        # plt.errorbar(x, y, yerr=std_error, fmt='--ro', ecolor='k',capsize=5)
+        # # # plt.plot(x, gaussian(x, *params), color='red', label='Gaussian fit')
+        # # # plt.errorbar(xs, ys, std_errors, fmt='-co', ecolor='c',capsize=5)
+        # # # plt.legend(['Fitted','Raw'])
+        # # # plt.legend(['Fitted'])
+        # save_imag(plt, title)
         if False: #switch to automatic updating of optimization parameter
             runmanager.remote.set_globals({opt_parameter: optimum})
             print('optimum set to global')

@@ -59,7 +59,8 @@ if True: #functions definition
 
     def save_imag(plt, name):
         picname = name
-        img_name=str(dt) + '_' + str(datetime.datetime.now().hour) + str(datetime.datetime.now().minute) + str(datetime.datetime.now().second)
+        tm = datetime.datetime.now()
+        img_name=str(dt) + '_' + tm.strftime("%H") + tm.strftime("%M") + tm.strftime("%S") + '_' +tm.strftime("%f")
         print(path)
         one_level_up = os.path.dirname(path)
         plt.savefig(one_level_up + '/' + img_name +  '_' + picname + ".png")
@@ -153,6 +154,7 @@ if True: #functions definition
         
         conversion_counts_to_electron = 0.11
         quantum_efficiency = 0.85
+
         TweezerPoint=TweezerSpot[Tray-waist:Tray+waist, Tray-waist:Tray+waist]*conversion_counts_to_electron/quantum_efficiency
         mean_count=mean(TweezerPoint)
         photon_count=sum(TweezerPoint)
@@ -227,7 +229,8 @@ print(path)
 with Run(path).open('r+') as shot:
     start_time = time.time()
     data_frame=data(path)
-    ROI=data_frame['Orca_ROI']
+    ROI = data_frame['Orca_ROI']
+
     second_shot = data_frame['second_shot']
     
     deltax=-1
@@ -309,6 +312,7 @@ with Run(path).open('r+') as shot:
 
     BGspot_tosave = test_roi - background_value
     background_value_tosave = np.mean(BGspot_tosave)
+    print('ciao', background_value_tosave)
 
     # plt.imshow(FluoImag, cmap='viridis')
     # plt.gca().add_patch(plt.Rectangle((x_min_BG, y_min_BG), 3, 3, edgecolor='r', facecolor='none'))
@@ -355,19 +359,24 @@ with Run(path).open('r+') as shot:
 
 
 
-    MOTray=50*5
+    # MOTray=50*5
+    MOTray=50
+    
     if ROI=='full': #ROIS
         MOT0=[2360,841]  
         MOTArea=patches.Circle(MOT0, MOTray, linewidth=1, edgecolor='r', facecolor='none')
         MotSpot=FluoImag[MOT0[1]-MOTray:MOT0[1]+MOTray, MOT0[0]-MOTray:MOT0[0]+MOTray]-np.average(BGspot)
         # plt.gca().add_patch(MOTArea)
     elif ROI=='mot':
-        MOT0=[664,431] 
-        MOTArea=patches.Circle(MOT0, MOTray, linewidth=1, edgecolor='r', facecolor='none')
-        MotSpot=FluoImag[MOT0[1]-MOTray:MOT0[1]+MOTray, MOT0[0]-MOTray:MOT0[0]+MOTray]-background_value #np.average(BGspot)
-        if second_shot:
-            MotSpot2nd=SecondImag[MOT0[1]-MOTray:MOT0[1]+MOTray, MOT0[0]-MOTray:MOT0[0]+MOTray]-background_value_2nd #np.average(BGspot_2nd)
+        # MOT0=[664,431] 
+        # MOTArea=patches.Circle(MOT0, MOTray, linewidth=1, edgecolor='r', facecolor='none')
+        # MotSpot=FluoImag[MOT0[1]-MOTray:MOT0[1]+MOTray, MOT0[0]-MOTray:MOT0[0]+MOTray]-background_value #np.average(BGspot)
+        # if second_shot:
+        #     MotSpot2nd=SecondImag[MOT0[1]-MOTray:MOT0[1]+MOTray, MOT0[0]-MOTray:MOT0[0]+MOTray]-background_value_2nd #np.average(BGspot_2nd)
         # plt.gca().add_patch(MOTArea)
+            MOT0=[round(np.shape(FluoImag)[0]/2),round(np.shape(FluoImag)[1]/2)] 
+            MOTArea=patches.Circle(MOT0, MOTray, linewidth=1, edgecolor='r', facecolor='none')
+            MotSpot=FluoImag[MOT0[1]-MOTray:MOT0[1]+MOTray, MOT0[0]-MOTray:MOT0[0]+MOTray]
     elif ROI=='tweez':
         MOTArea=patches.Circle(MOTray, MOTray, linewidth=1, edgecolor='r', facecolor='none')
         MotSpot=FluoImag-background_value #np.average(BGspot)
@@ -544,7 +553,7 @@ TweezArea81=patches.Rectangle([T8[0]-Tray/2,T8[1]-Tray/2], Tray,Tray, linewidth=
 TweezArea91=patches.Rectangle([T9[0]-Tray/2,T9[1]-Tray/2], Tray,Tray, linewidth=1, edgecolor='r', facecolor='none')
 
 plt.figure() #first shot 
-plt.imshow(MotSpot, cmap='plasma',vmin=0, vmax=50) #vmax=np.amax(MotSpot)
+plt.imshow(MotSpot, cmap='plasma',vmin=0, vmax=550) #vmax=np.amax(MotSpot)
 plt.rcParams.update({'font.size': 20})
 plt.title('Mot Spot(first shot)')
 n_ticks=5

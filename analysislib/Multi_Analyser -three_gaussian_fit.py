@@ -11,8 +11,10 @@ import matplotlib.pyplot as plt
 import datetime, time
 import seaborn as sns
 import pandas as pd
+
 ts=time.time()
 dt=datetime.datetime.now().date()
+dtf = datetime.datetime.now()
 
 # Define the Gaussian function
 def gaussian(x, a, x0, sigma, offset):
@@ -265,38 +267,15 @@ try: #initialization
     # parameter=np.multiply(parameter,1/1000)
 
     if True: #print list of shots in the characterization
+        list_name = str(dt) + '_' + dtf.strftime("%H") + dtf.strftime("%M") + dtf.strftime("%S") + '_' +dtf.strftime("%f") + '_' + para1_name
         if duo:
-            list_name=str(dt)  + '_' + str(datetime.datetime.now().hour)+ str(datetime.datetime.now().minute) +  str(datetime.datetime.now().second)  + '_' + para1_name + '_' + para2_name
-        else:
-            list_name=str(dt)  + '_' + str(datetime.datetime.now().hour)+ str(datetime.datetime.now().minute) +  str(datetime.datetime.now().second)  + '_' + para1_name
+            list_name += '_' + para2_name
         list_path=paths[-1]
         one_level_up = os.path.dirname(list_path)
         two_levels_up = os.path.dirname(one_level_up)
         print(two_levels_up)
-
-
         file_name=list_name+'.csv'
 
-        # with open(two_levels_up+ '/' + file_name, 'a', newline='') as csv_file:
-        #     writer = csv.writer(csv_file)
-        #     for ii in paths:
-        #         # print(ii)
-        #         writer.writerow([ii])
-        
-
-    """ list_name=str(dt)  + '_' + str(datetime.datetime.now().hour)+ str(datetime.datetime.now().minute) +  str(datetime.datetime.now().second)  + '_' + parameter_name
-    list_path=paths[-1]
-    one_level_up = os.path.dirname(list_path)
-    two_levels_up = os.path.dirname(one_level_up)
-    print(two_levels_up)
-    
-    file_name=list_name+'.csv'
-
-    with open(two_levels_up+ '/' + file_name, 'a', newline='') as csv_file:
-        writer = csv.writer(csv_file)
-        for ii in paths:
-            # print(ii)
-            writer.writerow([ii]) """
 
     ###############################################################################################
 

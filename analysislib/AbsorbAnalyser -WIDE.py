@@ -464,7 +464,8 @@ if True: #functions definition
 
     def save_imag(plt, name):
         picname = name
-        img_name=str(dt) + '_' + str(datetime.datetime.now().hour) + str(datetime.datetime.now().minute) + str(datetime.datetime.now().second)
+        tm = datetime.datetime.now()
+        img_name=str(dt) + '_' + tm.strftime("%H") + tm.strftime("%M") + tm.strftime("%S") + '_' +tm.strftime("%f")
         print(path)
         one_level_up = os.path.dirname(path)
         plt.savefig(one_level_up + '/' + img_name +  '_' + picname + ".png")
@@ -505,8 +506,8 @@ if True:# ROI Selection
     ray=400       
 ######################
 
-scan_parameter='Red_MOT_Frq_ini'
-scan_unit='MHz'
+scan_parameter='Y_Coils_Current'
+scan_unit='V'
 
 op_plotting = False #extra images
 

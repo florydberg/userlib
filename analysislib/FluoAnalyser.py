@@ -34,6 +34,10 @@ if True: #functions definition
         b = -(np.sin(2 * theta)) / (4 * sigma_x**2) + (np.sin(2 * theta)) / (4 * sigma_y**2)
         c = (np.sin(theta)**2) / (2 * sigma_x**2) + (np.cos(theta)**2) / (2 * sigma_y**2)
         return amplitude * np.exp(-(a * (x - xo)**2 + 2 * b * (x - xo) * (y - yo) + c * (y - yo)**2)) + offset
+    
+
+    def gaussian(y, A, y0, sigma, offset):
+        return A * np.exp(-(y - y0)**2 / (2 * sigma**2)) + offset
                    
     def saving_script(path):
         with Run(path).open('r+') as shot:
@@ -64,7 +68,8 @@ if True: #functions definition
 
     def save_imag(plt, name):
         picname = name
-        img_name=str(dt) + '_' + str(datetime.datetime.now().hour) + str(datetime.datetime.now().minute) + str(datetime.datetime.now().second)
+        tm = datetime.datetime.now()
+        img_name=str(dt) + '_' + tm.strftime("%H") + tm.strftime("%M") + tm.strftime("%S") + '_' +tm.strftime("%f")
         print(path)
         one_level_up = os.path.dirname(path)
         plt.savefig(one_level_up + '/' + img_name +  '_' + picname + ".png")
@@ -188,7 +193,7 @@ if True: #functions definition
 
             gs = gridspec.GridSpec(2, 2, width_ratios=[w * .2, w], height_ratios=[ h, h * .2])
             ax = [plt.subplot(gs[3]), plt.subplot(gs[0]), plt.subplot(gs[1])]
-            ax[2].imshow(TweezerSpot, cmap='plasma',vmin=0 , vmax=50 )
+            ax[2].imshow(TweezerSpot, cmap='plasma',vmin=0 , vmax=FLUO_MAX )
             plt.title('Tweezer '+ str(ii) + ' Spot')
             intx = np.sum(TweezerSpot, axis=0)
             inty = np.sum(TweezerSpot, axis=1)
@@ -280,6 +285,7 @@ tweezROI=8
 waist=round(tweezROI/2)
 atom_presence_threshold=30
 pixel_dim=0.388 #um
+FLUO_MAX = None
 
 ######################
 plt.style.use("default")
@@ -302,7 +308,7 @@ try:
         MOTray=50
         plt.figure(1)
         plt.title('Orca Fluo')
-        plt.imshow(FluoImag, cmap='plasma')
+        plt.imshow(FluoImag, cmap='plasma', vmax=FLUO_MAX)
         plt.colorbar()
 
         if ROI=='full': #ROIS
@@ -321,19 +327,19 @@ try:
             plt.gca().add_patch(diff_lim_area)
             if True:
     
-                mot_hsize, mot_vsize = 1000, 1000
-                mot_hpos, mot_vpos = 550*4, 200*4
+                mot_hsize, mot_vsize = 200, 200
+                mot_hpos, mot_vpos = 1160, 820
 
                 MOT_roi = patches.Rectangle(
-                    (mot_hpos, 2500-mot_vpos), mot_hsize, -mot_vsize,
+                    (mot_hpos, mot_vpos), mot_hsize, mot_vsize,
                     linewidth=2, edgecolor='orange', facecolor='none',
                     label='MOT ROI'
                 )
                 plt.gca().add_patch(MOT_roi)
 
                 # -------- TWEEZER ROI (overlay) --------
-                tweez_hsize, tweez_vsize = 200, 200
-                tweez_hpos, tweez_vpos = 650*4, 225*4
+                tweez_hsize, tweez_vsize = 50*2, 50*2
+                tweez_hpos, tweez_vpos = 655 * 4, 240*4
 
                 Tweezer_roi = patches.Rectangle(
                     (tweez_hpos, tweez_vpos), tweez_hsize, tweez_vsize,
@@ -374,6 +380,13 @@ try:
         # TweezerSpot2=MotSpot[T2[1]-Tray:T2[1]+Tray, T2[0]-Tray:T2[0]+Tray]
         # TweezerSpot3=MotSpot[T3[1]-Tray:T3[1]+Tray, T3[0]-Tray:T3[0]+Tray]
         
+        
+    y_index, x_index = np.unravel_index(np.argmax(FluoImag), FluoImag.shape)
+
+    center_y = y_index
+
+    shot.save_result('center', center_y)
+    print(f"Center at {center_y}")
 
     if False: #find FOV
         plt.figure()
@@ -435,7 +448,11 @@ try:
         shot.save_result('centerx', (x0*binfactor-C_FOV[0])*pixel_dim)
         shot.save_result('centery', (y0*binfactor-C_FOV[1])*pixel_dim)
 
+    sum_pixels=sum(FluoImag)
+    shot.save_result('sum', (sum_pixels))
     saving_script(path)
+
+
 
 except Exception as e:
     print("An error occurred during analysis:", e)

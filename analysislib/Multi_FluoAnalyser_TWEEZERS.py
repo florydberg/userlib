@@ -13,8 +13,10 @@ import datetime, time
 import seaborn as sns
 import pandas as pd
 from scipy.special import erf
+
 ts=time.time()
 dt=datetime.datetime.now().date()
+dtf = datetime.datetime.now()
 
 def saturation(dBm):
         Imag_beam_Power=140e-6/28*dBm #W   #TODO: update this value with the measure we have to take
@@ -126,10 +128,11 @@ def plot_heatmap(mean_values):
 
 def save_imag(plt, name):
     picname = name
+    tm = datetime.datetime.now()        
     if duo:
-        img_name=str(dt) + '_' + str(datetime.datetime.now().hour) + str(datetime.datetime.now().minute) + str(datetime.datetime.now().second)  + '_' + para1_name + '_' + para2_name
+        img_name=str(dt) + '_' + tm.strftime("%H") + tm.strftime("%M") + tm.strftime("%S") + '_' +tm.strftime("%f")  + '_' + para1_name + '_' + para2_name
     else:
-        img_name=str(dt)  + '_' + str(datetime.datetime.now().hour)+ str(datetime.datetime.now().minute) +  str(datetime.datetime.now().second)  + '_' + para1_name
+        img_name=str(dt)  + '_' + tm.strftime("%H") + tm.strftime("%M") + tm.strftime("%S") + '_' +tm.strftime("%f")  + '_' + para1_name
     plt.savefig(two_levels_up+ '/' + img_name +  '_' + picname + ".png")
     print(picname + ' saved')
 
@@ -309,10 +312,9 @@ try: #initialization
                 para2_unit='s'
 
     if True: #print list of shots in the characterization
+        list_name = str(dt) + '_' + dtf.strftime("%H") + dtf.strftime("%M") + dtf.strftime("%S") + '_' +dtf.strftime("%f") + '_' + para1_name
         if duo:
-            list_name=str(dt)  + '_' + str(datetime.datetime.now().hour)+ str(datetime.datetime.now().minute) +  str(datetime.datetime.now().second)  + '_' + para1_name + '_' + para2_name
-        else:
-            list_name=str(dt)  + '_' + str(datetime.datetime.now().hour)+ str(datetime.datetime.now().minute) +  str(datetime.datetime.now().second)  + '_' + para1_name
+            list_name += '_' + para2_name
         list_path=paths[-1]
         one_level_up = os.path.dirname(list_path)
         two_levels_up = os.path.dirname(one_level_up)

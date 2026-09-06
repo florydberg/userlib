@@ -15,30 +15,10 @@ ts=time.time()
 datetime.datetime.now()
 dt=datetime.datetime.now().date()
 
-def bin_data(data, binfactor):
-    # Get original shape
-    original_shape = np.array(data.shape)
-
-    # Check if the dimensions are divisible by binfactor
-    if np.any(original_shape % binfactor != 0):
-        # If not, crop the array to the nearest size that is divisible by binfactor
-        new_shape = original_shape - (original_shape % binfactor)
-        data = data[:new_shape[0], :new_shape[1]]
-    
-    # Calculate new shape
-    new_shape = (data.shape[0] // binfactor, binfactor,
-                 data.shape[1] // binfactor, binfactor)
-    
-    # Perform binning
-    binned_data = data.reshape(new_shape).sum(axis=(1, 3)) / (binfactor**2)
-    
-    return binned_data
-
-
 if True: #functions definition
     if True:  # Constants and Image Analysis  
         # V_MAX=0.6 #.15 for blue .40 for red
-        V_MAX=0.4
+        V_MAX=0.6
 
         Imag_beam_Power=440e-6 #W   #TODO: update this value with the measure we have to take
         waist_0=6.667e-3 #m
@@ -58,13 +38,40 @@ if True: #functions definition
         pixel_size = 1.85e-6  # meters per pixel (Basler)
         pix=pixel_size*500/150 # effective pixel size
         pixArea=pix*pix #pixArea = Sat
-        print(pixArea)
+        # print('Pixel area = '+ str(pixArea))
         delta=0
         Gam=32e6
         sigma_0=3*lambda_laser**2/(2*np.pi)  #  previous calculation was 9.7e-14 
         sigma=sigma_0/(1+(2*delta/Gam)**2 + I/I_sat)
-        print('sigma = '+ str(I_sat))
+        print('I_sat = '+ str(I_sat))
         print('sigma = '+ str(sigma))
+
+    def bin_data(data, binfactor):
+        # Get original shape
+        original_shape = np.array(data.shape)
+
+        # Check if the dimensions are divisible by binfactor
+        if np.any(original_shape % binfactor != 0):
+            # If not, crop the array to the nearest size that is divisible by binfactor
+            new_shape = original_shape - (original_shape % binfactor)
+            data = data[:new_shape[0], :new_shape[1]]
+        
+        # Calculate new shape
+        new_shape = (data.shape[0] // binfactor, binfactor,
+                    data.shape[1] // binfactor, binfactor)
+        
+        # Perform binning
+        binned_data = data.reshape(new_shape).sum(axis=(1, 3)) / (binfactor**2)
+        
+        return binned_data
+
+    def movingaverage(data, window_width):
+        cumsum_vec = np.cumsum(np.insert(data, 0, 0)) 
+        ma_vec = (cumsum_vec[window_width:] - cumsum_vec[:-window_width]) / window_width
+        return ma_vec
+        #box = np.ones(window_width)/window_width
+        #data_smooth = np.convolve(data, box, mode='same')
+        #return data_smooth
 
     def image_fft(image):
 
@@ -153,17 +160,20 @@ if True: #functions definition
         ampguess=min([np.max(data),np.max(intx)/(2*np.pi)**(1/2),np.max(inty)/(2*np.pi)**(1/2)]) #0.45
         
         # First Guess of Center
-        edge=0
-        x_0 = next(i for i in range(edge,len(intx)-edge) if intx[i] == max(intx[edge:len(intx)-edge]))
-        y_0 = next(i for i in range(edge,len(inty)-edge) if inty[i] == max(inty[edge:len(inty)-edge]))
-        # print('guess lent(intx), x_0:',len(intx), x_0)
+        edge = 0
+        ww = 20
+        intxmv = movingaverage(intx,ww)
+        intymv = movingaverage(inty,ww)
+        x_0 = next(i for i in range(edge,len(intxmv)-edge) if intxmv[i] == max(intxmv[edge:len(intxmv)-edge]))
+        y_0 = next(i for i in range(edge,len(intymv)-edge) if intymv[i] == max(intymv[edge:len(intymv)-edge]))
+        print('first guess of cloud center (x_0,y_0): ', x_0, y_0)
         # print('guess lent(inty), y_0:',len(inty), y_0)
-        print((x_0, len(inty)-y_0))
+        # print((x_0, len(inty)-y_0))
 
 
         initial_guess = (ampguess, x_0, y_0, 10, 10, 0.01, 0.01)  # Initial guess for amplitude, xo, yo, sigma_x, sigma_y, theta, offset
-        low = [0, RX/10, RY/10, 0, 0, 0, -10]
-        upper = [1e10, RX-RX/10, RY-RY/10, 2*RX, 2*RY, 3.1415/2, 10]
+        low = [0, RX/20, RY/20, 0, 0, 0, -10]
+        upper = [1e10, RX-RX/20, RY-RY/20, 2*RX, 2*RY, 3.1415/2, 10]
         print('initial_guess', initial_guess)
         bounds = [low, upper]
 
@@ -200,6 +210,7 @@ if True: #functions definition
         print("Npeak:", Npeak)
         print("Center (x, y):", xo, RY - yo)
         print("Standard Deviations (sigma_x, sigma_y):", sigma_x, sigma_y)
+
         print("Theta: %s pi " % (round(theta * 100) / 100))
         print("offset: %s " % (round(offset* 100) / 100))
 
@@ -282,7 +293,8 @@ if True: #functions definition
         sigma_awg = (sigma_x+sigma_y)/2
         plt.tight_layout()
         plt.subplots_adjust(wspace=0.2, hspace=0.2)
-        #plt.colorbar(ax[3].images[0], ax=ax[3], fraction=0.046, pad=0.04)
+        # plt.colorbar(ax[3].images[0], ax=ax[3], fraction=0.046, pad=0.04)
+        plt.colorbar(ax[3].images[0])
 
         plt.show()
 
@@ -460,7 +472,8 @@ if True: #functions definition
 
     def save_imag(plt, name):
         picname = name
-        img_name=str(dt) + '_' + str(datetime.datetime.now().hour) + str(datetime.datetime.now().minute) + str(datetime.datetime.now().second)
+        tm = datetime.datetime.now()
+        img_name=str(dt) + '_' + tm.strftime("%H") + tm.strftime("%M") + tm.strftime("%S") + '_' +tm.strftime("%f")
         print(path)
         one_level_up = os.path.dirname(path)
         plt.savefig(one_level_up + '/' + img_name +  '_' + picname + ".png")
@@ -481,7 +494,7 @@ op_gauss_fit_internal = 1
 
 noise_cut=True
 
-threshold_min=3
+threshold_min=2
 threshold_max=200
 ######################
 try:
@@ -498,17 +511,20 @@ try:
         if True:# mot_blue:
             if mot_red:
                 if mot_red_sf:
-                    P0=(500,500)   # Starting point for the atoms ROIxxxxx previous (270,600) 
-                    RX=400 #300
-                    RY=400 #300 
+                    P0=(450, 550) #450)   # Starting point for the atoms ROIxxxxx previous (270,600) 
+                    RX=300 #300
+                    RY=300 #300 
+                    # P0=(80, 20) #450)   # Starting point for the atoms ROIxxxxx previous (270,600) 
+                    # RX=700 #300
+                    # RY=1100 #300                     
                 else:
-                    P0=(350,330)   # Starting point for the atoms ROIxxxxx previous (200,400)
-                    RX=400
-                    RY=400
+                    P0=(150,500)   # Starting point for the atoms ROIxxxxx previous (200,400)
+                    RX=400+200
+                    RY=400+200
             else:
-                P0=(250,350)   # Starting point for the atoms ROI
-                RX=800
-                RY=800
+                P0=(250-200,450-200)   # Starting point for the atoms ROI
+                RX=600+200
+                RY=600+200
             DX=(P0[0], P0[0]+RX)
             DY=(P0[1], P0[1]+RY)
 

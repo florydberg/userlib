@@ -8,8 +8,13 @@ import math
 from scipy.optimize import curve_fit, least_squares
 import numpy as np
 import matplotlib.pyplot as plt
+import datetime, time
 import io
 from PIL import Image 
+
+ts=time.time()
+dt=datetime.datetime.now().date()
+dtf = datetime.datetime.now()
 
 # Define the Gaussian function
 def gaussian(x, a, x0, sigma, offset):
@@ -44,22 +49,10 @@ def data_mean(para, values):
     eN= [stdN[key] for key in x]
     return x, y, e, eN
 
-def save_imag(plt, scan, name):
-    # fig = plt.gcf() 
-    # def fig2img(fig): 
-    #     buf = io.BytesIO() 
-    #     fig.savefig(buf) 
-    #     buf.seek(0) 
-    #     img = Image.open(buf) 
-    #     return img 
-    # img = fig2img(fig) 
-    picname = name
-    path=R"F:/Experiments/Sr/Selection_experiment/" + scan
-    plt.savefig(path + picname + ".tiff")
-
 def save_imag(plt, name):
     picname = name
-    img_name=str(dt) + '_' + str(datetime.datetime.now().hour) + str(datetime.datetime.now().minute) + str(datetime.datetime.now().second)  + '_' + parameter_name
+    tm = datetime.datetime.now()
+    img_name=str(dt) + '_' + tm.strftime("%H") + tm.strftime("%M") + tm.strftime("%S") + '_' +tm.strftime("%f") + '_' + parameter_name
     plt.savefig(two_levels_up+ '/' + img_name +  '_' + picname + ".png")
     print(picname + ' saved')
 
@@ -87,7 +80,7 @@ parameter=np.array(df[parameter_name])
 
 parameter=np.array(df[parameter_name])
 # parameter=np.multiply(parameter,1/1000)
-list_name=str(dt)  + '_' + str(datetime.datetime.now().hour)+ str(datetime.datetime.now().minute) +  str(datetime.datetime.now().second)  + '_' + parameter_name
+list_name = str(dt) + '_' + dtf.strftime("%H") + dtf.strftime("%M") + dtf.strftime("%S") + '_' +dtf.strftime("%f") + '_' + para1_name
 list_path=paths[-1]
 one_level_up = os.path.dirname(list_path)
 two_levels_up = os.path.dirname(one_level_up)

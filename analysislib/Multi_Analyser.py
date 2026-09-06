@@ -12,14 +12,56 @@ import datetime, time
 import seaborn as sns
 import pandas as pd
 import matplotlib.ticker as ticker
+from scipy.special import ndtr
+
 ts=time.time()
 dt=datetime.datetime.now().date()
+dtf = datetime.datetime.now()
 
 # Define the Gaussian function
 def gaussian(x, a, x0, sigma, offset):
     return offset + a * np.exp(-(x - x0)**2 / (2 * sigma**2))
 
-# Define the Gaussian function
+def triple_gaussian(x, 
+                   a1, x01, s1,
+                   a2, x02, s2,
+                   a3, x03, s3,
+                   offset):
+    return (offset
+            + a1 * np.exp(-(x - x01)**2 / (2 * s1**2))
+            + a2 * np.exp(-(x - x02)**2 / (2 * s2**2))
+            + a3 * np.exp(-(x - x03)**2 / (2 * s3**2)))
+
+def skewed_gaussian_component(x, amplitude, center, sigma, skew):
+    """
+    Skew-normal peak.
+
+    skew = 0  -> ordinary symmetric Gaussian
+    skew > 0  -> longer/right-hand tail
+    skew < 0  -> longer/left-hand tail
+    """
+    sigma = np.maximum(np.abs(sigma), 1e-12)
+    z = (x - center) / sigma
+
+    gaussian_part = np.exp(-0.5 * z**2)
+    skew_part = 2.0 * ndtr(skew * z)
+
+    return amplitude * gaussian_part * skew_part
+
+
+def triple_skewed_gaussian(
+    x,
+    a1, x01, s1, 
+    a2, x02, s2, 
+    a3, x03, s3, 
+    offset, skewed
+):
+    return (
+        offset
+        + skewed_gaussian_component(x, a1, x01, s1, skewed)
+        + skewed_gaussian_component(x, a2, x02, s2, skewed)
+        + skewed_gaussian_component(x, a3, x03, s3, skewed)
+    )
 def parabbola(x, T, offset):
     mass = 1.67*88e-27
     kB=1.38*1e-23
@@ -51,7 +93,6 @@ def data_mean(para, values):
 from collections import defaultdict
 import numpy as np
 from math import sqrt
-
 
 def duo_mean(
     param1,
@@ -124,7 +165,6 @@ def plot_heatmap(mean_values, param1_scan, param2_scan, title=""):
     plt.tight_layout()
     plt.show()
 
-
 def duo_scan(
     values,
     parameter1,
@@ -163,7 +203,6 @@ def duo_scan(
     )
 
     return mean_values, std_values, error_values
-
 
 def mean_scan_duo(values, title):
     param1_scan = np.linspace(0,10,21) # in kHz
@@ -208,11 +247,11 @@ n_order=1000 # order of digits in parameter values
 saving_data=True
 fit_gaussian1= False
 
-para1_name='Red_MOT_Frq_fin'#n_shot'
+para1_name='Sisyphus_Frq'#n_shot'
 para1_unit= 'MHz'    #'s' 
 if duo:
-    para2_name='Red_MOT_Pow_fin'
-    para2_unit='dbm'
+    para2_name='Sisyphus_Frq'
+    para2_unit='MHz'
 
 ###################################################################################
 try: #initialization
@@ -224,6 +263,10 @@ try: #initialization
     unique_runs = sorted(runs.unique())
     run_str = "_".join(f"{r:04d}" for r in unique_runs)
     print(run_str)
+    if len(unique_runs) == 1:
+        dataset_label = f"dataset {unique_runs[0]:04d}"
+    else:
+        dataset_label = f"dataset {unique_runs[0]:04d}-{unique_runs[-1]:04d}"
 
     AbAnalyser= df['AbsorbAnalyser']
     # AbAnalyser= df['AbsorbAnalyser_old']
@@ -292,18 +335,18 @@ try: #initialization
     ###############################################################################################
 
     if duo:
-        print('duo analysis')
+        tm = datetime.datetime.now()
+        img_name=str(dt) + '_' + tm.strftime("%H") + tm.strftime("%M") + tm.strftime("%S") + '_' +tm.strftime("%f")
+        
+        print('duo analysis atom number')
         mean_scan_duo(number_of_atoms,'Number of atoms')
-        # mean_scan_duo(peak_density,'Peak density')
-        img_name=str(dt) + '_' + str(datetime.datetime.now().hour) + str(datetime.datetime.now().minute) + str(datetime.datetime.now().second)  
-        img_name+='_' + para1_name + '_' + para2_name + '_density'
-        df.to_csv(two_levels_up+ '/' + img_name + '.csv', index=False)
+        img_nameA ='_' + para1_name + '_' + para2_name + '_number'
+        df.to_csv(two_levels_up+ '/' + img_name + img_nameA + '.csv', index=False)
 
-        print('duo analysis')
+        print('duo analysis peak density')
         mean_scan_duo(peak_density,'Peak density')
-        img_name=str(dt) + '_' + str(datetime.datetime.now().hour) + str(datetime.datetime.now().minute) + str(datetime.datetime.now().second)  
-        img_name+='_' + para1_name + '_' + para2_name + '_density'
-        df.to_csv(two_levels_up+ '/' + img_name + '.csv', index=False)      
+        img_nameA='_' + para1_name + '_' + para2_name + '_density'
+        df.to_csv(two_levels_up+ '/' + img_name + img_nameA + '.csv', index=False)      
 
 
     else:
@@ -318,7 +361,7 @@ try: #initialization
         xs, ys, stdevs, std_errors = data_mean(parameter1, sum_of_atoms)
 
         title='Peak density'
-        plt.title(title,fontsize=25)
+        plt.title(title+ " - " + dataset_label,fontsize=25)
         plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+')',fontsize=30)
         plt.ylabel(title,fontsize=30)
         plt.errorbar(x, y, yerr=std_error, fmt='-o',
@@ -378,7 +421,7 @@ try: #initialization
         #plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+')')
 
         title='Number Of Atoms'
-        plt.title(title,fontsize=15)
+        plt.title(title+ " - " + dataset_label,fontsize=15)
         plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+')',fontsize=15)
         # plt.ylabel(title,fontsize=15)
         plt.errorbar(x, y, yerr=std_error, fmt='o', linestyle='-', color='black',
@@ -431,6 +474,7 @@ try: #initialization
 
         save_imag(plt, title)
 
+
         # Waist avg plot
 
         if fit_TOF_waist:
@@ -468,8 +512,8 @@ try: #initialization
             # params, covariance = curve_fit(parabbola,xw, yw,p0=initial_guess, bounds=bounds )
 
             # Extract the fitted parameters
-            Temp_fit, waist_i = params
-            print(f"Fitted parameters: Temp = {Temp_fit}, waist_i={waist_i}")
+            # Temp_fit, waist_i = params
+            # print(f"Fitted parameters: Temp = {Temp_fit}, waist_i={waist_i}")
 
             # Print the fitted parameters
             # print(f"Fitted parameters: Temp = {Temp_fit}, waist_i={waist_i}")
@@ -480,7 +524,7 @@ try: #initialization
             # plt.errorbar(xw, yw, yerr=std_errorw, fmt='--bo', ecolor='k',capsize=5)
             # plt.plot(xw, plot_parabbola(xw, Temp_fit, waist_i), fmt='--ko', capsize=5)
 
-        xw, yw, stdevw, std_errorw =data_mean(parameter1, np.multiply(waistavg,1000))
+        # xw, yw, stdevw, std_errorw =data_mean(parameter1, np.multiply(waistavg,1000))
         # print( xw)
         # print( yw)
         # print( std_errorw)
@@ -500,37 +544,35 @@ try: #initialization
         # # Print the fitted parameters
         # print(f"Fitted parameters: Temp = {Temp_fit}, waist_i={waist_i}")
 
-        figure()
-        plt.rcParams.update({'font.size': 22})
+        # figure()
+        # plt.rcParams.update({'font.size': 22})
 
-        # plt.errorbar(xw, yw, yerr=std_errorw, fmt='--ro', ecolor='k',capsize=5)
-        plt.errorbar(xw, yw, yerr=std_errorw, fmt='o',linestyle='None',
-            markerfacecolor='lightgray', markeredgecolor='black', markersize=4,
-            ecolor='black', capsize=3,)
+        # # plt.errorbar(xw, yw, yerr=std_errorw, fmt='--ro', ecolor='k',capsize=5)
+        # plt.errorbar(xw, yw, yerr=std_errorw, fmt='o',linestyle='None',
+        #     markerfacecolor='lightgray', markeredgecolor='black', markersize=4,
+        #     ecolor='black', capsize=3,)
         
-        plt.title('Waist avg',fontsize=25)
+        # plt.title('Waist avg'+ " - " + dataset_label,fontsize=25)
 
-        plt.ylabel('Waist avg (mm)',fontsize=25)
-        if fit_TOF_waist:
-            if True:
-                plt.plot(xw, plot_parabbola(xw, Temp_fit, waist_i), linestyle='-', color='black', label='Parabola fit')
-            plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+'), Temperature = '+ str(round(Temp_fit*1e6, 2)) +' uK', fontsize=25)
-        else:
-            plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+')')
-        plt.legend(['Raw','Fitted'])
+        # plt.ylabel('Waist avg (mm)',fontsize=25)
+        # if fit_TOF_waist:
+        #     if True:
+        #         plt.plot(xw, plot_parabbola(xw, Temp_fit, waist_i), linestyle='-', color='black', label='Parabola fit')
+        #     plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+'), Temperature = '+ str(round(Temp_fit*1e6, 2)) +' uK', fontsize=25)
+        # else:
+        #     plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+')')
+        # plt.legend(['Raw','Fitted'])
         
-        title = 'Waist avg'
+        # title = 'Waist avg'
 
-        if saving_plots: save_imag(plt, title)
+        # if saving_plots: save_imag(plt, title)
 
-        # writer.writerow([optimum,str(best_value), df['sequence'].iloc[-1], str(df['labscript'].iloc[-1])])
-        figure()
-        x, y, stdev, std_error = data_mean(parameter1, centerx)
-        xs, ys, stdevs, std_errors = data_mean(parameter1, sum_of_atoms)
+        # # writer.writerow([optimum,str(best_value), df['sequence'].iloc[-1], str(df['labscript'].iloc[-1])])
 
-        # plt.ylabel()
+
+        # # plt.ylabel()
         
-        plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+')')
+        # plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+')')
 
         if saving_data:
             print('waist avg data saved to waist_avg.csv')
@@ -556,8 +598,13 @@ try: #initialization
         # Print the fitted parameters
         # print(f"Fitted parameters: amplitude = {a_fit}, mean = {x0_fit}, sigma = {sigma_fit}")
 
+        # plt.figure(figsize=(3, 2))
+        plt.figure()
+        x, y, stdev, std_error = data_mean(parameter1, centerx)
+        xs, ys, stdevs, std_errors = data_mean(parameter1, sum_of_atoms)
+
         title='Center along x'
-        plt.title(title,fontsize=25)
+        plt.title(title + " - " + dataset_label,fontsize=25)
         plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+')')
         # plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+')'+'\n'+ f"Fitted parameters: peak = {round((a_fit+offset)/1e6,2)} M, x_0 = {round(x0_fit,2)}, sigma_x = {round(sigma_fit,2)}")
         # plt.errorbar(x, y, stdev, fmt='-bo', ecolor='gray',capsize=5)
@@ -567,6 +614,16 @@ try: #initialization
         # plt.legend(['Fitted','Raw'])
         # plt.legend(['Fitted'])
         save_imag(plt, title)
+
+        if saving_data:
+            print("CSV saved in:", os.getcwd())
+            # print (x, y, std_error)
+            with open(two_levels_up + '/'+f"{dt}_{run_str}_"+'center_x.csv', 'w', newline='') as csv_file:
+                print(csv_file)
+                writer = csv.writer(csv_file)
+
+                for ii in zip(x, y,  std_error):
+                    writer.writerow(ii)
 
         
         figure()
@@ -592,7 +649,7 @@ try: #initialization
         # print(f"Fitted parameters: amplitude = {a_fit}, mean = {x0_fit}, sigma = {sigma_fit}")
 
         title='Center along y'
-        plt.title(title,fontsize=25)
+        plt.title(title + " - " + dataset_label,fontsize=25)
         plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+')')
         # plt.xlabel(str(parameter_name)+' ('+str(para1_unit)+')'+'\n'+ f"Fitted parameters: peak = {round((a_fit+offset)/1e6,2)} M, x_0 = {round(x0_fit,2)}, sigma_x = {round(sigma_fit,2)}")
         # plt.errorbar(x, y, stdev, fmt='-bo', ecolor='gray',capsize=5)
@@ -602,10 +659,163 @@ try: #initialization
         # plt.legend(['Fitted','Raw'])
         # plt.legend(['Fitted'])
         save_imag(plt, title)
+
+
+        # --- Triple Gaussian fit for center along y ---
+
+    if True:
+        # Initial guesses (IMPORTANT: adjust if needed)
+        x_span = max(x) - min(x)
+
+        initial_guess = [
+            max(y), -1.5, x_span/20,   # peak 1
+            max(y), 0.5, x_span/20,   # peak 2
+            max(y), 2, x_span/20, # peak 3
+            min(y)                # offset
+        ]
+
+        # Bounds (helps stability)
+        lower_bounds = [
+            0, min(x), 0,
+            0, 0.1, 0,
+            0, min(x), 0,
+            -np.inf
+        ]
+
+        upper_bounds = [
+            1.2*max(y), max(x), x_span,
+            1.2*max(y), 1, x_span,
+            1.2*max(y), max(x), x_span,
+            np.inf
+        ]
+
+        initial_guess_skd = [
+            max(y), -1.1, x_span/20,   # peak 1
+            max(y), 0.5, x_span/20,   # peak 2
+            max(y), 2.3, x_span/20, # peak 3
+            min(y), -2                # offset
+        ]
+
+        # Bounds (helps stability)
+        lower_bounds_skd = [
+            0, min(x), 0,
+            0, 0.1, 0,
+            0, min(x), 0,
+            -np.inf,
+            -5
+        ]
+
+        upper_bounds_skd = [
+            1.2*max(y), max(x), x_span,
+            1.2*max(y), 0.8, x_span,
+            1.2*max(y), max(x), x_span,
+            np.inf,
+            5
+        ]
+        try:
+            params, covariance = curve_fit(
+                triple_gaussian, x, y,
+                p0=initial_guess,
+                bounds=(lower_bounds, upper_bounds)
+            )
+
+            # Extract centers
+            x01 = params[1]
+            x02 = params[4]
+            x03 = params[7]
+
+            errors = np.sqrt(np.diag(covariance))
+
+            dx01, dx02, dx03 = errors[1], errors[4], errors[7]
+
+            # Sort them (optional but cleaner)
+            centers = sorted([x01, x02, x03])
+
+            print("\n=== Triple Gaussian Centers ===")
+            print(f"Peak 1 center: {x01:.3f} +- {dx01:.3f}")
+            print(f"Peak 2 center: {x02:.3f} +- {dx02:.3f}")
+            print(f"Peak 3 center: {x03:.3f} +- {dx03:.3f}")
+
+            params_skd, covariance_skd = curve_fit(
+                triple_skewed_gaussian, x, y,
+                p0=initial_guess_skd,
+                bounds=(lower_bounds_skd, upper_bounds_skd)
+            )
+
+            # Extract centers
+            x01_skd = params_skd[1]
+            x02_skd = params_skd[4]
+            x03_skd = params_skd[7]
+
+            errors_skd = np.sqrt(np.diag(covariance_skd))
+
+            # Sort them (optional but cleaner)
+            centers_skd = sorted([x01_skd, x02_skd, x03_skd])
+
+            dx01_skd, dx02_skd, dx03_skd = errors_skd[1], errors_skd[4], errors_skd[7]
+
+            print("\n=== Triple Skewed Gaussian Centers ===")
+            print(f"Skd Peak 1 center: {x01_skd:.3f} +- {dx01_skd:.3f}")
+            print(f"Skd Peak 2 center: {x02_skd:.3f} +- {dx02_skd:.3f}")
+            print(f"Skd Peak 3 center: {x03_skd:.3f} +- {dx03_skd:.3f}")
+
+            # Plot fit
+            x_dense = np.linspace(min(x), max(x), 500)
+            plt.plot(x_dense, triple_gaussian(x_dense, *params),
+                    'k-', label='mJ states')
+
+            x_dense = np.linspace(min(x), max(x), 500)
+            plt.plot(x_dense, triple_skewed_gaussian(x_dense, *params_skd),
+                    'b-', label='mJ states - skewed')
+            
+            plt.legend()
+            xlabel=str(parameter_name)+' ('+str(para1_unit)+')'
+            plt.xlabel(f"{xlabel}") #\n Peaks centers: {centers[0]:.6f}, {centers[1]:.6f}, {centers[2]:.6f}\n Skewed Peaks centers:{centers_skd[0]:.6f}, {centers_skd[1]:.6f}, {centers_skd[2]:.6f}" 
+
+        except Exception as e:
+            print("Triple Gaussian fit failed:", e)
+            
+            if saving_data:
+                print("CSV saved in:", os.getcwd())
+                # print (x, y, std_error)
+                with open(two_levels_up + '/'+f"{dt}_{run_str}_"+'center_y.csv', 'w', newline='') as csv_file:
+                    print(csv_file)
+                    writer = csv.writer(csv_file)
+
+                    for ii in zip(x, y,  std_error):
+                        writer.writerow(ii)
+
+            print("two_levels_up =", two_levels_up)
+            print("Saving to:", os.path.join(two_levels_up, f"{dt}_{run_str}_center_y.csv"))
+
+
         if False: #switch to automatic updating of optimization parameter
             runmanager.remote.set_globals({opt_parameter: optimum})
             print('optimum set to global')
 except Exception as e:
     print("An error occurred during analysis:", e)
 
+
+# n_boot = 200
+# centers_boot = []
+
+# for _ in range(n_boot):
+#     indices = np.random.randint(0, len(x), len(x))
+#     x_resampled = x[indices]
+#     y_resampled = y[indices]
+
+#     try:
+#         p, _ = curve_fit(triple_gaussian, x_resampled, y_resampled, p0=params)
+#         centers_boot.append([p[1], p[4], p[7]])
+#     except:
+#         continue
+
+# centers_boot = np.array(centers_boot)
+
+# means = np.mean(centers_boot, axis=0)
+# stds  = np.std(centers_boot, axis=0)
+
+# print("\n=== Bootstrap Peak Centers ===")
+# for i in range(3):
+#     print(f"Peak {i+1}: {means[i]:.6f} ± {stds[i]:.6f}")
 
