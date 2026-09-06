@@ -1,543 +1,638 @@
-from lyse import *
-from pylab import *
-import csv
-import runmanager
-from runmanager.remote import *
-import numpy as np
-import math
-from scipy.optimize import curve_fit, least_squares
-import numpy as np
-import matplotlib.pyplot as plt
-import datetime, time
-import seaborn as sns
-import pandas as pd
-import matplotlib.ticker as ticker
+"""
+N-dimensional fluorescence tweezer ROI analysis for Lyse.
 
-ts=time.time()
-dt=datetime.datetime.now().date()
-dtf = datetime.datetime.now()
+- Supports any number of scan parameters.
+- Averages over all tweezers at each N-D scan coordinate.
+- Treats first and second fluorescence images separately.
+- 1D scan: error-bar plot
+- 2D scan: heatmap
+- 3D+ scan: 2D heatmap slice with other dimensions fixed
+- Saves the complete N-D results table as CSV
+"""
 
-# Define the Gaussian function
-def gaussian(x, a, x0, sigma, offset):
-    return offset + a * np.exp(-(x - x0)**2 / (2 * sigma**2))
-
-# Define the Gaussian function
-def parabbola(x, T, offset):
-    mass = 1.67*88e-27
-    kB=1.38*1e-23
-    a=np.sqrt( offset**2+(kB*T/mass)*x*x)
-    return a
-
-def plot_parabbola(x, T, offset):
-    mass = 1.67*88e-27
-    kB=1.38*1e-23
-    a=np.sqrt(offset**2+ kB*T/mass*np.square(x))
-    return a
-
-def data_mean(para, values):
-    data1 = {}
-    std1 = {}
-    stdN = {}
-    for ii in set(para):
-        indices = [idx for idx, val in enumerate(para) if val == ii]
-        aa = [values[idx] for idx in indices]
-        data1[ii] = np.mean(aa)
-        std1[ii] = np.std(aa)
-        stdN[ii] = np.std(aa)/sqrt(len(aa))
-    x = sorted(data1.keys())
-    y = [data1[key] for key in x]
-    e = [std1[key] for key in x]
-    eN= [stdN[key] for key in x]
-    return x, y, e, eN
+from __future__ import annotations
 
 from collections import defaultdict
+from datetime import datetime
+from pathlib import Path
+
+import lyse
+import matplotlib.pyplot as plt
 import numpy as np
-from math import sqrt
+import pandas as pd
+import seaborn as sns
 
 
-def duo_mean(
-    param1,
-    param2,
-    values,
-    *,
-    param1_mapping,
-    param2_mapping
-):
+# =============================================================================
+# CONFIGURATION
+
+# sem == standard error of the mean
+# =============================================================================
+
+N_TWEEZERS = 36
+SAVE_PLOTS = True
+SAVE_CSV = True
+One_D = False
+
+if One_D:
+    PLOT_AXES = (0,)      # 1D: plot FluoImgPulse_Dt
+else:
+    PLOT_AXES = (0, 1)    # 2D: plot FluoImgPulse_Dt × LAC_duration
+
+
+    
+SCAN_NAMES = [
+    "FluoImgPulse_Dt",
+    "LAC_duration",
+    "LAC_Frq",
+    "LAC_Pow",
+    "SisyphusImg_Frq",
+]
+
+SCAN_UNITS = [
+    "ms",
+    "s",
+     "MHz",
+     "",
+     "MHz",
+]
+
+# For more than two scan parameters:
+# Which two parameters should be displayed as the heatmap axes?
+# Indices refer to SCAN_NAMES.
+FIXED_VALUES = {
+    "LAC_Frq": -1.2,
+    "LAC_Pow": 17,
+    "SisyphusImg_Frq": -2.9,
+}
+# Fix dimensions not included in PLOT_AXES.
+# Example:
+# FIXED_VALUES = {
+#     "LAC_Frq": -1.25,
+#     "LAC_power": 0.8,
+# }
+#
+# Leave empty to automatically select the middle measured value of every
+# non-plotted scan dimension.
+FIXED_VALUES = {}
+
+# =============================================================================
+
+
+def scalar_per_shot(values, name: str) -> np.ndarray:
     """
-    Compute mean, std and stderr per (param1_bin, param2_bin).
+    Convert one Lyse dataframe column to exactly one finite scalar per shot.
 
-    param*_mapping MUST return an INTEGER bin index.
+    Raises a clear error instead of silently accepting arrays or lists.
     """
+    output = []
 
-    if not (len(param1) == len(param2) == len(values)):
-        raise ValueError("param1, param2 and values must have the same length")
+    for index, value in enumerate(values):
+        array = np.asarray(value)
+
+        if array.size != 1:
+            raise ValueError(
+                f"'{name}' must contain one scalar per shot. "
+                f"Shot {index} contains shape {array.shape}."
+            )
+
+        output.append(float(array.reshape(-1)[0]))
+
+    return np.asarray(output, dtype=float)
+
+
+
+def validate_scan_configuration(df: pd.DataFrame):
+    """Check scan-parameter and plot configuration before running."""
+    if not SCAN_NAMES:
+        raise ValueError("SCAN_NAMES cannot be empty.")
+
+    if len(SCAN_NAMES) != len(SCAN_UNITS):
+        raise ValueError(
+            "SCAN_NAMES and SCAN_UNITS must have the same number of entries."
+        )
+
+    duplicates = sorted(
+        name
+        for name in set(SCAN_NAMES)
+        if SCAN_NAMES.count(name) > 1
+    )
+
+    if duplicates:
+        raise ValueError(
+            f"Duplicate names in SCAN_NAMES: {', '.join(duplicates)}"
+        )
+
+    missing = [
+        name
+        for name in SCAN_NAMES
+        if name not in df.columns
+    ]
+
+    if missing:
+        raise KeyError(
+            "The following scan globals are not present in Lyse data: "
+            + ", ".join(missing)
+        )
+
+    # PLOT_AXES may select either one plotted parameter or two:
+    if len(PLOT_AXES) not in (1, 2):
+        raise ValueError(
+            "PLOT_AXES must contain either one index, e.g. (0,), "
+            "or two indices, e.g. (0, 1)."
+        )
+
+    if len(set(PLOT_AXES)) != len(PLOT_AXES):
+        raise ValueError("PLOT_AXES cannot contain duplicate indices.")
+
+    if any(index < 0 or index >= len(SCAN_NAMES) for index in PLOT_AXES):
+        raise ValueError(
+            "PLOT_AXES contains an index outside SCAN_NAMES."
+        )
+
+    unknown_fixed = set(FIXED_VALUES) - set(SCAN_NAMES)
+
+    if unknown_fixed:
+        raise KeyError(
+            "FIXED_VALUES contains unknown scan names: "
+            + ", ".join(sorted(unknown_fixed))
+        )
+
+def load_roi_integrals(analyser: pd.DataFrame, suffix: str = "") -> np.ndarray:
+    """
+    Return ROI integrals as an array of shape:
+
+        (number_of_tweezers, number_of_shots)
+    """
+    columns = [
+        f"tw{i}_integral{suffix}"
+        for i in range(1, N_TWEEZERS + 1)
+    ]
+
+    missing = [column for column in columns if column not in analyser.columns]
+    if missing:
+        raise KeyError(
+            f"Missing ROI-integral columns for suffix '{suffix}': "
+            + ", ".join(missing)
+        )
+
+    values = analyser.loc[:, columns].to_numpy(dtype=float).T
+
+    if values.shape[0] != N_TWEEZERS:
+        raise RuntimeError("Unexpected number of loaded tweezer ROIs.")
+
+    return values
+
+
+def make_dataset_label(paths: pd.Series) -> str:
+    """Create a useful label such as dataset 0042-0054."""
+    runs = paths.str.extract(r"_(\d{4})_")[0].dropna()
+
+    if runs.empty:
+        return "loaded dataset"
+
+    runs = runs.astype(int)
+    if runs.min() == runs.max():
+        return f"dataset {runs.min():04d}"
+
+    return f"dataset {runs.min():04d}-{runs.max():04d}"
+
+
+def output_directory(paths: pd.Series) -> Path:
+    """
+    Keep the original convention:
+    save one directory above the run-file directory.
+    """
+    return Path(paths.iloc[-1]).parent.parent
+
+
+def aggregate_nd_scan(
+    scan_values: list[np.ndarray],
+    roi_integrals: np.ndarray,
+    shot_name: str,
+) -> pd.DataFrame:
+    """
+    Aggregate all loaded shots by their full N-dimensional scan coordinate.
+
+    For each coordinate:
+    1. average repeated experimental shots for each tweezer;
+    2. calculate the mean across the 36 tweezers;
+    3. calculate SEM across the 36 tweezer means.
+    """
+    n_shots = roi_integrals.shape[1]
+
+    if any(values.size != n_shots for values in scan_values):
+        raise ValueError("Each scan parameter must have one value per shot.")
 
     bins = defaultdict(list)
 
-    for p1, p2, v in zip(param1, param2, values):
-        b1 = param1_mapping(p1)
-        b2 = param2_mapping(p2)
-
-        if b1 is None or b2 is None:
-            continue
-
-        bins[(b1, b2)].append(v)
-
-    mean_values = {}
-    std_values = {}
-    error_values = {}
-
-    for key, vals in bins.items():
-        vals = np.asarray(vals)
-        mean_values[key] = vals.mean()
-        std_values[key] = vals.std()
-        error_values[key] = vals.std() / sqrt(len(vals))
-
-    return mean_values, std_values, error_values
-
-def plot_heatmap(mean_values, param1_scan, param2_scan, title=""):
-    """
-    Plot heatmap from bin-indexed mean_values.
-    """
-
-    df = (
-        pd.Series(mean_values, name="Mean")
-        .unstack()
-        .sort_index(axis=0)
-        .sort_index(axis=1)
-    )
-
-    df.index = param1_scan[df.index]
-    df.columns = param2_scan[df.columns]
-
-    plt.figure(figsize=(8, 5))
-    plt.rcParams.update({'font.size': 20})
-
-    ax = sns.heatmap(df, cmap="viridis", linewidths=0.5)
-
-    plt.xlabel(para2_name + ' (' + para2_unit + ')')
-    plt.ylabel(para1_name + ' (' + para1_unit + ')')
-    plt.title(title + " - " + dataset_label )
-
-    ax.set_xticklabels([f"{x:.2f}" for x in df.columns])
-    ax.set_yticklabels([f"{y:.1f}" for y in df.index])
-
-    plt.tight_layout()
-    plt.show()
-
-def duo_scan(
-    values,
-    parameter1,
-    parameter2,
-    param1_scan,
-    param2_scan,
-    title=""
-):
-    """
-    Full analysis pipeline:
-    - bin
-    - average
-    - plot heatmap
-    """
-
-    # Integer-bin mappings (rock-solid)
-    def param1_mapping(p):
-        return int(np.argmin(np.abs(param1_scan - p)))
-
-    def param2_mapping(p):
-        return int(np.argmin(np.abs(param2_scan - p)))
-
-    mean_values, std_values, error_values = duo_mean(
-        parameter1,
-        parameter2,
-        values,
-        param1_mapping=param1_mapping,
-        param2_mapping=param2_mapping
-    )
-
-    plot_heatmap(
-        mean_values,
-        param1_scan=param1_scan,
-        param2_scan=param2_scan,
-        title=title + " - " + dataset_label
-    )
-
-    return mean_values, std_values, error_values
-
-def mean_scan_duo(values, title):
-
-    # param1_scan = np.linspace(-3,3,31)
-    # param2_scan = np.linspace(-3,3,31)
-    # param2_scan = parameter2
-    # param1_scan = parameter1
-
-
-
-    duo_scan(
-        values=values,
-        parameter1=parameter1,
-        parameter2=parameter2,
-        param1_scan=param1_scan,
-        param2_scan=param2_scan,
-        title=title + " - " + dataset_label
-    )
-    print("Heatmap data saved to heatmap_data.csv")
-
-    if saving_plots: save_imag(plt, title)  #####################################################################
-
-def save_imag(plt, name):
-    picname = name
-    if duo:
-        img_name = (f"{dt}_{run_str}_{para1_name}_{para2_name}")
-    else:
-        img_name = (f"{dt}_{run_str}_{para1_name}")
-    plt.savefig(two_levels_up+ '/' + img_name +  '_' + picname + ".png") 
-    print(picname + ' saved')
-
-
-################################### 
-duo=0
-
-saving_plots=True
-saving_location=True
-fit_TOF_waist = True
-n_order=1000 # order of digits in parameter values
-saving_data=True
-fit_gaussian1= False
-
-para1_name='FluoImgPulse_Dt' #'n_shot'
-para1_unit= 'ms'    #'s' 
-if duo:
-    para2_name='LAC_duration'
-    para2_unit='s'
-
-param1_scan = np.linspace(-5,0,21) # in kHz
-param2_scan = np.linspace(1,10,10)
-###################################################################################
-try: #initialization
-
-    # Let's obtain the dataframe for all of lyse's currently loaded shots:
-    df = data()
-    paths=df['filepath']
-    runs = paths.str.extract(r'_(\d{4})_')[0].astype(int)
-    unique_runs = sorted(runs.unique())
-    run_str = "_".join(f"{r:04d}" for r in unique_runs)
-    print(run_str)
-    if len(unique_runs) == 1:
-        dataset_label = f"dataset {unique_runs[0]:04d}"
-    else:
-        dataset_label = f"dataset {unique_runs[0]:04d}-{unique_runs[-1]:04d}"
-
-    FluoAnalyser= df['FluoAnalyser_tweez']
-    # AbAnalyser= df['AbsorbAnalyser_old']
-    means={}
-    maxs={}
-    vars={}
-    photons={}
-    atoms={}
-
-    parameter1=np.array(df[para1_name])
-    #print('optimization parameter 1 =', parameter1)
-    parameter_name = para1_name
-    if duo:
-        parameter2=np.array(df[para2_name])
-        print('optimization parameter 2 =', parameter2)
-        # print('optimization parameter 2 =', parameter2)
-    #parameter_name = AbAnalyser['scan_parameter'].iloc[-1]
-    #scan_unit=AbAnalyser['scan_unit'].iloc[-1]
-
-    # number_of_atoms=tuple(AbAnalyser['number_of_atoms'])
-    # sum_of_atoms=tuple(AbAnalyser['sum_of_atoms'])
-    # peak_density=tuple(AbAnalyser['peak_density'])
-    # waistavg=tuple(AbAnalyser['waistavg'])
-    # waistx=tuple(AbAnalyser['waistx'])
-    # waisty=tuple(AbAnalyser['waisty'])
-
-    for i in range(1, 37):
-        globals()[f"itw{i}"] = tuple(FluoAnalyser[f"tw{i}_integral"])
-
-    for i in range(1, 37):
-        globals()[f"itw{i}_2nd"] = tuple(FluoAnalyser[f"tw{i}_integral_2nd"])
-
-
-    itw = tuple(
-    value
-    for i in range(1, 37)
-    for value in FluoAnalyser[f"tw{i}_integral"]
-    )
-    itw_2nd = tuple(
-    value
-    for i in range(1, 37)
-    for value in FluoAnalyser[f"tw{i}_integral_2nd"]
-    )
-
-
-    # ihalo=tuple(FluoAnalyser['Halo_integral'])
-
-    # parameter=np.array(df[parameter_name])
-    # parameter=np.multiply(parameter,1/1000)
-
-    if True: #print list of shots in the characterization
-        list_name = str(dt) + '_' + dtf.strftime("%H") + dtf.strftime("%M") + dtf.strftime("%S") + '_' +dtf.strftime("%f") + '_' + para1_name
-        if duo:
-            list_name += '_' + para2_name
-        list_path=paths[-1]
-        one_level_up = os.path.dirname(list_path)
-        two_levels_up = os.path.dirname(one_level_up)
-        print(two_levels_up)
-        file_name=list_name+'.csv'
-
-
-    ###############################################################################################
-    if duo:
-        img_name= str(dt) + '_' + dtf.strftime("%H") + dtf.strftime("%M") + dtf.strftime("%S") + '_' +dtf.strftime("%f") + '_' + para1_name + '_' + para2_name
-    if duo:
-        print('duo analysis Tw3')
-        value = tuple(elem_1 // elem_2 for elem_1, elem_2 in zip(itw, ihalo))
-
-        mean_scan_duo(itw3,'Tweezer Sum integral')
-        # mean_scan_duo(peak_density,'Peak density')
-        df.to_csv(two_levels_up+ '/' + img_name + '_tw3' + '.csv', index=False)
-
-        # print('duo analysis Halo')
-        # mean_scan_duo(ihalo,'Halo  integral')
-        # img_name+='_' + para1_name + '_' + para2_name + '_density'
-        # df.to_csv(two_levels_up+ '/' + img_name + '_halo' + '.csv', index=False)      
-
-
-    else:
-        print('single analysis')
-
-        # #plot the mean
-        # ys = []
-        # errors = []
-
-        # for itw in [itw1, itw2, itw3, itw4, itw5, itw6, itw7, itw8, itw9]:
-        #     x, y, stdev, std_error = data_mean(parameter1, itw)
-        #     ys.append(y)
-        #     errors.append(std_error)
-
-        # ys = np.array(ys)
-        # errors = np.array(errors)
-
-        # # media delle 9 curve
-        # y_mean = np.mean(ys, axis=0)
-
-        # # deviazione standard tra le 9 curve
-        # y_std = np.std(ys, axis=0, ddof=1)
-
-        # # errore standard della media
-        # y_sem = y_std / np.sqrt(ys.shape[0])
-
-        # # figure(figsize=(10, 2))
-        # title = 'Tweez ROI integral mean'
-
-        # # plt.title(title, fontsize=25)
-        # # plt.xlabel(f'{parameter_name} ({para1_unit})')
-
-        # # plt.errorbar(
-        # #     x,
-        # #     y_mean,
-        # #     yerr=y_sem,
-        # #     fmt='--ko',
-        # #     ecolor='k',
-        # #     capsize=5
-        # # )
-
-        # # save_imag(plt, title)
-
-        # fig, axes = plt.subplots(2, 1, figsize=(10, 6), sharex=True)
-
-        # # ---------- TOP: all individual tweezers ----------
-        # ax = axes[0]
-        # title = 'Tweez ROI integral '
-
-        # ax.set_title(title+dataset_label, fontsize=20)
-        # ax.set_xlabel(f'{parameter_name} ({para1_unit})')
-
-        # colors = ['k', 'b', 'r', 'g', 'c', 'm', 'y', 'purple', 'brown']
-        # itws = [itw1, itw2, itw3, itw4, itw5, itw6, itw7, itw8, itw9]
-
-        # ys = []
-        # errors = []
-
-        # for itw, color in zip(itws, colors):
-        #     x, y, stdev, std_error = data_mean(parameter1, itw)
-            
-        #     ax.errorbar(
-        #         x, y,
-        #         yerr=std_error,
-        #         fmt='--o',
-        #         color=color,
-        #         ecolor=color,
-        #         capsize=5
-        #     )
-            
-        #     ys.append(y)
-        #     errors.append(std_error)
-
-        # # ---------- BOTTOM: mean ----------
-        # ax2 = axes[1]
-        # title_mean = 'Tweez ROI integral mean'
-
-        # ys = np.array(ys)
-
-        # y_mean = np.mean(ys, axis=0)
-        # y_std = np.std(ys, axis=0, ddof=1)
-        # y_sem = y_std / np.sqrt(ys.shape[0])
-
-        # ax2.set_title(title_mean, fontsize=20)
-        # ax2.set_xlabel(f'{parameter_name} ({para1_unit})')
-
-        # ax2.errorbar(
-        #     x,
-        #     y_mean,
-        #     yerr=y_sem,
-        #     fmt='--ko',
-        #     ecolor='k',
-        #     capsize=5
-        # )
-
-        # # ---------- layout & save ----------
-        # plt.tight_layout()
-        # save_imag(plt, 'Tweez_ROI_combined')
-        
-        
-
-        # ============================================================
-        # FIRST SHOT
-        # itw1 ... itw36
-        # ============================================================
-
-        itws_first = [
-            globals()[f"itw{i}"]
-            for i in range(1, 37)
-        ]
-
-        ys_first = []
-        errors_first = []
-
-        for itw in itws_first:
-            x, y, stdev, std_error = data_mean(parameter1, itw)
-
-            ys_first.append(y)
-            errors_first.append(std_error)
-
-        ys_first = np.array(ys_first)
-        errors_first = np.array(errors_first)
-
-        # Media delle 36 curve
-        y_mean_first = np.mean(ys_first, axis=0)
-
-        # Deviazione standard tra le 36 curve
-        y_std_first = np.std(ys_first, axis=0, ddof=1)
-
-        # Errore standard della media
-        y_sem_first = y_std_first / np.sqrt(ys_first.shape[0])
-
-
-        # ============================================================
-        # SECOND SHOT
-        # itw1_2nd ... itw36_2nd
-        # ============================================================
-
-        itws_second = [
-            globals()[f"itw{i}_2nd"]
-            for i in range(1, 37)
-        ]
-
-        ys_second = []
-        errors_second = []
-
-        for itw in itws_second:
-            x, y, stdev, std_error = data_mean(parameter1, itw)
-
-            ys_second.append(y)
-            errors_second.append(std_error)
-
-        ys_second = np.array(ys_second)
-        errors_second = np.array(errors_second)
-
-        # Media delle 36 curve
-        y_mean_second = np.mean(ys_second, axis=0)
-
-        # Deviazione standard tra le 36 curve
-        y_std_second = np.std(ys_second, axis=0, ddof=1)
-
-        # Errore standard della media
-        y_sem_second = y_std_second / np.sqrt(ys_second.shape[0])
-
-
-        # ============================================================
-        # PLOT
-        # ============================================================
-
-        fig, axes = plt.subplots(
-            2, 1,
-            figsize=(10, 6),
-            sharex=True
+    for shot_index in range(n_shots):
+        coordinate = tuple(
+            values[shot_index]
+            for values in scan_values
         )
+        bins[coordinate].append(shot_index)
+
+    rows = []
+
+    for coordinate in sorted(bins):
+        shot_indices = bins[coordinate]
+
+        # Shape: (N_TWEEZERS, repetitions at this N-D coordinate)
+        samples = roi_integrals[:, shot_indices]
+
+        # One mean value per tweezer at this coordinate:
+        tweezer_means = np.nanmean(samples, axis=1)
+
+        n_valid_tweezers = np.sum(np.isfinite(tweezer_means))
+        mean_value = np.nanmean(tweezer_means)
+
+        if n_valid_tweezers > 1:
+            sem_value = (
+                np.nanstd(tweezer_means, ddof=1)
+                / np.sqrt(n_valid_tweezers)
+            )
+        else:
+            sem_value = np.nan
+
+        row = {
+            "shot": shot_name,
+            "mean_roi_integral": mean_value,
+            "sem_roi_integral": sem_value,
+            "n_tweezers": n_valid_tweezers,
+            "n_repetitions": len(shot_indices),
+        }
+
+        for name, value in zip(SCAN_NAMES, coordinate):
+            row[name] = value
+
+        rows.append(row)
+
+    return pd.DataFrame(rows)
 
 
-        # ---------- TOP: First Shot ----------
+def choose_fixed_value(
+    results: pd.DataFrame,
+    parameter_name: str,
+) -> float:
+    """Use a user-selected fixed value or the middle measured scan value."""
+    if parameter_name in FIXED_VALUES:
+        requested = FIXED_VALUES[parameter_name]
+        available = np.sort(results[parameter_name].unique())
 
-        ax = axes[0]
+        return available[np.argmin(np.abs(available - requested))]
 
-        ax.set_title(
-            'Tweez ROI integral mean (First Shot)' + dataset_label,
-            fontsize=20
-        )
+    available = np.sort(results[parameter_name].unique())
+    return available[len(available) // 2]
 
-        ax.set_ylabel('ROI integral')
+
+def plot_1d(results: pd.DataFrame, dataset_label: str):
+    """Plot both fluorescence shots for a one-parameter scan."""
+    parameter = SCAN_NAMES[0]
+    unit = SCAN_UNITS[0]
+
+    fig, ax = plt.subplots(figsize=(10, 6), constrained_layout=True)
+
+    for shot, color, marker in (
+        ("first", "black", "o"),
+        ("second", "tab:blue", "s"),
+    ):
+        data = results[results["shot"] == shot].sort_values(parameter)
 
         ax.errorbar(
-            x,
-            y_mean_first,
-            yerr=y_sem_first,
-            fmt='--ko',
-            ecolor='k',
-            capsize=5
+            data[parameter],
+            data["mean_roi_integral"],
+            yerr=data["sem_roi_integral"],
+            fmt=f"{marker}--",
+            color=color,
+            capsize=4,
+            label=shot.capitalize() + " shot",
         )
 
+    ax.set_title(f"Tweezer ROI integral — {dataset_label}")
+    ax.set_xlabel(f"{parameter} ({unit})")
+    ax.set_ylabel("Mean ROI integral")
+    ax.grid(alpha=0.25)
+    ax.legend()
 
-        # ---------- BOTTOM: Second Shot ----------
+    return fig
 
-        ax2 = axes[1]
 
-        ax2.set_title(
-            'Tweez ROI integral mean (Second Shot)' + dataset_label,
-            fontsize=20
+def plot_2d_heatmap(
+    results: pd.DataFrame,
+    shot_name: str,
+    x_parameter: str,
+    y_parameter: str,
+    fixed_dimensions: dict[str, float],
+    dataset_label: str,
+):
+    """Create one heatmap, optionally at a fixed slice of higher dimensions."""
+    data = results[results["shot"] == shot_name].copy()
+
+    for parameter, value in fixed_dimensions.items():
+        data = data[np.isclose(data[parameter], value)]
+
+    heatmap = data.pivot_table(
+        index=y_parameter,
+        columns=x_parameter,
+        values="mean_roi_integral",
+        aggfunc="mean",
+    )
+
+    fig, ax = plt.subplots(figsize=(10, 7), constrained_layout=True)
+
+    sns.heatmap(
+        heatmap.sort_index().sort_index(axis=1),
+        cmap="viridis",
+        annot=True,
+        fmt=".1f",
+        linewidths=0.4,
+        ax=ax,
+    )
+
+    x_unit = SCAN_UNITS[SCAN_NAMES.index(x_parameter)]
+    y_unit = SCAN_UNITS[SCAN_NAMES.index(y_parameter)]
+
+    slice_text = ", ".join(
+        f"{name}={value:g}"
+        for name, value in fixed_dimensions.items()
+    )
+
+    title = f"Tweezer ROI integral — {shot_name} shot ({dataset_label})"
+    if slice_text:
+        title += f"\n{slice_text}"
+
+    ax.set_title(title)
+    ax.set_xlabel(f"{x_parameter} ({x_unit})")
+    ax.set_ylabel(f"{y_parameter} ({y_unit})")
+
+    return fig
+
+
+def plot_nd(
+    results: pd.DataFrame,
+    dataset_label: str,
+) -> list[tuple[str, plt.Figure]]:
+    """
+    Plot either:
+
+    PLOT_AXES = (i,)      -> 1D error-bar plot versus SCAN_NAMES[i]
+    PLOT_AXES = (i, j)    -> 2D heatmap with all other parameters fixed
+
+    Any number of scan parameters in SCAN_NAMES is supported.
+    """
+    n_plot_axes = len(PLOT_AXES)
+
+    if n_plot_axes not in (1, 2):
+        raise ValueError(
+            "PLOT_AXES must contain either one index, e.g. (0,), "
+            "or two indices, e.g. (0, 1)."
         )
 
-        ax2.set_xlabel(f'{parameter_name} ({para1_unit})')
-        ax2.set_ylabel('ROI integral')
+    if len(set(PLOT_AXES)) != n_plot_axes:
+        raise ValueError("PLOT_AXES cannot contain the same index twice.")
 
-        ax2.errorbar(
-            x,
-            y_mean_second,
-            yerr=y_sem_second,
-            fmt='--ko',
-            ecolor='k',
-            capsize=5
+    if any(index < 0 or index >= len(SCAN_NAMES) for index in PLOT_AXES):
+        raise ValueError(
+            "An index in PLOT_AXES is outside SCAN_NAMES."
         )
 
+    # =====================================================================
+    # 1D plot
+    # =====================================================================
+    if n_plot_axes == 1:
+        parameter = SCAN_NAMES[PLOT_AXES[0]]
+        unit = SCAN_UNITS[PLOT_AXES[0]]
 
-        # ---------- layout & save ----------
+        # Fix every other scan parameter to the chosen/default value:
+        fixed_dimensions = {
+            name: choose_fixed_value(results, name)
+            for name in SCAN_NAMES
+            if name != parameter
+        }
 
-        plt.tight_layout()
-
-        save_imag(
-            plt,
-            'Tweez_ROI_mean_First_Second_Shot'
+        fig, ax = plt.subplots(
+            figsize=(10, 6),
+            constrained_layout=True,
         )
 
+        for shot_name, color, marker in (
+            ("first", "black", "o"),
+            ("second", "tab:blue", "s"),
+        ):
+            data = results[
+                results["shot"] == shot_name
+            ].copy()
+
+            # Select the desired N-D slice:
+            for name, value in fixed_dimensions.items():
+                data = data[
+                    np.isclose(data[name], value)
+                ]
+
+            data = data.sort_values(parameter)
+
+            ax.errorbar(
+                data[parameter],
+                data["mean_roi_integral"],
+                yerr=data["sem_roi_integral"],
+                fmt=f"{marker}--",
+                color=color,
+                ecolor=color,
+                capsize=4,
+                label=f"{shot_name.capitalize()} image",
+            )
+
+        fixed_text = ", ".join(
+            f"{name}={value:g}"
+            for name, value in fixed_dimensions.items()
+        )
+
+        title = f"Tweezer ROI integral — {dataset_label}"
+        if fixed_text:
+            title += f"\n{fixed_text}"
+
+        ax.set_title(title)
+        ax.set_xlabel(f"{parameter} ({unit})")
+        ax.set_ylabel("Mean ROI integral")
+        ax.grid(alpha=0.25)
+        ax.legend()
+
+        return [("1D_scan", fig)]
+
+    # =====================================================================
+    # 2D plot
+    # =====================================================================
+    x_parameter = SCAN_NAMES[PLOT_AXES[0]]
+    y_parameter = SCAN_NAMES[PLOT_AXES[1]]
+
+    fixed_dimensions = {
+        name: choose_fixed_value(results, name)
+        for name in SCAN_NAMES
+        if name not in (x_parameter, y_parameter)
+    }
+
+    figures = []
+
+    for shot_name in ("first", "second"):
+        figure = plot_2d_heatmap(
+            results=results,
+            shot_name=shot_name,
+            x_parameter=x_parameter,
+            y_parameter=y_parameter,
+            fixed_dimensions=fixed_dimensions,
+            dataset_label=dataset_label,
+        )
+
+        figures.append((f"{shot_name}_heatmap", figure))
+
+    return figures
 
 
-        # save_imag(plt, title)
-        if False: #switch to automatic updating of optimization parameter
-            runmanager.remote.set_globals({opt_parameter: optimum})
-            print('optimum set to global')
-except Exception as e:
-    print("An error occurred during analysis:", e)
+def main():
+    df = lyse.data()
+
+    if df.empty:
+        raise RuntimeError("Lyse has no loaded shots to analyse.")
+
+    if "filepath" not in df.columns:
+        raise KeyError("Lyse data does not contain the 'filepath' column.")
+
+    if "FluoAnalyser_tweez" not in df.columns:
+        raise KeyError(
+            "No 'FluoAnalyser_tweez' results group was found in Lyse data."
+        )
+
+    validate_scan_configuration(df)
+
+    paths = df["filepath"]
+    analyser = df["FluoAnalyser_tweez"]
+    dataset_label = make_dataset_label(paths)
+
+    scan_values = [
+        scalar_per_shot(df[name], name)
+        for name in SCAN_NAMES
+    ]
+
+    first_shot = load_roi_integrals(analyser, suffix="")
+    second_shot = load_roi_integrals(analyser, suffix="_2nd")
+
+    first_results = aggregate_nd_scan(
+        scan_values=scan_values,
+        roi_integrals=first_shot,
+        shot_name="first",
+    )
+
+    second_results = aggregate_nd_scan(
+        scan_values=scan_values,
+        roi_integrals=second_shot,
+        shot_name="second",
+    )
+
+    results = pd.concat(
+        [first_results, second_results],
+        ignore_index=True,
+    )
 
 
+    # Print every scanned value available for every parameter:
+    parameter_values = {
+        parameter_name: np.sort(results[parameter_name].unique())
+        for parameter_name in SCAN_NAMES
+    }
+
+    print("\nAVAILABLE SCAN VALUES:")
+    for parameter_name, values in parameter_values.items():
+        print(f"{parameter_name}: {values}")
+
+
+
+
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    output_dir = output_directory(paths)
+    stem = f"{timestamp}_{'_'.join(SCAN_NAMES)}_ND_tweezer_ROI"
+
+    if SAVE_CSV:
+        csv_path = output_dir / f"{stem}.csv"
+        results.to_csv(csv_path, index=False)
+        print(f"Saved complete N-D data: {csv_path}")
+    
+    figures = plot_nd(results, dataset_label)
+
+    if SAVE_PLOTS:
+        for suffix, figure in figures:
+            image_path = output_dir / f"{stem}_{suffix}.png"
+            figure.savefig(image_path, dpi=200)
+            print(f"Saved plot: {image_path}")
+
+    plt.show()
+
+
+
+
+    top_five_first = (
+        results[results["shot"] == "first"]
+        .sort_values("mean_roi_integral", ascending=False)
+        .head(5)
+    )
+
+    top_five_second = (
+        results[results["shot"] == "second"]
+        .sort_values("mean_roi_integral", ascending=False)
+        .head(5)
+    )
+
+    print("\nTOP 5 — FIRST IMAGE")
+    print(top_five_first.to_string(index=False))
+
+    print("\nTOP 5 — SECOND IMAGE")
+    print(top_five_second.to_string(index=False))
+
+    top_five = pd.concat(
+        [top_five_first, top_five_second],
+        ignore_index=True,
+    )
+
+    top_five.to_csv(
+        output_dir / f"{stem}_top_5_first_and_second.csv",
+        index=False,
+    )
+
+
+
+
+
+
+    
+    available_values_csv = pd.DataFrame(
+        [
+            {
+                "parameter": parameter_name,
+                "available_value": value,
+            }
+            for parameter_name, values in parameter_values.items()
+            for value in values
+        ]
+    )
+
+    available_values_path = (
+        output_dir / f"{stem}_available_parameter_values.csv"
+    )
+
+    available_values_csv.to_csv(
+        available_values_path,
+        index=False,
+    )
+
+    print(f"\nSaved available parameter values: {available_values_path}")
+
+
+
+
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as error:
+        print(f"N-D analysis failed: {error}")
