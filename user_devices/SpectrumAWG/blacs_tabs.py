@@ -194,7 +194,7 @@ class SpectrumAWGTab(DeviceTab):
             self.slope_ui.pushButton_Slope.setEnabled(True)
             # self.static_ui.pushButton_MemoryReplay.setEnabled(True)
             self.manual_active = False
-            yield self.queue_work(self._primary_worker, 'dds_static', None)
+            yield self.queue_work(self._primary_worker, 'dds_static', False)
 
     @define_state(MODE_MANUAL, False)
     def dds_slope(self):
@@ -212,7 +212,7 @@ class SpectrumAWGTab(DeviceTab):
 
             self.static_ui.pushButton_SingleTone.setEnabled(False)
             self.slope_ui.pushButton_Slope.setIcon(self.stop_icon)
-            duration = self.slope_ui.spinBox_duration_slope.value()
+            duration = self.slope_ui.spinBox_duration_slope.value()/1000
             # self.static_ui.pushButton_MemoryReplay.setEnabled(False)
             self.manual_active = True
 
@@ -222,7 +222,7 @@ class SpectrumAWGTab(DeviceTab):
             self.slope_ui.pushButton_Slope.setIcon(self.start_icon)
             # self.static_ui.pushButton_MemoryReplay.setEnabled(True)
             self.manual_active = False
-            yield self.queue_work(self._primary_worker, 'dds_slope', None)
+            yield self.queue_work(self._primary_worker, 'dds_slope', False)
    
     @define_state(MODE_MANUAL, True)
     def reset_card(self):

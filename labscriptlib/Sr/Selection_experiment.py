@@ -228,6 +228,8 @@ for i in range(0,GLOBALS['n_loop']):
 
         if sel_tweezer:
 
+            # Setpoint_Tweezer.constant(t,GLOBALS['Tweezer_setpoint']) #controll the tweezer setpoint for the PID
+
             fluo_delay=10*msec
             ##### Tweezers loading #################
             t-=GLOBALS['TweezerLoading_duration']
@@ -333,7 +335,6 @@ for i in range(0,GLOBALS['n_loop']):
                 print(f"Start imaging Sisyphus: {t} us")
                 NEW_TABLE_LINE('Sisyphus', t, (GLOBALS['Red_MOT_Frq_fin']+0.5*GLOBALS['SisyphusImg_Frq'])/1e6, GLOBALS['SisyphusImg_Pow'], GLOBALS['FluoImaging_duration'] )
 
-                
                 while tt-t < GLOBALS['FluoImaging_duration']:
                     if GLOBALS['FluoCoolingPulsing']:  #alternating cooling during fluorescence
                         NEW_TABLE_LINE('Sisyphus', tt+dt, (GLOBALS['Red_MOT_Frq_fin']+0.5*GLOBALS['SisyphusImg_Frq'])/1e6, GLOBALS['SisyphusImg_Pow'])
@@ -342,11 +343,15 @@ for i in range(0,GLOBALS['n_loop']):
                     else:
                         tt+=delta_cooling
                     BlueImaging_AOM_TTL(tt+dt,True)
+                
                     tt+=delta_imaging
                     BlueImaging_AOM_TTL(tt, False)
 
+
                 TABLE_MODE_OFF('Sisyphus', tt)  #solution that turns off Sisyphus beam
                 tt+=4*dt 
+
+                # Setpoint_imaging.constant(tt+dt,GLOBALS['ImagingFluo_SetPoint']) #controll the imaging setpoint for the PID
 
                 #Sisyphus_AOM_TTL(t+dt+ GLOBALS['FluoImaging_duration']+delta_cooling,False)
                 if not GLOBALS['repumpers_always_on']:
@@ -521,4 +526,7 @@ Shutter_ImagingBlue.go_high(t)
 t+=dt
 # MOT_Blue3D_AOM_TTL(t, True) #re-open blue mot aom after switch off 
 
-stop(t+GLOBALS['stop_buffering_time'])
+# stop(t+GLOBALS['stop_buffering_time'])
+shot_end = t + GLOBALS['stop_buffering_time']
+print(f"Programmed shot duration: {shot_end / sec:.3f} seconds")
+stop(shot_end)

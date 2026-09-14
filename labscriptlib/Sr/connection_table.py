@@ -53,28 +53,33 @@ if f:
         DigitalOut(name='dueD_MOT_gate', parent_device=DO0, connection=str(1))
         DigitalOut(name='treD_MOT_gate', parent_device=DO0, connection=str(2))
         DigitalOut(name='ImagingBeam_gate', parent_device=DO0, connection=str(3))
-        DigitalOut(name='ImagingTweezBeam_gate', parent_device=DO0, connection=str(4))
+        DigitalOut(name='ImagingTweezBeam_gate', parent_device=DO0, connection=str(4)) 
     DigitalOut(name='coilsMosfet', parent_device=DO0, connection=str(5))   
-    DigitalOut(name='Tweezer_switch', parent_device=DO0, connection=str(6))
+    DigitalOut(name='Matisse_switch', parent_device=DO0, connection=str(6))
     if not co:
         DigitalOut(name='Orca_Camera_trigger', parent_device=DO0, connection=str(7))    
     if not cb_abs:
         DigitalOut(name='Basler_Camera_abs_trigger', parent_device=DO0, connection=str(8))  
     if not mr:
         DigitalOut(name='QRFRed_trigger', parent_device=DO0, connection=str(9))
-        DigitalOut(name='Tweezers_gate', parent_device=DO0, connection=str(10))
+        DigitalOut(name='Free_Channel_gate', parent_device=DO0, connection=str(10))
         DigitalOut(name='RedMOT_gate', parent_device=DO0, connection=str(11))
-        DigitalOut(name='Free_gate', parent_device=DO0, connection=str(12))
+        DigitalOut(name='Tweezers_gate', parent_device=DO0, connection=str(12))
         DigitalOut(name='Sisyphus_gate', parent_device=DO0, connection=str(13))
     awg_trigger=DigitalOut(name='awg_trigger', parent_device=DO0, connection=14)
     IGBT_close=DigitalOut(name='IGBT_close', parent_device=DO0, connection=str(15))
 
     DO2=DigitalChannels(name='DO2'  , parent_device=main_board, connection='0x05', rack=0, max_channels = 16)
-    DigitalOut(name='Free_gate_01', parent_device=DO2, connection=str(0))
+    DigitalOut(name='Free_ttl', parent_device=DO2, connection=str(0))
     DigitalOut(name='RedMOT_multiFrq_gate', parent_device=DO2, connection=str(1))
     DigitalOut(name='RedMOT_singleFrq_gate', parent_device=DO2, connection=str(2))
     DigitalOut(name='Shutter_Blue', parent_device=DO2, connection=str(3))
     DigitalOut(name='Shutter_ImagingBlue', parent_device=DO2, connection=str(5))
+
+    DigitalOut(name='re707_switch', parent_device=DO2, connection=str(9))
+    DigitalOut(name='re679_switch', parent_device=DO2, connection=str(10))
+
+    DigitalOut(name='Tweezer_Shutter', parent_device=DO2, connection=str(13))
 
     if not cb_fluo:
         DigitalOut(name='Basler_Camera_fluo_trigger', parent_device=DO2, connection=str(4))
@@ -93,7 +98,7 @@ if f:
     AO1=AnalogChannels(name='AO1'   , parent_device=main_board, rack=0, max_channels = 4)
     AnalogOut     (name='BigCoilsV', parent_device=AO1, connection='0x18')
     AnalogOut     (name='Setpoint_imaging', parent_device=AO1, connection='0x19')
-    AnalogOut     (name='Test', parent_device=AO1, connection='0x1A')
+    AnalogOut     (name='Setpoint_Tweezer', parent_device=AO1, connection='0x1A')
     AnalogOut     (name='Zio', parent_device=AO1, connection='0x1B')
 
     ########################                         Floating                               ########################
@@ -168,14 +173,14 @@ if mr:
     elif f:
         QRF_Red=MOGLabs_QRF(name='QRF_Red', parent_device=QRF_trigger_2, addr='192.168.1.103', port=7802)
 
-    Tweezers=QRF_DDS(name='Tweezers', parent_device=QRF_Red, connection='channel 0', 
-            table_mode=False, trigger_each_step=True, digital_gate={'device':DO0, 'connection': 10})
+    Tweezers=QRF_DDS(name='Tweezers', parent_device=QRF_Red, connection='channel 2', 
+            table_mode=False, trigger_each_step=True, digital_gate={'device':DO0, 'connection': 12})
     Tweezers_trigger=Tweezers_gate
     RedMOT=QRF_DDS(name='RedMOT', parent_device=QRF_Red, connection='channel 1', 
             table_mode=True, trigger_each_step=True, digital_gate={'device':DO0, 'connection': 11})
     RedMOT_trigger=RedMOT_gate
-    Free=QRF_DDS(name='Free', parent_device=QRF_Red, connection='channel 2', 
-            table_mode=False, trigger_each_step=True, digital_gate={'device':DO0, 'connection': 12})
+    Free=QRF_DDS(name='Free', parent_device=QRF_Red, connection='channel 0', 
+            table_mode=False, trigger_each_step=True, digital_gate={'device':DO0, 'connection': 10})
     Free_trigger=Free_gate
     Sisyphus=QRF_DDS(name='Sisyphus', parent_device=QRF_Red, connection='channel 3', 
             table_mode=True, trigger_each_step=True, digital_gate={'device':DO0, 'connection': 13})
@@ -501,7 +506,7 @@ if co:
                             },
                             
                             manual_mode_camera_attributes = {
-                                'TRIGGER SOURCE': 1, #1 internal, 2 external
+                                # 'TRIGGER SOURCE': 1, #1 internal, 2 external
                                 # 'TRIGGER MODE': 2.0,
                             },
                             ) # ref file:///C:/Users/florydberg01/Documents/Orca-settings/propC15550-20UP_en.html

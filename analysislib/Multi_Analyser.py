@@ -247,7 +247,7 @@ n_order=1000 # order of digits in parameter values
 saving_data=True
 fit_gaussian1= False
 
-para1_name='Sisyphus_Frq'#n_shot'
+para1_name='Red_MOT_Frq_fin'#n_shot'
 para1_unit= 'MHz'    #'s' 
 if duo:
     para2_name='Sisyphus_Frq'

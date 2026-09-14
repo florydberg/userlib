@@ -88,8 +88,14 @@
            <property name="maximum">
             <number>100</number>
            </property>
+           <property name="singleStep">
+            <number>10</number>
+           </property>
            <property name="value">
             <number>100</number>
+           </property>
+           <property name="displayIntegerBase">
+            <number>10</number>
            </property>
           </widget>
          </item>
@@ -158,6 +164,9 @@
            <property name="value">
             <number>100</number>
            </property>
+           <property name="displayIntegerBase">
+            <number>10</number>
+           </property>
           </widget>
          </item>
          <item row="1" column="1">
@@ -187,6 +196,9 @@
            </property>
            <property name="maximum">
             <number>999999</number>
+           </property>
+           <property name="value">
+            <number>1000</number>
            </property>
           </widget>
          </item>

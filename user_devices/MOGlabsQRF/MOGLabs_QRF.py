@@ -27,7 +27,8 @@ from user_devices.MOGlabsQRF.mogdevice import MOGDevice
 from qtutils import UiLoader
 import os
 from qtutils.qt import QtGui
-from PyQt5.QtWidgets import QWidget, QGridLayout, QCheckBox
+from PyQt5.QtWidgets import QWidget, QGridLayout, QCheckBox, QLabel
+from qtutils.qt.QtCore import Qt
 
 if True:
     # reduce number of log entries in logfile (labscript-suite/logs/BLACS.log)
@@ -341,9 +342,9 @@ class MOGLabs_QRF(PseudoclockDevice):
 
 class power_check_boxes(QWidget):
     # Andi: power check boxes for each DDS
-    labels = ['signal', 'amplifier', 'both', 'PID']  # labels for check boxes
+    labels = ['signal', 'amplifier', 'both', 'Modulation']  # labels for check boxes
 
-    def __init__(self, parent, name, channel, signal=False, amplifier=False, PID=False, align_horizontal=False):
+    def __init__(self, parent, name, channel, signal=False, amplifier=False, Mod=False, align_horizontal=False):
         super(power_check_boxes, self).__init__(parent._ui)
 
         # init class
@@ -353,15 +354,16 @@ class power_check_boxes(QWidget):
         self.signal    = signal                 # initial state of signal check box (bool)
         self.amplifier = amplifier              # initial state of amplifier check box (bool)
         self.both      = signal and amplifier   # initial state of both check box (bool)
-        self.PID       = PID                    # initial state of PID
+        self.PID       = False                  # initial state of PID
+        self.Mod       = Mod                    # initial state of external imput for modulation
 
         # create layout
         grid = QGridLayout(self)
         self.setLayout(grid)
 
         # create check boxes
-        states  = [signal, amplifier, signal and amplifier, PID]
-        connect = [self.onSignal, self.onAmp, self.onBoth, self.onPID]
+        states  = [signal, amplifier, signal and amplifier, Mod]
+        connect = [self.onSignal, self.onAmp, self.onBoth, self.onMod]
         self.cb = []
         for i,name in enumerate(self.labels):
             cb = QCheckBox(name)
@@ -458,7 +460,40 @@ class power_check_boxes(QWidget):
                 if self.amplifier != amp: self.onAmp(amp)
                 self.both = both
                 self.cb[2].setChecked(both)
-    
+
+    def onMod(self, state):
+        #modulation according to the combobox
+        self.parent.event_queue.put(allowed_states=MODE_MANUAL, queue_state_indefinitely=True, delete_stale_states=False,
+                                data=[self._onMod_, [[self.channel, state], {}]])
+
+        
+    def _onMod_(self,  parent, channel, state):       
+        # check if PID is still ON
+        if state:
+            parent.mod_box[self.channel].ui.radioButton_PID.setEnabled(True)
+        
+        elif not state: 
+            parent.mod_box[self.channel].ui.radioButton_PID.setEnabled(False)
+            if parent.mod_box[self.channel].ui.radioButton_PID.isChecked():
+                parent.mod_box[self.channel].ui.radioButton_PID.setChecked(False)
+                self.PID = state
+
+        self.parent.event_queue.put(allowed_states=MODE_MANUAL, queue_state_indefinitely=True, delete_stale_states=False,
+                                data=[self._onMod, [[self.channel, state], {}]])
+
+    def _onMod(self, parent, channel, state):
+        info = "'%s' Modulation for channel %i is %s" % (self.name, channel, 'enable' if state else 'disable')
+        result = yield (self.parent.queue_work(self.parent.primary_worker, 'onMod', channel, state))
+        if (result is not None) and result:
+            self.Mod = state
+            print(info)
+            self.cb[3].setChecked(self.Mod)
+            self.set_both()
+        else:
+            print(info + ' failed!')
+            self.cb[3].setChecked(self.Mod)
+            
+
     def  onPID(self, state):
         # 'PID' clicked: manually insert event into parent event queue. see tab_base_classes.py @define_state(MODE_MANUAL, True)
         self.parent.event_queue.put(allowed_states=MODE_MANUAL, queue_state_indefinitely=True, delete_stale_states=False,
@@ -498,12 +533,12 @@ class power_check_boxes(QWidget):
             self.PID = False
         self.cb[2].setChecked(self.PID)
 
-class PID_boxes(QWidget):
+class MOD_boxes(QWidget):
     # Andre: PID box for each DDS
     labels = ['Proportional', 'Integral', 'Derivative', 'Setpoint', 'Invert']  # labels for check boxes
 
     def __init__(self, parent, name, channel, Proportional=False, Integral=False, Derivative=False, Setpoint=False, Invert=False):
-        super(PID_boxes, self).__init__(parent._ui)
+        super(MOD_boxes, self).__init__(parent._ui)
 
         # init class
         self.parent       = parent                 # parent (DeviceTab instance)
@@ -542,12 +577,10 @@ class PID_boxes(QWidget):
         # self.ui.pushButton_invert.setIcon(QtGui.QIcon(':/qtutils/fugue/arrow-circle-double'))
         self.start_icon = QtGui.QIcon(':/qtutils/fugue/control')
         self.stop_icon = QtGui.QIcon(':/qtutils/fugue/control-stop-square')
-        self.ui.pushButton_errorSignal.setIcon(self.start_icon)
-        self.ui.pushButton_errorSignal.clicked.connect(lambda: self.display_errorSignal())
-        # self.ui.pushButton_invert.clicked.connect(lambda: self.invertPID())
+        # self.ui.pushButton_errorSignal.setIcon(self.start_icon)
+        # self.ui.pushButton_errorSignal.clicked.connect(lambda: self.display_errorSignal())
         self.ui.doubleSpinBox_Proportional.valueChanged.connect(lambda: self.set_proportional())
         self.ui.slider_Proportional.valueChanged.connect(lambda: self.slide_proportional())
-        # self.ui.slider_Proportional.sliderReleased.connect(lambda: self.set_proportional())
         self.ui.doubleSpinBox_Integral.valueChanged.connect(lambda: self.set_integral())
         self.ui.slider_Integral.valueChanged.connect(lambda: self.slide_integral())
         self.ui.doubleSpinBox_Derivative.valueChanged.connect(lambda: self.set_derivative())
@@ -556,9 +589,24 @@ class PID_boxes(QWidget):
         self.ui.slider_PreGain.valueChanged.connect(lambda: self.slide_pregain())
         self.ui.doubleSpinBox_SetPoint.valueChanged.connect(lambda: self.set_setpoint())
 
-        self.ui.slider_ErrorSignal.setSliderPosition(self.ErrorSignal)
+        self.ui.radioButton_PID.toggled.connect(self.onPID)
 
-        self.parent.auto_place_widgets((f"P.I.D. settings for channel {self.channel}",{"P.I.D.":self.ui}))
+        self.ui.doubleSpinBox_Proportional.setEnabled(False)
+        self.ui.slider_Proportional.setEnabled(False)
+        self.ui.doubleSpinBox_Integral.setEnabled(False)
+        self.ui.slider_Integral.setEnabled(False)
+        self.ui.doubleSpinBox_Derivative.setEnabled(False)
+        self.ui.slider_Derivative.setEnabled(False)
+        self.ui.doubleSpinBox_SetPoint.setEnabled(False)
+        self.ui.radioButton_PID.setEnabled(False)
+
+
+        self.ui.comboBox_modulation.currentTextChanged.connect(lambda: self.setMod())
+
+
+        # self.ui.slider_ErrorSignal.setSliderPosition(self.ErrorSignal)
+
+        self.parent.auto_place_widgets((f"Modulation External Input settings for channel {self.channel}",{"Ext_Input":self.ui}))
 
         # yield(self.parent.queue_work(self.parent.primary_worker,'print_main', notify_queue))
 
@@ -574,7 +622,7 @@ class PID_boxes(QWidget):
 
     def _set_pregain(self, parent, channel, value=0):
         info = "'%s' PID proportional set to %s" % (self.name, value)
-        result = yield (self.parent.queue_work(self.parent.primary_worker, 'pregainPID', channel, value))
+        result = yield (self.parent.queue_work(self.parent.primary_worker, 'pregainMod', channel, value))
         if (result is not None) and result:
             print(info)
         else:
@@ -610,6 +658,17 @@ class PID_boxes(QWidget):
         self.parent.event_queue.put(allowed_states=MODE_MANUAL, queue_state_indefinitely=True, delete_stale_states=False,
                                     data=[self._setPID, [[self.channel, 'D', value], {}]])
 
+    def setMod(self):
+        parameter = self.ui.comboBox_modulation.currentText()
+        self.parent.event_queue.put(allowed_states=MODE_MANUAL, queue_state_indefinitely=True, delete_stale_states=False,
+                                    data=[self._setMod, [[self.channel, parameter], {}]])
+
+    def _setMod(self, parent, channel, parameter):
+        info = "'%s' Channel %i's Modulation set to %s " % (self.name, channel, parameter)
+        
+        result = yield (self.parent.queue_work(self.parent.primary_worker, 'setMod', channel, parameter))
+        print(info + (' ok' if (result is not None) and result else ' failed'))
+
     def _setPID(self, parent, channel, type, value):
         info = "'%s' PID channel %i set %s to %s" % (self.name, channel, type, value)
         result = yield (self.parent.queue_work(self.parent.primary_worker, 'setPID', channel, type, value))
@@ -643,22 +702,22 @@ class PID_boxes(QWidget):
 
     def display_errorSignal(self):
         if not self.error_display:
-            self.ui.pushButton_errorSignal.setIcon(self.stop_icon)
+            # self.ui.pushButton_errorSignal.setIcon(self.stop_icon)
             self.error_display = True
             self.parent.event_queue.put(allowed_states=MODE_MANUAL, queue_state_indefinitely=True, delete_stale_states=False,
                                         data=[self._display_errorSignal, [[self.channel, ], {}]])
         else:
-            self.ui.pushButton_errorSignal.setIcon(self.start_icon)
+            # self.ui.pushButton_errorSignal.setIcon(self.start_icon)
             self.error_display = False
-            self.ui.slider_ErrorSignal.setSliderPosition(500)        
+            # self.ui.slider_ErrorSignal.setSliderPosition(500)        
             
     def _display_errorSignal(self, parent, channel):
         result = yield(self.parent.queue_work(self.parent.primary_worker,'errorPID', channel) )
         if (result is not None):
-            self.ui.slider_ErrorSignal.setSliderPosition(result)
+            # self.ui.slider_ErrorSignal.setSliderPosition(result)
             print('displaying error')
         else:
-            self.ui.slider_ErrorSignal.setSliderPosition(0)
+            # self.ui.slider_ErrorSignal.setSliderPosition(0)
             print('displaying error'+ ' failed!')
 
     def update(self, remote_values):
@@ -666,6 +725,44 @@ class PID_boxes(QWidget):
         self.ui.doubleSpinBox_Proportional.setValue(remote_values['P'])
         self.ui.doubleSpinBox_Integral.setValue(remote_values['I'])
         self.ui.doubleSpinBox_Derivative.setValue(remote_values['D'])
+
+    def onPID(self, state):
+        # 'PID' clicked: manually insert event into parent event queue. see tab_base_classes.py @define_state(MODE_MANUAL, True)
+        print("clicked")
+        if state:
+            self.ui.doubleSpinBox_Proportional.setEnabled(True)
+            self.ui.slider_Proportional.setEnabled(True)
+            self.ui.doubleSpinBox_Integral.setEnabled(True)
+            self.ui.slider_Integral.setEnabled(True)
+            self.ui.doubleSpinBox_Derivative.setEnabled(True)
+            self.ui.slider_Derivative.setEnabled(True)
+            self.ui.doubleSpinBox_SetPoint.setEnabled(True)
+        else:
+            self.ui.doubleSpinBox_Proportional.setEnabled(False)
+            self.ui.slider_Proportional.setEnabled(False)
+            self.ui.doubleSpinBox_Integral.setEnabled(False)
+            self.ui.slider_Integral.setEnabled(False)
+            self.ui.doubleSpinBox_Derivative.setEnabled(False)
+            self.ui.slider_Derivative.setEnabled(False)
+            self.ui.doubleSpinBox_SetPoint.setEnabled(False)
+
+        self.parent.event_queue.put(allowed_states=MODE_MANUAL, queue_state_indefinitely=True, delete_stale_states=False,
+                                    data=[self._onPID, [[self.channel, state], {}]])
+
+    def _onPID(self, parent, channel, state):
+        # executed by QT main thread (tab_base_classes.py Tab::mainloop). must be generator (with yield).
+        info = "'%s' PID channel %i is %s" % (self.name, channel, 'enable' if state else 'disable')
+        result = yield (self.parent.queue_work(self.parent.primary_worker, 'onPID', channel, state))
+        if (result is not None) and result:
+            self.PID = state
+            print(info)
+            # self.cb[1].setChecked(self.PID)
+            # self.set_both()
+
+        else:
+            print(info + ' failed!')
+            # self.cb[1].setChecked(self.PID)
+
 
 @BLACS_tab
 class MOGLabs_QRF_Tab(DeviceTab):
@@ -681,23 +778,6 @@ class MOGLabs_QRF_Tab(DeviceTab):
         self.base_decimals = {'freq': 3, 'amp': 2, 'phase': 3}  # TODO: find out what the phase precision is! #freq was at 6
         self.num_DDS = MAX_NUM_CHANNELS
 
-        # Create DDS Output objects
-        dds_prop = {}
-        for i in range(self.num_DDS):  # 4 is the number of DDS outputs on this device
-            dds_prop['channel %d' % i] = {}
-            for subchnl in ['freq', 'amp', 'phase']:
-                dds_prop['channel %d' % i][subchnl] = {'base_unit': self.base_units[subchnl],
-                                                       'min': self.base_min[subchnl],
-                                                       'max': self.base_max[subchnl],
-                                                       'step': self.base_step[subchnl],
-                                                       'decimals': self.base_decimals[subchnl]
-                                                       }
-        # Create the output objects
-        self.create_dds_outputs(dds_prop)
-        # Create widgets for output objects
-        dds_widgets, ao_widgets, do_widgets = self.auto_create_widgets()
-        # and auto place the widgets in the UI
-        self.auto_place_widgets(("DDS Outputs", dds_widgets))
 
         connection_object = self.settings['connection_table'].find_by_name(self.device_name)
         connection_table_properties = connection_object.properties
@@ -706,64 +786,137 @@ class MOGLabs_QRF_Tab(DeviceTab):
         self.port = connection_table_properties['port']
         self.worker_args = connection_table_properties['worker_args']
 
-        # Create and set the primary worker
-        self.create_worker("main_worker", MOGLabs_QRF_Worker, {'addr': self.addr, 'port': self.port, 'worker_args': self.worker_args})
+        # ------------------------------------------------------------------
+        # Create DDS outputs (STANDARD BLACS naming: channel X)
+        # ------------------------------------------------------------------
+        dds_prop = {}
+        for i in range(self.num_DDS):
+            ch_name = f'channel {i}'
+            dds_prop[ch_name] = {}
+
+            for subchnl in ['freq', 'amp', 'phase']:
+                dds_prop[ch_name][subchnl] = {
+                    'base_unit': self.base_units[subchnl],
+                    'min': self.base_min[subchnl],
+                    'max': self.base_max[subchnl],
+                    'step': self.base_step[subchnl],
+                    'decimals': self.base_decimals[subchnl],
+                }
+
+        self.create_dds_outputs(dds_prop)
+
+        # Create widgets
+        dds_widgets, ao_widgets, do_widgets = self.auto_create_widgets()
+        self.auto_place_widgets(("DDS Outputs", dds_widgets))
+
+        # ------------------------------------------------------------------
+        # Worker
+        # ------------------------------------------------------------------
+        self.create_worker(
+            "main_worker",
+            MOGLabs_QRF_Worker,
+            {'addr': self.addr, 'port': self.port, 'worker_args': self.worker_args}
+        )
         self.primary_worker = "main_worker"
 
-        # Set the capabilities of this device
         self.supports_remote_value_check(True)
         self.supports_smart_programming(True)
 
-        # get dictionary of channels with names in connection table
+        # ------------------------------------------------------------------
+        # Build mapping: "channel X" → "your_name"
+        # ------------------------------------------------------------------
         channels = {}
         for pseudoclock in connection_object.child_list.values():
-            #print(pseudoclock.name)
             for clockline in pseudoclock.child_list.values():
-                #print(clockline.name)
                 for IM in clockline.child_list.values():
-                    #print(IM.name)
                     for name, child in IM.child_list.items():
                         channels[child.parent_port] = name
-        print(channels)
 
-        # add check boxes to enable signal/power/both:
-        place_below = False # True = below DDS frame, False = right of DDS frame
+        print("Channel mapping:", channels)
+
+        # ------------------------------------------------------------------
+        # Enhance UI: add custom labels + checkboxes
+        # ------------------------------------------------------------------
+        place_below = False
         layout = self.get_tab_layout()
-        index = layout.count()
-        self.power_cb = [None for _ in range(MAX_NUM_CHANNELS)]
-        for i in range(index):
-            widget = layout.itemAt(i).widget()
-            if widget is not None:
-                children = widget.findChildren(ToolPaletteGroup)
-                for child in children:
-                    if 'DDS Outputs' in child._widget_groups:
-                        index, toolpalette, button = child._widget_groups['DDS Outputs']
-                        for j,dds in enumerate(toolpalette._widget_list):
-                            layout = dds._layout
-                            channel = dds._hardware_name
-                            try:
-                                channel_index = int(channel.split(' ')[-1])
-                            except ValueError:
-                                print("unexpected channel name '%s'?")
-                                break
-                            cb = power_check_boxes(parent=self, name=channels[channel], channel=channel_index, align_horizontal=place_below)
-                            if place_below: layout.addWidget(cb)
-                            else:           layout.addWidget(cb,1,1)
-                            if j < MAX_NUM_CHANNELS:
-                                self.power_cb[j] = cb
-                            else:
-                                print('error: maximum channels %i specified but %i existing!?' % (MAX_NUM_CHANNELS, len(toolpalette._widget_list)))
-                                exit()
+        count = layout.count()
 
+        self.power_cb = [None for _ in range(MAX_NUM_CHANNELS)]
+
+        for i in range(count):
+            widget = layout.itemAt(i).widget()
+            if widget is None:
+                continue
+
+            children = widget.findChildren(ToolPaletteGroup)
+
+            for child in children:
+                if 'DDS Outputs' not in child._widget_groups:
+                    continue
+
+                _, toolpalette, _ = child._widget_groups['DDS Outputs']
+
+                for j, dds in enumerate(toolpalette._widget_list):
+
+                    layout = dds._layout
+                    channel = dds._hardware_name  # "channel X"
+
+                    # Extract index
+                    try:
+                        channel_index = int(channel.split(' ')[-1])
+                    except ValueError:
+                        print(f"Unexpected channel name '{channel}'")
+                        continue
+
+                    # Get custom name
+                    custom_name = channels.get(channel, channel)
+
+                    # -----------------------------
+                    # 🔹 Add nice label under DDS
+                    # -----------------------------
+                    label = QLabel(custom_name)
+                    label.setAlignment(Qt.AlignCenter)
+                    label.setStyleSheet("""
+                        QLabel {
+                            color: #0d0d0d;
+                            font-size: 8pt;
+                            font-style: italic;
+                        }
+                    """)
+
+                    # place label 
+                    layout.addWidget(label, 0, 0, 1, 2)
+
+                    # -----------------------------
+                    # 🔹 Add checkbox (your logic)
+                    # -----------------------------
+                    cb = power_check_boxes(
+                        parent=self,
+                        name=custom_name,
+                        channel=channel_index,
+                        align_horizontal=place_below
+                    )
+
+                    if place_below:
+                        layout.addWidget(cb)
+                    else:
+                        layout.addWidget(cb, 1, 1)
+
+                    # store reference
+                    if j < MAX_NUM_CHANNELS:
+                        self.power_cb[j] = cb
+                    else:
+                        print(f'Error: max channels {MAX_NUM_CHANNELS}, found {len(toolpalette._widget_list)}')
+                        exit()
         # Andre: PID SECTION #######################################################################
      
 
         if True:
-            self.pid_box = [None for _ in range(MAX_NUM_CHANNELS)]
+            self.mod_box = [None for _ in range(MAX_NUM_CHANNELS)]
             for ch in range(4):
-                self.pid_box[ch] = PID_boxes(parent=self, name='PID', channel=ch)
-            
-
+                box_name=str('MOD'+str(ch))
+                self.mod_box[ch] = MOD_boxes(parent=self, name=box_name, channel=ch)
+       
     def get_save_data(self):
         # Andi: save user selection on shutdown
         data = {}
@@ -814,7 +967,7 @@ class MOGLabs_QRF_Tab(DeviceTab):
         for ch in range(4):
             ch_data = self._last_remote_values['channel %i'%ch]
             self.power_cb[ch].update(ch_data)
-            self.pid_box[ch].update(ch_data['PID'])
+            self.mod_box[ch].update(ch_data['PID'])
 
 # @BLACS_worker # Andi: disabled due to warning
 class MOGLabs_QRF_Worker(Worker):
@@ -826,8 +979,11 @@ class MOGLabs_QRF_Worker(Worker):
         self.logger.setLevel(log_level)
 
         self.PIDstatus={}
+        
         self.smart_cache = {'TABLE_DATA': ''}
         self.smart_cache = {'STATIC_DATA': ''}
+        self.ModStatus = {}            
+        self.ModParameter = {} 
 
         # Andre: to rescue table-stucked channels
         if self.reconnect('init'):
@@ -842,9 +998,14 @@ class MOGLabs_QRF_Worker(Worker):
                     print(f"Ch {channel} already in normal mode")
                     self.dev.cmd('MODE,%i,NSB' % (channel+1))
                     self.dev.cmd(f"ON,{channel+1},SIG")
+                
+                
+                self.ModStatus[channel] = False
+                self.ModParameter[channel] = 'AMPL'
                 self.PIDstatus[channel]=False
                 ask=self.dev.ask(f'PID,STATUS,{channel+1}')
-                print(f'PID of channel {channel} is {str(ask)}')
+
+                # print(f'PID of channel {channel} is {str(ask)}')
 
     def reconnect(self, name):
         # Andi: try to connect to device. returns True on success, otherwise False.
@@ -997,17 +1158,21 @@ class MOGLabs_QRF_Worker(Worker):
                     self.dev.cmd(f"POW,{channel+1},{1e-2*static_data[-1]['amp']}")   ##### BUG  TODO: FIX removing 1e-2 ask Andre #################
                     self.dev.cmd(f"PID, SETPOINT, {channel + 1}, {static_data[-1]['pid_setpoint']/1000}")
 
-                    self.dev.cmd('ON,%i,ALL' % (channel+1))
+                    
+                    parameter = self.ModParameter[channel]
 
-                    # self.final_values[f'channel {channel}']['freq'] = 1e-3*static_data[-1]['freq']
-                    # self.final_values[f'channel {channel}']['amp'] = 1e-2*static_data[-1]['amp']
-                    # self.final_values[f'channel {channel}']['phase'] = static_data[-1]['phase']
-                    # print(self.PIDstatus)
-                    if self.PIDstatus[channel]:
-                        self.dev.cmd('PID,ENABLE,%i, AMPL' % (channel+1))
+                    if self.ModStatus[channel]:
+                        self.dev.cmd('MOD, %i, %s, ON' % (channel + 1, parameter))
+                        print(f"Modulation of channel {channel} is ON")
+                        if self.PIDstatus[channel]:
+                            self.dev.cmd('PID,ENABLE,%i, %s' % (channel+1, parameter))
+                    else:
+                        print(f"Modulation of channel {channel} is OFF")
 
                     ask=self.dev.ask(f'PID,STATUS,{channel+1}')
                     print(f'PID of channel {channel} is {str(ask)}')
+
+                    self.dev.cmd('ON,%i,ALL' % (channel+1))
         return self.final_values
 
     def abort_transition_to_buffered(self):
@@ -1099,22 +1264,46 @@ class MOGLabs_QRF_Worker(Worker):
             return True
         print(info + ' failed!')
         return False
-     
+
+    def onMod(self, channel, state):
+        # Andre: switch Modulation mode ENABLEd or DISABLEd. returns True if ok, False on error.
+        cmd = 'ENABLE' if state else 'DISABLE'
+        mod_cmd='ON' if state else 'OFF'
+        parameter = self.ModParameter[channel]
+
+        
+        if self.dev is not None:
+            if state:
+                info = "'%s' channel %i: %s modulation is %sD" % (self.device_name, channel, parameter, cmd)
+                self.dev.cmd('MOD, %i, %s, ON' % (channel + 1, parameter))
+                self.dev.cmd('MAPMOD, %i, %s' % (channel + 1, channel + 1))
+            else:
+                for para in ['AMPL', 'FREQ', 'PHAS']:
+                    self.dev.cmd('MOD, %i, %s, OFF' % (channel + 1, para))
+                info = "'%s' channel %i: every modulation is %sD" % (self.device_name, channel, cmd)
+            self.ModStatus[channel]=state
+            print(info)
+            return True
+        print(info + ' failed!')
+        return False
+
     def onPID(self, channel, state):
         # Andre: switch PID mode ENABLEd or DISABLEd. returns True if ok, False on error.
         cmd = 'ENABLE' if state else 'DISABLE'
         mod_cmd='ON' if state else 'OFF'
-        info = "'%s' channel %i: amplitude PID is %sD" % (self.device_name, channel, cmd)
+        parameter = self.ModParameter[int(channel)] 
+        info = "'%s' channel %i: %s PID is %sD" % (self.device_name, channel, parameter, cmd)
         if self.dev is not None:
+            print(info)
             if state:
-                self.dev.cmd('MOD, %i, AMPL, %s' % (channel + 1, mod_cmd))
+                self.dev.cmd('MOD, %i, %s, %s' % (channel + 1, parameter, mod_cmd))
                 self.dev.cmd('MAPMOD, %i, %s' % (channel + 1, channel + 1))
                 self.dev.cmd('PID, %s ,%i, AMPL' % (cmd, channel + 1))
             else:
                 self.dev.cmd('PID, %s ,%i, AMPL' % (cmd, channel + 1))
                 self.dev.cmd('MOD, %i, AMPL, %s' % (channel + 1, mod_cmd))
             self.PIDstatus[channel]=state
-            print(info)
+            
             return True
         print(info + ' failed!')
         return False
@@ -1128,7 +1317,23 @@ class MOGLabs_QRF_Worker(Worker):
             return True
         print(info + ' failed!')
         return False
-     
+
+    def update_parameter(self, channel, parameter):
+        # Andre: switch Modulation mode
+
+        info = "'%s' channel %i: %s modulation" % (self.device_name, channel, parameter)
+        if self.dev is not None:
+            self.dev.cmd('MOD, %i, %s' % (channel + 1, parameter))
+            print(info)
+            return True
+        print(info + ' failed!')
+        return False        
+        
+    def setMod(self, channel, parameter):
+        self.ModParameter[int(channel)] = parameter
+        print(f"Modulation parameter for channel {channel} updated: {parameter}")
+        self.update_parameter(channel, parameter)
+        
     def setpointPID(self, channel, value): #value must be [-1,+1] V
         # Andre: PID setpoint: applies a DC offset to anable locking at non-zero setpoint voltage. returns True if ok, False on error.
         info = "'%s' channel %i: PID's setpoint at %.1f mV" % (self.device_name, channel, value)
@@ -1161,17 +1366,28 @@ class MOGLabs_QRF_Worker(Worker):
         # Andre: report the current status of the PID controller and whether saturation occured
         return self.dev.cmd('PID, STATUS, %i' % (channel + 1)) 
 
-    def pregainPID(self, channel, value):
-        # Andre: set PID preGAIN. It returns True if ok, False on error.
-        mod_type='AMPL'
-        info = "'%s' channel %i: PID's %s PreGAIN is set to %i  %s" % (self.device_name, channel, mod_type, value, '%')
+    def pregainMod(self, channel, value):
+        # Andre: set Mod preGAIN. It returns True if ok, False on error.
+        parameter = self.ModParameter[int(channel)] 
+        info = "'%s' channel %i: Modulation %s PreGAIN is set to %i  %s" % (self.device_name, channel, parameter, value, '%')
         if self.dev is not None:
-            self.dev.cmd('GAIN, %i, %s, %f' % (channel + 1, mod_type, value)) 
+            self.dev.cmd('GAIN, %i, %s, %f' % (channel + 1, parameter, value)) 
             print(info)
             return True
         print(info + ' failed!')
         return False
 
+    def pregainPID(self, channel, value):
+        # Andre: set PID preGAIN. It returns True if ok, False on error.
+        mod_type=self.ModParameter[int(channel)] 
+        info = "'%s' channel %i: PID's %s PreGAIN is set to %i  %s" % (self.device_name, channel, mod_type, value, '%')
+        if self.dev is not None:
+            self.dev.cmd('PID, GAIN, %i, %s, %f' % (channel + 1, mod_type, value)) 
+            print(info)
+            return True
+        print(info + ' failed!')
+        return False
+    
     def print_main(self, string):
         print(string)     
 

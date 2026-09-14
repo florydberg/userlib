@@ -1,4 +1,4 @@
-# Modified by Andre FloRydberg on 10/03/2026
+# Modified by Andre FloRydberg on 22/06/2026
 
 import labscript_utils.h5_lock
 import h5py
@@ -12,6 +12,7 @@ import time
 
 debugging_mode=True
 reordering_mode = 0
+dds_mode=True
 
 naked_eye = 1
 
@@ -65,6 +66,8 @@ class SpectrumAWGWorker(Worker):
         self.AWG = SpectrumCard.SpectrumCard(self.device_path,timeout=self.timeout)
         # print(self.__dir__())
         self.gemetry_path = None
+        self.tab_values=None
+        self.dds_on=False
 
         self.AWG.open()
 
@@ -102,7 +105,7 @@ class SpectrumAWGWorker(Worker):
         self.AWG.set_ext_trigger_mode('ext0','pos',rearm=True)
         self.AWG.set_ext_trigger_level('ext0',2000,800) # 2V trigger, 0.8V rearm
         self.AWG.set_trigger_or_mask(['ext0'])
-        self.AWG.trigger = ['ext0']
+        self.AWG.trigger = ['software'] #['ext0']
         self.AWG.seq_set_memory_segments(self.memory_segments)
         self.AWG.change_Multi_IO('X0', 'RUNSTATE')
         self.AWG.card_write_setup()
@@ -271,81 +274,148 @@ class SpectrumAWGWorker(Worker):
 
     def dds_static(self, values=None, amps=100):
         
-        if values is None:
+        if values is False:
             self.AWG.card_stop()
             print("Manual DDS mode ended.")
+            self.dds_on=False
             return {}
+        if values is None:
+            
+            if self.tab_values is not None:
+                values = self.tab_values
+                print("Buffer DDS mode started.")
+                print(values)
+
+            else:
+                self.AWG.card_stop()
+                print("Manual DDS mode ended.")
+                return {}
         else:
+            self.tab_values=values
             print("Manual DDS mode on")
-            self.AWG.set_generation_mode(mode='dds')  
-            self.AWG.card_stop()
-            self.AWG.set_trigger_or_mask(enable_sources=self.AWG.trigger)
 
-            self.AWG.dds_setup(0)
+        self.AWG.card_stop()
+        self.AWG.set_generation_mode(mode='dds')  
+        
+        self.AWG.set_trigger_or_mask(enable_sources=self.AWG.trigger)
+        # print(self.AWG.trigger)
+        if self.AWG.trigger == ['software']:
+            trigger_duration = 1000 # 10 = 25 us
+        else:
+            trigger_duration = None
 
-            self.AWG.card_start()
-            self.AWG.card_enable_trigger()
+        self.AWG.dds_setup(0, trigger_duration)
+
+        self.AWG.card_start()
+        self.AWG.card_enable_trigger()
 
         if self.ch_num==1:
             print("BE CAREFUL: THIS FUNCTION IS DEPRECATED")
 
         elif self.ch_num == 2:
             if isinstance(values, list) and all(isinstance(ch, list) for ch in values):
-                for k, frq in enumerate(values[0]):
-                    core=cores_0[k]
-                    N = len(values[0])
+                for i in range(10):
+                    for k, frq in enumerate(values[0]):
+                        core=cores_0[k]
+                        N_0 = len(values[0])
 
-                    phase_opt = 2*(1+np.random.uniform(0,1)) * np.pi * k / N 
-                    phase_opt = np.pi * k * (k+1)/ N  #Kitayoshi's pahse (see Omar's Thesis)
+                        # phase_opt = 2*(1+np.random.uniform(0,1)) * np.pi * k / N_0
+                        phase_opt = np.pi * k * (k+1)/ N_0  #Kitayoshi's phase (see Omar's Thesis)
 
+                        if np.isscalar(amps):
+                            ampl = amps
+                        else:
+                            ampl = amps[0]
+                        ampl *= CF[N_0]/N_0#*LUTx(frq)
 
-                    self.AWG.dds_static(core, frequency=frq+np.random.uniform(0,1)/10, amplitude=amps[0]*CF[N]/N, phase=phase_opt)
-                print(f"DDS manual mode started for channel 0.")
+                        self.AWG.dds_static(core, frequency=frq+np.random.uniform(0,1)/100, amplitude=ampl, phase=phase_opt) #•+np.random.uniform(0,1)/1000
+                        
+                    # print(f"DDS manual mode started for channel 0.")
 
-                for k, frq in enumerate(values[1]):
-                    core=cores_1[k]
-                    N = len(values[1])
+                    for k, frq in enumerate(values[1]):
+                        core=cores_1[k]
+                        N_1 = len(values[1])
 
-                    phase_opt = 2*(1+np.random.uniform(0,1)) * np.pi * k / N 
-                    phase_opt = np.pi * k * (k+1)/ N  #Kitayoshi's pahse (see Omar's Thesis) 
+                        # phase_opt = 2*(1+np.random.uniform(0,1)) * np.pi * k /  N_1
+                        phase_opt = np.pi * k * (k+1)/  N_1  #Kitayoshi's phase (see Omar's Thesis) 
+                        if np.isscalar(amps):
+                            ampl = amps
+                        else:
+                            ampl = amps[0]
+                        ampl *= CF[N_1]/N_1#*LUTy(frq)
 
+                        self.AWG.dds_static(core, frequency=frq+np.random.uniform(0,1)/100, amplitude=ampl, phase=phase_opt)
+                    # print(f"DDS manual mode started for channel 1.")
 
-                    self.AWG.dds_static(core, frequency=frq+np.random.uniform(0,1), amplitude=amps[1]*CF[N]/N, phase=phase_opt)
-                print(f"DDS manual mode started for channel 1.")
+                    self.AWG.trigger_dds(trigger_time=trigger_duration)
 
-                self.AWG.trigger_dds(trigger_time=10)
+                    if self.AWG.trigger is not ['software']:
+                        for core in cores_0[:N_0] + cores_1[:N_1] : #range(0,20
+                            self.AWG.dds_static(core, frequency=frq+np.random.uniform(0,1)/1000, amplitude=0, phase=phase_opt)
+                        # print("zero values for trigger")
+
+                        self.AWG.trigger_dds(trigger_time=trigger_duration)
+                    
                 self.AWG.dds_setup(1)
                 print('running...')
+                self.dds_on=True
             else:
                 if debugging_mode:
                     print('nothing to do')
                 return {}      
 
-        # self.AWG.card_force_trigger() # Start replay without a hardware trigger
+        # print(self.AWG.trigger)
+        if self.AWG.trigger == ['software']:
+            # print("software trigger forced")
+            self.AWG.card_force_trigger() # Start replay without a hardware trigger
 
         return {}
 
     def dds_slope(self, values_i=None, values_f=None, amps=100, duration=1, c_loop=False, keep_final=False):
-        if values_i is None:
+        if values_i is False:
             self.AWG.card_stop()
-            print("Manual DDS slope mode ended.")
+            print("Manual DDS mode ended.")
+            self.dds_on=False
             return {}
-        else:
-            print("Manual DDS slope mode on")
-            self.AWG.set_generation_mode(mode='dds')  
-            self.AWG.card_stop()
+        if values_i is None:
+        
+            if self.tab_values is not None:
 
-            self.AWG.dds_setup(0, trigger_time=duration)
-            self.AWG.card_start()
-            self.AWG.card_enable_trigger()
+                values_i = self.tab_values
+                print("Buffer DDS mode started.")
+                print(values_i)
+
+            else:
+                self.AWG.card_stop()
+                print("Manual DDS mode ended.")
+                return {}
+        else:
+            self.tab_values=values_i
+            print("Manual DDS mode on")
+
+        self.AWG.card_stop()
+        self.AWG.set_generation_mode(mode='dds')  
+        
+        self.AWG.set_trigger_or_mask(enable_sources=self.AWG.trigger)
+        # print(self.AWG.trigger)
+        if self.AWG.trigger == ['software']:
+            trigger_duration = duration # 10 = 25 us
+        else:
+            trigger_duration = None
+
+        self.AWG.dds_setup(0, trigger_duration)
+
+        self.AWG.card_start()
+        self.AWG.card_enable_trigger()
 
         if self.ch_num == 2:
             if isinstance(values_i, list) and all(isinstance(ch, list) for ch in values_i):
 
-                for frq in range(len(values_i[0])):
+                for frq in range(len(values_i[0])): #STARTING VALUE
                     core=cores_0[frq]
                     N = len(values_i[0])
-                    self.AWG.dds_static(core, frequency=values_i[0][frq], amplitude=amps[1]*CF[N]/N)
+
+                    self.AWG.dds_static(core, frequency=values_i[0][frq], amplitude=amps[0]*CF[N]/N)
                 print(f"DDS manual static mode started for channel 0.")
                 for frq in range(len(values_i[1])):
                     core=cores_1[frq]
@@ -354,11 +424,12 @@ class SpectrumAWGWorker(Worker):
                 print(f"DDS manual static mode started for channel 1.")
 
                 self.AWG.trigger_dds(trigger_time=0)
+                self.AWG.dds_setup(1)
 
-                for frq in range(len(values_f[0])):
+                for frq in range(len(values_f[0])): #SLOPE
                     core=cores_0[frq]
                     N = len(values_f[0])
-                    self.AWG.dds_slope(core, frequency_per_sec=(values_f[0][frq]-values_i[0][frq])/duration*1e3, amplitude=amps[0]*CF[N]/N)
+                    self.AWG.dds_slope(core, frequency_per_sec=(values_f[0][frq]-values_i[0][frq])/duration, amplitude=amps[0]*CF[N]/N)
                 print(f"DDS manual slope mode started for channel 0.")
                 for frq in range(len(values_f[1])):
                     core=cores_1[frq]
@@ -367,44 +438,53 @@ class SpectrumAWGWorker(Worker):
                 print(f"DDS manual slope mode started for channel 1.")
 
                 self.AWG.trigger_dds(trigger_time=1)
+                self.AWG.dds_setup(1)
 
                 if keep_final:
                     for frq in range(len(values_f[0])):
                         core=cores_0[frq]
                         N = len(values_f[0])
-                        self.AWG.dds_static(core, frequency=values_f[0][frq], amplitude=amps[1]*CF[N]/N)
+                        self.AWG.dds_slope(core, frequency_per_sec=0, amplitude=amps[0]*CF[N]/N)
                     print(f"DDS manual static mode started for channel 0.")
                     for frq in range(len(values_f[1])):
                         core=cores_1[frq]
                         N = len(values_f[1])
-                        self.AWG.dds_static(core, frequency=values_f[1][frq], amplitude=amps[1]*CF[N]/N)
+                        self.AWG.dds_slope(core, frequency_per_sec=0, amplitude=amps[1]*CF[N]/N)
                     print(f"DDS manual static mode started for channel 1.")
 
                     self.AWG.trigger_dds(trigger_time=duration)
+                    self.AWG.dds_setup(1)
+                else:
+                    for frq in range(len(values_f[0])):
+                        core=cores_0[frq]
+                        N = len(values_f[0])
+                        self.AWG.dds_slope(core, frequency_per_sec=0, amplitude=0)
+                    print(f"DDS manual static mode ended for channel 0.")
+                    for frq in range(len(values_f[1])):
+                        core=cores_1[frq]
+                        N = len(values_f[1])
+                        self.AWG.dds_slope(core, frequency_per_sec=0, amplitude=0)
+                    print(f"DDS manual static mode ended for channel 1.")
 
-                self.AWG.dds_setup(1)
-                print('should be working...')
+                    self.AWG.trigger_dds(trigger_time=2)
+                    self.AWG.dds_setup(1)                    
+
+                
+                print('running...')
+                self.dds_on=True
             else:
                 if debugging_mode:
                     print('nothing to do')
                 return {}      
 
-        time.sleep(1)
-        self.AWG.card_force_trigger() # Start replay without a hardware trigger
-
-        time.sleep(1)
-        self.AWG.card_force_trigger() # Start replay without a hardware trigger
-
-        time.sleep(duration/1e3)
-        self.AWG.card_force_trigger() # Start replay without a hardware trigger
-
-        time.sleep(duration/1e3)
-        self.AWG.card_force_trigger() # Start replay without a hardware trigger        
-        time.sleep(1)
-        self.dds_slope(None)
         if c_loop:
-            self.AWG.card_stop()
-            self.dds_slope(values_i=values_i, values_f=values_f, amps=amps, duration=duration, c_loop=c_loop, keep_final=keep_final)
+            time.sleep(duration*3)
+            self.dds_slope(values_i, values_f, amps, duration, c_loop, keep_final)
+
+        # print(self.AWG.trigger)
+        if self.AWG.trigger == ['software']:
+            print("software trigger forced")
+            self.AWG.card_force_trigger() # Start replay without a hardware trigger
 
         return {}
 
@@ -501,7 +581,7 @@ class SpectrumAWGWorker(Worker):
                     continue
 
     def transition_to_buffered(self, device_name, h5_file, initial_values, fresh):
-        if False:
+        if not dds_mode:
             self.AWG.card_stop() # If card was still running, e.g. from manual mode
             self.AWG.set_generation_mode(self.generation_mode)
             self.AWG.set_sample_rate(int(self.sample_rate))
@@ -606,11 +686,13 @@ class SpectrumAWGWorker(Worker):
                     daemon=True,
                 )
                 self.reordering_thread.start()
-
+        else: #run dds static mode
+            self.dds_static(self.tab_values)
+            print("replaying tab values")
         return initial_values
 
     def transition_to_manual(self):
-        if False:
+        if True:
             self.AWG.card_stop()
         return True
 

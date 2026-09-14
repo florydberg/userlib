@@ -1078,7 +1078,7 @@ class SpectrumCard:
             spcm_dwSetParam_d64(self.hCard, SPC_DDS_CORE0_AMP + core, amplitude / 100)
             spcm_dwSetParam_d64(self.hCard, SPC_DDS_CORE0_PHASE + core, phase)
             spcm_dwSetParam_d64(self.hCard, SPC_DDS_CORE0_FREQ + core, MEGA(frequency))
-            print("core number ", core, " set to: frequency ", frequency, "MHz; amplitude: ", amplitude, "%; phase: ", phase, "degrees.")
+            # print("core number ", core, " set to: frequency ", frequency, "MHz; amplitude: ", amplitude, "%; phase: ", phase, "degrees.")
             
         else:
             raise ValueError("Invalid core number. Must be 0<20.")
@@ -1105,7 +1105,7 @@ class SpectrumCard:
         spcm_dwSetParam_i32 (self.hCard, SPC_DDS_CMD, SPCM_DDS_CMD_EXEC_AT_TRG);
         # print("Trigger time set to:", trigger_time, "seconds.")
 
-    def dds_setup(self, step, trigger_time=1):
+    def dds_setup(self, step, trigger_time = None):
         if step==0:
             print("Setting up DDS cores and triggers.")
             spcm_dwSetParam_i64(self.hCard, SPC_DDS_CORES_ON_CH1, SPCM_DDS_CORE8 | SPCM_DDS_CORE9 |SPCM_DDS_CORE10 | SPCM_DDS_CORE11 | SPCM_DDS_CORE20)
@@ -1113,11 +1113,12 @@ class SpectrumCard:
             # spcm_dwSetParam_i32 (self.hCard, SPC_DDS_TRG_SRC, SPCM_DDS_TRG_SRC_NONE);
             # spcm_dwSetParam_i32 (self.hCard, SPC_DDS_TRG_SRC, SPCM_DDS_TRG_SRC_TIMER);
             
-            if True:
+            if trigger_time is None:
                 spcm_dwSetParam_i32 (self.hCard, SPC_DDS_TRG_SRC, SPCM_DDS_TRG_SRC_CARD);
                 print("Trigger set.") 
             else:
-                spcm_dwSetParam_d64 (self.hCard, SPC_DDS_TRG_TIMER, trigger_time);
+                spcm_dwSetParam_i32 (self.hCard, SPC_DDS_TRG_SRC, SPCM_DDS_TRG_SRC_NONE);
+                # spcm_dwSetParam_d64 (self.hCard, SPC_DDS_TRG_TIMER, trigger_time);
                 print("Trigger time set to:", trigger_time, "seconds.") 
             
         elif step==1:

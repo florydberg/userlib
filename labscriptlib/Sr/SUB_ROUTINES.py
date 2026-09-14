@@ -300,7 +300,7 @@ if True: #Envelope of ttl and analog
         channel_trigger.go_high(tt)
         channel_trigger.go_low(tt+dt)
 
-    def NEW_TABLE_LINE(channel_name, tt, frequency, amplitude):
+    def NEW_TABLE_LINE(channel_name, tt, frequency, amplitude, duration=dt):
 
         channel = globals().get(channel_name)
         channel.DDS.setamp(tt, amplitude*1e2)
@@ -309,8 +309,10 @@ if True: #Envelope of ttl and analog
         trigger_name = channel_name+'_trigger'
         channel_trigger = globals().get(trigger_name)
 
+        if duration<10*usec: duration=10*usec
         channel_trigger.go_high(tt)
-        channel_trigger.go_low(tt+dt)
+        channel_trigger.go_low(tt+duration)
+        return duration
 
     def MOT_Blue2D_AOM_TTL(tt, control=True):
         if control:
@@ -381,9 +383,9 @@ if True: #Envelope of ttl and analog
 
     def Twizzi_Switch_TTL(tt, control=True):
         if control:
-            Tweezer_switch.go_high(tt)
+            Tweezer_Shutter.go_high(tt)
         else:
-            Tweezer_switch.go_low(tt)
+            Tweezer_Shutter.go_low(tt)
 
     def Tweezers_AOM_TTL(tt, control=True):
         if control:
@@ -410,6 +412,17 @@ if True: #Envelope of ttl and analog
             return
         else:
             print('Value not allowed.')
+    def Re679_AOM_TTL(tt, control=True):
+        if control:
+            re679_switch.go_high(tt)
+        else:
+            re679_switch.go_low(tt)
+
+    def Re707_AOM_TTL(tt, control=True):
+        if control:
+            re707_switch.go_high(tt)
+        else:
+            re707_switch.go_low(tt)
 
     def COILSmain_Current(tt, value=0):
         BigCoilsI.constant(tt, abs(value))
@@ -421,7 +434,7 @@ if True: #Envelope of ttl and analog
         CompCoilsI_X.constant(tt, abs(value))
 
     def COILScompY_Current(tt, value=0):
-        CompCoilsI_Y.constant(tt, abs(value))
+        CompCoilsI_Y.constant(tt, value)
 
     def COILScompZ_Current(tt, value=0):
         CompCoilsI_Z.constant(tt, abs(value))
@@ -445,6 +458,18 @@ if True: #Envelope of ttl and analog
                 coils.constant(tt, GLOBALS['Z_Coils_Current']-i*0.001)  
                 tt+=100*usec
                 return tt 
+
+    def Re679_AOM_TTL(tt, control=True):
+        if control:
+            re679_switch.go_high(tt)
+        else:
+            re679_switch.go_low(tt) 
+
+    def Re707_AOM_TTL(tt, control=True):
+        if control:
+            re707_switch.go_high(tt)
+        else:
+            re707_switch.go_low(tt) 
 
 if True: # === MOTs ===
     def BlueMot_load(tt, load_time):
@@ -1171,48 +1196,36 @@ if True: # === MOTs ===
 
         return tt
     
-    def take_absorbImaging_new(tt, beam_duration):
+    def take_absorbImaging_red(tt, beam_duration):
+
         trigger_delay=100*usec+5*usec #100 for camera activation + 5 as safety buffer
         Basler_Camera_abs_readout=4*120*msec # was at 120ms with small ROI, when enlarged changed to 200ms, still had issues capturing, changed to 480 and no issue
+        NEW_TABLE_LINE('Sisyphus', tt-trigger_delay, (GLOBALS['Red_MOT_Frq_fin']+0.5*GLOBALS['Sisyphus_Frq'])/1e6, GLOBALS['Sisyphus_Pow'], 5*us )
 
-        tt-=3.9*ms
-        Setpoint_imaging.constant(tt-10*ms,-1) #turning off AOM
-        tt+=5*us
-        Shutter_ImagingBlue.go_high(tt-3*ms) 
-        tt+=dt  
-        Setpoint_imaging.constant(tt+2.9*ms,GLOBALS['ImagingAbs_SetPoint'])   
-        
-        BlueImaging_AOM_TTL(tt, True)
-        BlueImaging_AOM_TTL(tt+beam_duration, False)
         tt+=Basler_Camera_abs.expose(tt-trigger_delay,'Atoms', frametype='tiff')
-        tt+=GLOBALS['AbsImgPulse_duration']+4*ms
-        Setpoint_imaging.constant(tt+1*us,-1) #turning off AOM
-        
-        Shutter_ImagingBlue.go_low(tt+5*us)
-        tt+=10*ms
-        Setpoint_imaging.constant(tt+1*us,5)
-        tt+=20*ms
-        Setpoint_imaging.constant(tt-10*ms,-1) #turning off AOM
-        tt+=5*us
-        Shutter_ImagingBlue.go_high(tt-3*ms) 
-    
-        Setpoint_imaging.constant(tt+2.9*ms,GLOBALS['ImagingAbs_SetPoint'])# turning on the AOM with the external setpoint considering delay
-        
-        BlueImaging_AOM_TTL(tt, True)
-        BlueImaging_AOM_TTL(tt+beam_duration, False)
-        tt+=Basler_Camera_abs.expose(tt-trigger_delay,'Probe', frametype='tiff')
-        tt+=GLOBALS['AbsImgPulse_duration']+4*ms
-        Setpoint_imaging.constant(tt+1*us,-1) #turning off AOM
 
-        Shutter_ImagingBlue.go_low(tt+5*us)
-        tt+=10*ms
-        Setpoint_imaging.constant(tt+1*us,5)
+        # Sisyphus_AOM_TTL(tt, True)
+        # Sisyphus_AOM_TTL(tt+beam_duration, False)
+        
+        tt+=Basler_Camera_abs_readout 
+        TABLE_MODE_OFF('Sisyphus', tt) 
+
+        NEW_TABLE_LINE('Sisyphus', tt-trigger_delay, (GLOBALS['Red_MOT_Frq_fin']+0.5*GLOBALS['Sisyphus_Frq'])/1e6, GLOBALS['Sisyphus_Pow'], 5*us )
+
+        tt+=Basler_Camera_abs.expose(tt-trigger_delay,'Probe', frametype='tiff')
+        
+        # Sisyphus_AOM_TTL(tt, True)
+        # Sisyphus_AOM_TTL(tt+beam_duration, False)
 
         tt+=Basler_Camera_abs_readout 
+        TABLE_MODE_OFF('Sisyphus', tt) 
+
         Basler_Camera_abs.expose(tt-trigger_delay,'Background', frametype='tiff')
+
         tt+=Basler_Camera_abs_readout 
 
         return tt
+    
 
     def take_absorbImaging_test(tt, beam_duration):
         trigger_delay=100*usec+5*usec #100 for camera activation + 5 as safety buffer
@@ -1294,19 +1307,20 @@ if True: # === MOTs ===
         ImagingTweezBeam.DDS.setfreq(tt, G_ImagingTweez_Frq*1e3)
         ImagingTweezBeam.DDS.setamp(tt, G_ImagingTweez_Pow*1e2)
 
-        Sisyphus.DDS.setfreq(tt, G_Sisyphus_Frq*1e3)
-        Sisyphus.DDS.setamp(tt, G_Sisyphus_Pow*1e2)
+        if False:
+            Sisyphus.DDS.setfreq(tt, G_Sisyphus_Frq*1e3)
+            Sisyphus.DDS.setamp(tt, G_Sisyphus_Pow*1e2)
 
         Tweezers.DDS.setfreq(tt,  G_Tweezers_Frq*1e3)
         Tweezers.DDS.setamp(tt, G_Tweezers_Pow*1e2)
-        Tweezers_gate.go_high(tt+dt)
+        # Tweezers_gate.go_high(tt+dt)
 
     def set_CompCoils(tt, control="ON"):
         if control=="ON":
             COILScomp_SwitchON_TTL(tt, True)
             tt+=5*usec
             COILScompX_Current(tt, abs(GLOBALS['X_Coils_Current']))
-            COILScompY_Current(tt+dt, abs(GLOBALS['Y_Coils_Current']))
+            COILScompY_Current(tt+dt, GLOBALS['Y_Coils_Current'])
             COILScompZ_Current(tt+2*dt, abs(GLOBALS['Z_Coils_Current']))
         else:
             COILScomp_SwitchON_TTL(tt, False)
@@ -1340,17 +1354,38 @@ if True: # === MOTs ===
                 channel.constant(tt, v_initial-i*v_step_size)
                 tt+=deltat
         return tt 
+    
+    def Bfiled_test(tt, control="ON"):
+        if control=="ON":
+            COILScompX_Current(tt, abs(GLOBALS['X_Coils_Current']*GLOBALS['TweezerBfield']))
+            COILScompY_Current(tt+dt, GLOBALS['Y_Coils_Current']*GLOBALS['TweezerBfield'])
+            COILScompZ_Current(tt+2*dt, abs(GLOBALS['Z_Coils_Current']*GLOBALS['TweezerBfield']))
+        elif control=="OFF":
+            COILScompX_Current(tt, abs(GLOBALS['X_Coils_Current']))
+            COILScompY_Current(tt+dt, GLOBALS['Y_Coils_Current'])
+            COILScompZ_Current(tt+2*dt, abs(GLOBALS['Z_Coils_Current']))
+        return tt+4*dt
 
     def set_CompCoils_QuantizationAxis(tt, control="ON", duration=GLOBALS['QuantizAxis_ramp_duration'], v_step_size=0.01):
         if control=="ON":
-            analog_ramp(CompCoilsI_X, tt, abs(GLOBALS['X_Coils_Current']), abs(GLOBALS['QuantizAxis_X_Coils_Current']), duration, v_step_size)
-            analog_ramp(CompCoilsI_Y, tt+dt, abs(GLOBALS['Y_Coils_Current']), abs(GLOBALS['QuantizAxis_Y_Coils_Current']), duration, v_step_size)
-            analog_ramp(CompCoilsI_Z, tt+2*dt, abs(GLOBALS['Z_Coils_Current']), abs(GLOBALS['QuantizAxis_Z_Coils_Current']), duration, v_step_size)
+            if duration == 0:
+                COILScompX_Current(tt, abs(GLOBALS['QuantizAxis_X_Coils_Current']))
+                COILScompY_Current(tt+dt, GLOBALS['QuantizAxis_Y_Coils_Current'])
+                COILScompZ_Current(tt+2*dt, abs(GLOBALS['QuantizAxis_Z_Coils_Current']))  
+            else:    
+                analog_ramp(CompCoilsI_X, tt, abs(GLOBALS['X_Coils_Current']), abs(GLOBALS['QuantizAxis_X_Coils_Current']), duration, v_step_size)
+                analog_ramp(CompCoilsI_Y, tt+dt, GLOBALS['Y_Coils_Current'], GLOBALS['QuantizAxis_Y_Coils_Current'], duration, v_step_size)
+                analog_ramp(CompCoilsI_Z, tt+2*dt, abs(GLOBALS['Z_Coils_Current']), abs(GLOBALS['QuantizAxis_Z_Coils_Current']), duration, v_step_size)
         else:
-            analog_ramp(CompCoilsI_X, tt, abs(GLOBALS['QuantizAxis_X_Coils_Current']), abs(GLOBALS['X_Coils_Current']), duration, v_step_size)
-            analog_ramp(CompCoilsI_Y, tt+dt, abs(GLOBALS['QuantizAxis_Y_Coils_Current']), abs(GLOBALS['Y_Coils_Current']), duration, v_step_size)
-            analog_ramp(CompCoilsI_Z, tt+2*dt, abs(GLOBALS['QuantizAxis_Z_Coils_Current']), abs(GLOBALS['Z_Coils_Current']), duration, v_step_size)
-        return tt+duration+3*dt
+            if duration == 0:
+                COILScompX_Current(tt, abs(GLOBALS['X_Coils_Current']))
+                COILScompY_Current(tt+dt, GLOBALS['Y_Coils_Current'])
+                COILScompZ_Current(tt+2*dt, abs(GLOBALS['Z_Coils_Current']))
+            else:    
+                analog_ramp(CompCoilsI_X, tt, abs(GLOBALS['QuantizAxis_X_Coils_Current']), abs(GLOBALS['X_Coils_Current']), duration, v_step_size)
+                analog_ramp(CompCoilsI_Y, tt+dt, GLOBALS['QuantizAxis_Y_Coils_Current'], GLOBALS['Y_Coils_Current'], duration, v_step_size)
+                analog_ramp(CompCoilsI_Z, tt+2*dt, abs(GLOBALS['QuantizAxis_Z_Coils_Current']), abs(GLOBALS['Z_Coils_Current']), duration, v_step_size)
+        return duration+3*dt
 
     def set_CompCoils_QuantizationAxis_test(tt, control="ON", duration=GLOBALS['QuantizAxis_ramp_duration'], samplerate=1e5):
         # Ramp compensation coils to/from values that set Quantization axis for imaging
@@ -1358,11 +1393,11 @@ if True: # === MOTs ===
         # generate_analog_samples
         if control=="ON":
             CompCoilsI_X.ramp(tt,      duration, abs(GLOBALS['X_Coils_Current']), abs(GLOBALS['QuantizAxis_X_Coils_Current']), samplerate)
-            CompCoilsI_Y.ramp(tt+dt,   duration, abs(GLOBALS['Y_Coils_Current']), abs(GLOBALS['QuantizAxis_Y_Coils_Current']), samplerate)
+            CompCoilsI_Y.ramp(tt+dt,   duration, GLOBALS['Y_Coils_Current'], GLOBALS['QuantizAxis_Y_Coils_Current'], samplerate)
             CompCoilsI_Z.ramp(tt+2*dt, duration, abs(GLOBALS['Z_Coils_Current']), abs(GLOBALS['QuantizAxis_Z_Coils_Current']), samplerate)
         else:
             CompCoilsI_X.ramp(tt,      duration, abs(GLOBALS['QuantizAxis_X_Coils_Current']), abs(GLOBALS['X_Coils_Current']), samplerate)
-            CompCoilsI_Y.ramp(tt+dt,   duration, abs(GLOBALS['QuantizAxis_Y_Coils_Current']), abs(GLOBALS['Y_Coils_Current']), samplerate)
+            CompCoilsI_Y.ramp(tt+dt,   duration, GLOBALS['QuantizAxis_Y_Coils_Current'], GLOBALS['Y_Coils_Current'], samplerate)
             CompCoilsI_Z.ramp(tt+2*dt, duration, abs(GLOBALS['QuantizAxis_Z_Coils_Current']), abs(GLOBALS['Z_Coils_Current']), samplerate)
         return tt+duration+3*dt
 

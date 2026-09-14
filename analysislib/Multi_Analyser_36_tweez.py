@@ -32,12 +32,12 @@ import seaborn as sns
 N_TWEEZERS = 36
 SAVE_PLOTS = True
 SAVE_CSV = True
-One_D = False
+One_D = True
 
 if One_D:
-    PLOT_AXES = (0,)      # 1D: plot FluoImgPulse_Dt
+    PLOT_AXES = (4,)      # 1D: plot FluoImgPulse_Dt
 else:
-    PLOT_AXES = (0, 1)    # 2D: plot FluoImgPulse_Dt × LAC_duration
+    PLOT_AXES = (1, 2)    # 2D: plot FluoImgPulse_Dt × LAC_duration
 
 
     
@@ -47,6 +47,9 @@ SCAN_NAMES = [
     "LAC_Frq",
     "LAC_Pow",
     "SisyphusImg_Frq",
+    "Sisyphus_Pow",
+    "ImagingTweez_Frq",
+
 ]
 
 SCAN_UNITS = [
@@ -54,6 +57,8 @@ SCAN_UNITS = [
     "s",
      "MHz",
      "",
+     "MHz",
+     "dB",
      "MHz",
 ]
 
@@ -309,7 +314,7 @@ def plot_1d(results: pd.DataFrame, dataset_label: str):
             label=shot.capitalize() + " shot",
         )
 
-    ax.set_title(f"Tweezer ROI integral — {dataset_label}")
+    ax.set_title(f"Tweezer ROI integral - {dataset_label}")
     ax.set_xlabel(f"{parameter} ({unit})")
     ax.set_ylabel("Mean ROI integral")
     ax.grid(alpha=0.25)
@@ -358,7 +363,7 @@ def plot_2d_heatmap(
         for name, value in fixed_dimensions.items()
     )
 
-    title = f"Tweezer ROI integral — {shot_name} shot ({dataset_label})"
+    title = f"Tweezer ROI integral - {shot_name} shot ({dataset_label})"
     if slice_text:
         title += f"\n{slice_text}"
 
