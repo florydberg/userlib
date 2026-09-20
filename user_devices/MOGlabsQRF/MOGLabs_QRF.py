@@ -1,15 +1,26 @@
-#####################################################################
-#                                                                   #
-# /MOGLabs_QRF.py                                                   #
-#                                                                   #
-# Copyright 2024, Florence University  -08/05/24                    #
-#                                                                   #
-# This file is part of the module labscript_devices, in the         #
-# labscript suite (see http://labscriptsuite.org), and is           #
-# licensed under the Simplified BSD License. See the license.txt    #
-# file in the root of the project for the full license.             #
-#                                                                   #
-#####################################################################
+# #####################################################################
+
+
+
+# /MOGLabs_QRF.py
+
+
+
+# Copyright 2024, Florence University  -08/05/24
+
+
+
+# This file is part of the module labscript_devices, in the
+
+# labscript suite (see http://labscriptsuite.org), and is
+
+# licensed under the Simplified BSD License. See the license.txt
+
+# file in the root of the project for the full license.
+
+
+
+# #####################################################################
 
 # last modified by Andre FloRydberg 12/03/2025
 
@@ -36,6 +47,9 @@ if True:
 
     # set number of channels
     MAX_NUM_CHANNELS = 4
+
+    # Temporary logging for QRF_Blue; set False and restart after diagnosis.
+    TRACE_QRF_COMMANDS = True
 
     # min/max RF frequency in MHz
     MIN_RF_FREQ     = 5.0
@@ -126,8 +140,7 @@ class QRF_DDS(IntermediateDevice):
         #    raise LabscriptError("Device '%s' parent device is '%s' but must be 'FPGA_board'!" % (name, type(parent_board).__name__))
 
         # trigger device must be DigitalChannels intermediate device
-        # note: importing FPGA_board makes troubles, so have to check type instead of isinstance!
-        if not 'device' in digital_gate or not 'connection' in digital_gate:
+        # note: importing FPGA_board makes troubles, so have to check type instead of isinstance!a
             raise LabscriptError("Device '%s' give digital_gate={'device':DigitalChannels, 'connection':free channel number}!" % (self.name))
         if type(digital_gate['device']).__name__ != 'DigitalChannels':
             raise LabscriptError("Device '%s' trigger device is '%s' but must be 'DigitalChannels'!" % (name, type(digital_gate['device']).__name__))
@@ -466,12 +479,12 @@ class power_check_boxes(QWidget):
         self.parent.event_queue.put(allowed_states=MODE_MANUAL, queue_state_indefinitely=True, delete_stale_states=False,
                                 data=[self._onMod_, [[self.channel, state], {}]])
 
-        
+    
     def _onMod_(self,  parent, channel, state):       
         # check if PID is still ON
         if state:
             parent.mod_box[self.channel].ui.radioButton_PID.setEnabled(True)
-        
+    
         elif not state: 
             parent.mod_box[self.channel].ui.radioButton_PID.setEnabled(False)
             if parent.mod_box[self.channel].ui.radioButton_PID.isChecked():
@@ -492,7 +505,7 @@ class power_check_boxes(QWidget):
         else:
             print(info + ' failed!')
             self.cb[3].setChecked(self.Mod)
-            
+        
 
     def  onPID(self, state):
         # 'PID' clicked: manually insert event into parent event queue. see tab_base_classes.py @define_state(MODE_MANUAL, True)
@@ -513,25 +526,31 @@ class power_check_boxes(QWidget):
             self.cb[1].setChecked(self.PID)
 
     def update(self, remote_values):
-        "update values from remote_values"
-        state = remote_values['STATUS']
-        signal = (state & 1) == 1
-        amp    = (state & 2) == 2
-        both   = (state & 4) == 4
-        if (signal == amp) and ((self.signal != signal) or (self.amplifier != amp)):
-            self.onBoth(signal)
-        else:
-            if self.signal != signal: self.onSignal(signal)
-            if self.amplifier != amp: self.onAmp(amp)
-            self.both = both
-            self.cb[2].setChecked(both)
+        """Update the display without sending commands to the QRF."""
+        state = int(remote_values["STATUS"])
 
-        state = remote_values['PID']['STATUS']
-        if isinstance(state, str) and (state == 'DISABLED'):
-            self.PID = False
-        else:
-            self.PID = False
-        self.cb[2].setChecked(self.PID)
+        self.signal = bool(state & 1)
+        self.amplifier = bool(state & 2)
+        self.both = self.signal and self.amplifier
+
+        pid_status = str(
+            remote_values["PID"]["STATUS"]
+        ).strip().upper()
+
+        self.PID = (
+            pid_status.startswith("ENABLED")
+            or pid_status in ("AMPL", "FREQ", "PHAS")
+        )
+
+        for checkbox, value in zip(
+            self.cb[:3],
+            (self.signal, self.amplifier, self.both),
+        ):
+            previous = checkbox.blockSignals(True)
+            try:
+                checkbox.setChecked(value)
+            finally:
+                checkbox.blockSignals(previous)
 
 class MOD_boxes(QWidget):
     # Andre: PID box for each DDS
@@ -631,7 +650,7 @@ class MOD_boxes(QWidget):
     def slide_proportional(self):
         value = self.ui.slider_Proportional.value()
         self.ui.doubleSpinBox_Proportional.setValue(value)
-        
+    
     def set_proportional(self):
         value = self.ui.doubleSpinBox_Proportional.value()
         self.ui.slider_Proportional.setSliderPosition(value)
@@ -665,7 +684,7 @@ class MOD_boxes(QWidget):
 
     def _setMod(self, parent, channel, parameter):
         info = "'%s' Channel %i's Modulation set to %s " % (self.name, channel, parameter)
-        
+    
         result = yield (self.parent.queue_work(self.parent.primary_worker, 'setMod', channel, parameter))
         print(info + (' ok' if (result is not None) and result else ' failed'))
 
@@ -678,7 +697,7 @@ class MOD_boxes(QWidget):
         value = self.ui.doubleSpinBox_SetPoint.value()
         self.parent.event_queue.put(allowed_states=MODE_MANUAL, queue_state_indefinitely=True, delete_stale_states=False,
                                     data=[self._set_setpoint, [[self.channel, value], {}]])
-        
+    
     def _set_setpoint(self, parent, channel, value):
         info = "'%s' PID setpoint set to %s" % (self.name, value)
         result = yield (self.parent.queue_work(self.parent.primary_worker, 'setpointPID', channel, value))
@@ -710,7 +729,7 @@ class MOD_boxes(QWidget):
             # self.ui.pushButton_errorSignal.setIcon(self.start_icon)
             self.error_display = False
             # self.ui.slider_ErrorSignal.setSliderPosition(500)        
-            
+        
     def _display_errorSignal(self, parent, channel):
         result = yield(self.parent.queue_work(self.parent.primary_worker,'errorPID', channel) )
         if (result is not None):
@@ -721,10 +740,24 @@ class MOD_boxes(QWidget):
             print('displaying error'+ ' failed!')
 
     def update(self, remote_values):
-        "update values from remote_values"
-        self.ui.doubleSpinBox_Proportional.setValue(remote_values['P'])
-        self.ui.doubleSpinBox_Integral.setValue(remote_values['I'])
-        self.ui.doubleSpinBox_Derivative.setValue(remote_values['D'])
+        """Update PID controls without sending gain commands."""
+        for name, key in (
+            ("Proportional", "P"),
+            ("Integral", "I"),
+            ("Derivative", "D"),
+        ):
+            spinbox = getattr(self.ui, "doubleSpinBox_" + name)
+            slider = getattr(self.ui, "slider_" + name)
+
+            spinbox_previous = spinbox.blockSignals(True)
+            slider_previous = slider.blockSignals(True)
+
+            try:
+                spinbox.setValue(remote_values[key])
+                slider.setValue(remote_values[key])
+            finally:
+                slider.blockSignals(slider_previous)
+                spinbox.blockSignals(spinbox_previous)
 
     def onPID(self, state):
         # 'PID' clicked: manually insert event into parent event queue. see tab_base_classes.py @define_state(MODE_MANUAL, True)
@@ -762,7 +795,6 @@ class MOD_boxes(QWidget):
         else:
             print(info + ' failed!')
             # self.cb[1].setChecked(self.PID)
-
 
 @BLACS_tab
 class MOGLabs_QRF_Tab(DeviceTab):
@@ -903,20 +935,20 @@ class MOGLabs_QRF_Tab(DeviceTab):
                         layout.addWidget(cb, 1, 1)
 
                     # store reference
-                    if j < MAX_NUM_CHANNELS:
-                        self.power_cb[j] = cb
+                    if 0 <= channel_index < MAX_NUM_CHANNELS:
+                        self.power_cb[channel_index] = cb
                     else:
                         print(f'Error: max channels {MAX_NUM_CHANNELS}, found {len(toolpalette._widget_list)}')
                         exit()
         # Andre: PID SECTION #######################################################################
-     
+ 
 
         if True:
             self.mod_box = [None for _ in range(MAX_NUM_CHANNELS)]
             for ch in range(4):
                 box_name=str('MOD'+str(ch))
                 self.mod_box[ch] = MOD_boxes(parent=self, name=box_name, channel=ch)
-       
+   
     def get_save_data(self):
         # Andi: save user selection on shutdown
         data = {}
@@ -970,7 +1002,16 @@ class MOGLabs_QRF_Tab(DeviceTab):
             self.mod_box[ch].update(ch_data['PID'])
 
 # @BLACS_worker # Andi: disabled due to warning
+
 class MOGLabs_QRF_Worker(Worker):
+    def _set_qrf_phase(self, phase):
+        self._qrf_phase = phase
+        if TRACE_QRF_COMMANDS and self.device_name == "QRF_Blue":
+            self.logger.warning(
+                "QRF_PHASE monotonic=%.6f phase=%s shot=%s",
+                time.monotonic(), phase, getattr(self, 'shot_file', None),
+            )
+
     def init(self):
         global h5py
         import labscript_utils.h5_lock, h5py
@@ -978,8 +1019,9 @@ class MOGLabs_QRF_Worker(Worker):
         # Andi: reduce number of log entries in logfile (labscript-suite/logs/BLACS.log)
         self.logger.setLevel(log_level)
 
+        self._set_qrf_phase('initialising')
         self.PIDstatus={}
-        
+    
         self.smart_cache = {'TABLE_DATA': ''}
         self.smart_cache = {'STATIC_DATA': ''}
         self.ModStatus = {}            
@@ -998,14 +1040,15 @@ class MOGLabs_QRF_Worker(Worker):
                     print(f"Ch {channel} already in normal mode")
                     self.dev.cmd('MODE,%i,NSB' % (channel+1))
                     self.dev.cmd(f"ON,{channel+1},SIG")
-                
-                
+            
+            
                 self.ModStatus[channel] = False
                 self.ModParameter[channel] = 'AMPL'
                 self.PIDstatus[channel]=False
                 ask=self.dev.ask(f'PID,STATUS,{channel+1}')
-
+            self.restore_imaging_am(2)
                 # print(f'PID of channel {channel} is {str(ask)}')
+        self._set_qrf_phase('manual')
 
     def reconnect(self, name):
         # Andi: try to connect to device. returns True on success, otherwise False.
@@ -1017,6 +1060,38 @@ class MOGLabs_QRF_Worker(Worker):
             print('%s: no connection.' % (name))
             return False
         self.dev.flush()
+        if TRACE_QRF_COMMANDS and self.device_name == "QRF_Blue":
+            import sys
+            original_cmd = self.dev.cmd
+
+            def traced_cmd(command):
+                caller = sys._getframe(1).f_code.co_name
+                started = time.monotonic()
+                phase = getattr(self, '_qrf_phase', 'unknown')
+                self.logger.warning(
+                    "QRF_WRITE BEGIN monotonic=%.6f phase=%s caller=%s command=%s",
+                    started, phase, caller, command,
+                )
+                # Observe the existing command; preserve its result or exception.
+                try:
+                    result = original_cmd(command)
+                except Exception as error:
+                    self.logger.warning(
+                        "QRF_WRITE ERROR monotonic=%.6f elapsed_ms=%.3f "
+                        "phase=%s caller=%s command=%s error=%r",
+                        time.monotonic(), 1000 * (time.monotonic() - started),
+                        phase, caller, command, error,
+                    )
+                    raise
+                self.logger.warning(
+                    "QRF_WRITE END monotonic=%.6f elapsed_ms=%.3f "
+                    "phase=%s caller=%s command=%s",
+                    time.monotonic(), 1000 * (time.monotonic() - started),
+                    phase, caller, command,
+                )
+                return result
+
+            self.dev.cmd = traced_cmd
         return True
 
     def check_remote_values(self):
@@ -1060,19 +1135,24 @@ class MOGLabs_QRF_Worker(Worker):
         return results
 
     def program_manual(self, front_panel_values):
+        self._set_qrf_phase('programming_manual')
         # try to reconnect. return on failure.
         if (self.dev is None) and (not self.reconnect('program_manual')):
             return
         # TODO: Optimise this so that only items that have changed are reprogrammed by storing the last programmed values
         # For each DDS channel
-            
+        
         for i in range(MAX_NUM_CHANNELS):
             # and for each subchnl in the DDS,
             for subchnl in ['freq', 'amp', 'phase']:
                 self.program_static(i, subchnl, front_panel_values['channel %d' % i][subchnl])
             # for pid_setting in ['P', 'I', 'D', 'SetPoint']:
             #     self.program_PID(i, pid_setting, PID_values['channel %d' % i][pid_setting])
-        return self.check_remote_values()
+
+        self.restore_imaging_am(2)
+        values = self.check_remote_values()
+        self._set_qrf_phase('manual')
+        return values
 
     def program_static(self, channel, type, value):
         if type == 'freq':
@@ -1080,9 +1160,10 @@ class MOGLabs_QRF_Worker(Worker):
             command = 'FREQ,%d,%fMHz' % (channel + 1, value)
             self.dev.cmd(command)
         elif type == 'amp':
-            # print(value)
-            command = 'POW,%d,%f dBm' % (channel + 1, value)
-            self.dev.cmd(command)
+            if self.device_name == "QRF_Blue" and channel == 2:
+                value = 20.0
+
+            self.dev.cmd('POW,%d,%f dBm' % (channel + 1, value))
         elif type == 'phase':
             # print(value)
             command = 'PHASE,%d,%fdeg' % (channel + 1, value)
@@ -1093,6 +1174,8 @@ class MOGLabs_QRF_Worker(Worker):
         self.smart_cache['STATIC_DATA'] = None
 
     def transition_to_buffered(self, device_name, h5file, initial_values, fresh):
+        self.shot_file = h5file
+        self._set_qrf_phase('preparing')
         # try to reconnect. return on failure.
         if (self.dev is None) and (not self.reconnect('check_remote_values')):
             # Andi: TODO update code as in test case without connection above!
@@ -1115,6 +1198,8 @@ class MOGLabs_QRF_Worker(Worker):
             group = hdf5_file['/devices/' + device_name]
             for channel in range(MAX_NUM_CHANNELS):
                 # If there are values to set the unbuffered outputs to, set them now:
+                static_data = None
+                table_data = None
                 if 'STATIC_DATA%i'%channel in group:
                     static_data = group['STATIC_DATA%i'%channel][:]
                 if 'TABLE_DATA%i'%channel in group:
@@ -1152,13 +1237,23 @@ class MOGLabs_QRF_Worker(Worker):
 
                 elif static_data is not None: # Added by Andre
                     print(f"Ch {channel} in static mode: {static_data[-1]['freq']} MHz, {static_data[-1]['amp']} dBm")
-                    
-                    self.dev.cmd(f'MODE,{channel+1},NSB') 
+                
+                    # self.dev.cmd(f'MODE,{channel+1},NSB') 
+                    # init() already sets the blue imaging channel to NSB.
+                    # Avoid resetting its mode before every shot.
+                    if not (self.device_name == "QRF_Blue" and channel == 2):
+                        self.dev.cmd(f'MODE,{channel+1},NSB')
                     self.dev.cmd(f"FREQ,{channel+1},{1e-3*static_data[-1]['freq']}") ##### BUG  TODO: FIX removing 1e-3 ask Andre #################
-                    self.dev.cmd(f"POW,{channel+1},{1e-2*static_data[-1]['amp']}")   ##### BUG  TODO: FIX removing 1e-2 ask Andre #################
+                    # self.dev.cmd(f"POW,{channel+1},{1e-2*static_data[-1]['amp']}")   ##### BUG  TODO: FIX removing 1e-2 ask Andre #################
+                    power = 1e-2 * static_data[-1]['amp']
+
+                    if self.device_name == "QRF_Blue" and channel == 2:
+                        power = 20.0
+
+                    self.dev.cmd(f"POW,{channel+1},{power}")
                     self.dev.cmd(f"PID, SETPOINT, {channel + 1}, {static_data[-1]['pid_setpoint']/1000}")
 
-                    
+                
                     parameter = self.ModParameter[channel]
 
                     if self.ModStatus[channel]:
@@ -1173,20 +1268,29 @@ class MOGLabs_QRF_Worker(Worker):
                     print(f'PID of channel {channel} is {str(ask)}')
 
                     self.dev.cmd('ON,%i,ALL' % (channel+1))
+        # Restore AM after all buffered-mode configuration.
+        self.restore_imaging_am(2)
+
+        # Ready for the shot, not the timestamp of the actual FPGA start.
+        self._set_qrf_phase('buffered_ready')
         return self.final_values
 
     def abort_transition_to_buffered(self):
         return self.transition_to_manual(True)
-    
+
     def abort_buffered(self):
         # TODO: untested
         return self.transition_to_manual(True)
 
     def transition_to_manual(self, abort=False):
+        self._set_qrf_phase('aborting' if abort else 'returning_to_manual')
         print('Transition to manual')
         if self.dev is not None:
 
             for channel in range(MAX_NUM_CHANNELS): 
+                # Leave blue imaging unchanged after a normally completed experiment.
+                if self.device_name == "QRF_Blue" and channel == 2 and not abort:
+                    continue
                 try:
                     self.dev.cmd(f'TABLE,STOP,{channel+1}') 
                     self.dev.cmd(f'TABLE,CLEAR,{channel+1}')  
@@ -1197,8 +1301,14 @@ class MOGLabs_QRF_Worker(Worker):
                     print(f"Ch {channel} already in normal mode")
                     self.dev.cmd('MODE,%i,NSB' % (channel+1))
                     self.dev.cmd(f"ON,{channel+1},SIG")
-                ask=self.dev.ask(f'PID,STATUS,{channel+1}')
-                print(f'PID of channel {channel} is {str(ask)}')
+                # ask=self.dev.ask(f'PID,STATUS,{channel+1}')
+                # print(f'PID of channel {channel} is {str(ask)}')
+
+            # Restore connection="channel 2" after all mode changes.
+            # Blue imaging already has its AM configuration.
+            # Preserve the existing recovery behavior for aborted runs.
+            if abort or self.device_name != "QRF_Blue":
+                self.restore_imaging_am(2)
 
             if abort:
                 DDSs = [] # Andi to avoid problems
@@ -1222,9 +1332,11 @@ class MOGLabs_QRF_Worker(Worker):
             #         self.program_static(ddsnumber, subchnl, channel_values[subchnl])
 
         # return True to indicate we successfully transitioned back to manual mode
+        self._set_qrf_phase('manual')
         return True
 
     def shutdown(self):
+        self._set_qrf_phase('shutdown')
         # Andi: execute only when we are connected
         if self.dev is not None:
             # turn both channels off
@@ -1242,7 +1354,7 @@ class MOGLabs_QRF_Worker(Worker):
             return True
         print(info + ' failed!')
         return False
-   
+
     def onAmp(self, channel, state):
         # Andi: switch RF amplifier on/off. returns True if ok, False on error.
         cmd = 'ON' if state else 'OFF'
@@ -1271,7 +1383,7 @@ class MOGLabs_QRF_Worker(Worker):
         mod_cmd='ON' if state else 'OFF'
         parameter = self.ModParameter[channel]
 
-        
+    
         if self.dev is not None:
             if state:
                 info = "'%s' channel %i: %s modulation is %sD" % (self.device_name, channel, parameter, cmd)
@@ -1303,11 +1415,11 @@ class MOGLabs_QRF_Worker(Worker):
                 self.dev.cmd('PID, %s ,%i, AMPL' % (cmd, channel + 1))
                 self.dev.cmd('MOD, %i, AMPL, %s' % (channel + 1, mod_cmd))
             self.PIDstatus[channel]=state
-            
+        
             return True
         print(info + ' failed!')
         return False
-       
+   
     def setPID(self, channel, setting, value):
         # Andre: set PID GAIN P proportional, I integral, D derivative. returns True if ok, False on error.
         info = "'%s' channel %i: PID's %s is set to %.1f %s" % (self.device_name, channel, setting, value, '%')
@@ -1328,12 +1440,12 @@ class MOGLabs_QRF_Worker(Worker):
             return True
         print(info + ' failed!')
         return False        
-        
+    
     def setMod(self, channel, parameter):
         self.ModParameter[int(channel)] = parameter
         print(f"Modulation parameter for channel {channel} updated: {parameter}")
         self.update_parameter(channel, parameter)
-        
+    
     def setpointPID(self, channel, value): #value must be [-1,+1] V
         # Andre: PID setpoint: applies a DC offset to anable locking at non-zero setpoint voltage. returns True if ok, False on error.
         info = "'%s' channel %i: PID's setpoint at %.1f mV" % (self.device_name, channel, value)
@@ -1343,7 +1455,7 @@ class MOGLabs_QRF_Worker(Worker):
             return True
         print(info + ' failed!')
         return False
-           
+       
     def invertPID(self, channel, state):
         # Andre: inverts the controller action. returns True if ok, False on error.
         cmd = 'ON' if state else 'OFF'
@@ -1354,14 +1466,14 @@ class MOGLabs_QRF_Worker(Worker):
             return True
         print(info + ' failed!')
         return False   
-   
+
     def errorPID(self, channel):
         # Andre: returns the value of the error signal fed into the PID control loop, for diagnostic purposes
         result = self.dev.ask('PID, ERROR, %i' % (channel + 1))
         value = float(result[0:4])*1000
         print(f'error signal at: {value}') 
         return value
-     
+ 
     def statusPID(self, channel):
         # Andre: report the current status of the PID controller and whether saturation occured
         return self.dev.cmd('PID, STATUS, %i' % (channel + 1)) 
@@ -1387,9 +1499,48 @@ class MOGLabs_QRF_Worker(Worker):
             return True
         print(info + ' failed!')
         return False
-    
+
     def print_main(self, string):
         print(string)     
+    def restore_imaging_am(self, channel):
+        """Restore external AM for the imaging and tweezer channels."""
+
+        if self.dev is None or channel != 2:
+            return
+
+        if self.device_name not in ("QRF_Blue", "QRF_Red"):
+            return
+
+        rf_channel = channel + 1  # Python index 2 = physical channel 3
+
+        # Use the external PID.
+        # Disable the QRF's internal PID only if it is enabled.
+        pid_status = self.dev.ask(
+            f"PID,STATUS,{rf_channel}"
+        ).strip().upper()
+
+        if pid_status.startswith("ENABLED"):
+            self.dev.cmd(f"PID,DISABLE,{rf_channel}")
+
+        # Disable other modulation types.
+        self.dev.cmd(f"MOD,{rf_channel},FREQ,OFF")
+        self.dev.cmd(f"MOD,{rf_channel},PHAS,OFF")
+
+        # Use modulation input 3 for RF channel 3 on this QRF.
+        self.dev.cmd(f"MAPMOD,{rf_channel},{rf_channel}")
+
+        # Imaging-specific power and gain.
+        if self.device_name == "QRF_Blue":
+            self.dev.cmd(f"POW,{rf_channel},20")
+            self.dev.cmd(f"GAIN,{rf_channel},AMPL,34")
+
+        # Enable AM and the RF output.
+        self.dev.cmd(f"MOD,{rf_channel},AMPL,ON")
+        self.dev.cmd(f"ON,{rf_channel},ALL")
+
+        self.ModParameter[channel] = "AMPL"
+        self.ModStatus[channel] = True
+        self.PIDstatus[channel] = False
 
 @runviewer_parser
 class RunviewerClass(object):

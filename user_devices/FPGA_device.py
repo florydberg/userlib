@@ -1655,7 +1655,7 @@ class FPGA_board(PseudoclockDevice):
 
     def generate_code(self, hdf5_file):
         global total_time
-        
+        generate_code_with_labscript = True
         save_print("\n'%s' generating code ...\n" % (self.name))
         if total_time is None:
             total_time = get_ticks()

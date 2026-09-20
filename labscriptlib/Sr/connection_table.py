@@ -70,7 +70,7 @@ if f:
     IGBT_close=DigitalOut(name='IGBT_close', parent_device=DO0, connection=str(15))
 
     DO2=DigitalChannels(name='DO2'  , parent_device=main_board, connection='0x05', rack=0, max_channels = 16)
-    DigitalOut(name='Free_ttl', parent_device=DO2, connection=str(0))
+    DigitalOut(name='PID_blue_HOLD', parent_device=DO2, connection=str(0))
     DigitalOut(name='RedMOT_multiFrq_gate', parent_device=DO2, connection=str(1))
     DigitalOut(name='RedMOT_singleFrq_gate', parent_device=DO2, connection=str(2))
     DigitalOut(name='Shutter_Blue', parent_device=DO2, connection=str(3))

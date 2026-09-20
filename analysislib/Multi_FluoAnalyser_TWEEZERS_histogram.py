@@ -17,6 +17,8 @@ from scipy.special import erf
 ts=time.time()
 dt=datetime.datetime.now().date()
 dtf = datetime.datetime.now()
+show_tweezer_histograms = False
+
 
 def saturation(dBm):
         Imag_beam_Power=140e-6/28*dBm #W   #TODO: update this value with the measure we have to take
@@ -160,8 +162,70 @@ def Tweezers_scan(value, title):
     # plt.xscale('log')
     # plt.ylim(0,1)
     if saving_plots: save_imag(plt, title)  #####################################################################
+def plot_individual_tweezer_histograms(
+    analyser,
+    bins,
+):
+    """Plot first- and second-shot histograms for all 36 tweezers."""
 
+    fig, axes = plt.subplots(
+        6,
+        6,
+        figsize=(16, 13),
+        sharex=True,
+        sharey=True,
+        constrained_layout=True,
+    )
 
+    for tweezer, ax in enumerate(axes.flat, start=1):
+
+        first_values = finite_values(
+            analyser[f"tw{tweezer}_integral"]
+        )
+
+        second_values = finite_values(
+            analyser[f"tw{tweezer}_integral_2nd"]
+        )
+
+        # Same filled-bar design as the summed histogram.
+        ax.hist(
+            [first_values, second_values],
+            bins=bins,
+            color=["b", "r"],
+            histtype="bar",
+            fill=True,
+            stacked=False,
+            alpha=1.0,
+            label=["First Shot", "Second Shot"],
+        )
+
+        ax.set_title(
+            f"Tweezer {tweezer}",
+            fontsize=9,
+        )
+
+        ax.tick_params(
+            axis="both",
+            labelsize=7,
+        )
+
+    handles, labels = axes.flat[0].get_legend_handles_labels()
+
+    fig.legend(
+        handles,
+        labels,
+        loc="upper right",
+    )
+
+    fig.suptitle(
+        "First and Second Shot - Individual Tweezers",
+        fontsize=14,
+    )
+
+    fig.supxlabel("photons")
+    fig.supylabel("occurrences")
+
+    return fig
 def Tweezers_scan_tot(value, title):
     plt.figure()  ##################################################################### 
     all_y = []
@@ -482,6 +546,26 @@ try:
                 list_name + "_total_histograms.png",
             )
         )
+
+    if show_tweezer_histograms and second_shot:
+        
+        tweezer_histogram_figure = (
+            plot_individual_tweezer_histograms(
+                analyser=FluoAnalyser,
+                bins=bins,
+            )
+        )
+
+        if saving_plots:
+            tweezer_histogram_figure.savefig(
+                os.path.join(
+                    two_levels_up,
+                    list_name + "_36_tweezer_histograms.png",
+                ),
+                dpi=200,
+            )
+
+    plt.show()
 
     plt.show()
 

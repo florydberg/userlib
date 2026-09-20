@@ -424,6 +424,18 @@ if True: #Envelope of ttl and analog
         else:
             re707_switch.go_low(tt)
 
+    def PID_blue_HOLD_TTL(tt, control=True):
+        if control:
+            PID_blue_HOLD.go_high(tt)
+        else:
+            PID_blue_HOLD.go_low(tt)
+
+    def Shutter_ImagingBlue_TTL(tt, control=True):
+        if control:
+            Shutter_ImagingBlue.go_high(tt)
+        else:
+            Shutter_ImagingBlue.go_low(tt)
+
     def COILSmain_Current(tt, value=0):
         BigCoilsI.constant(tt, abs(value))
 
@@ -1200,7 +1212,7 @@ if True: # === MOTs ===
 
         trigger_delay=100*usec+5*usec #100 for camera activation + 5 as safety buffer
         Basler_Camera_abs_readout=4*120*msec # was at 120ms with small ROI, when enlarged changed to 200ms, still had issues capturing, changed to 480 and no issue
-        NEW_TABLE_LINE('Sisyphus', tt-trigger_delay, (GLOBALS['Red_MOT_Frq_fin']+0.5*GLOBALS['Sisyphus_Frq'])/1e6, GLOBALS['Sisyphus_Pow'], 5*us )
+        NEW_TABLE_LINE('Sisyphus', tt-trigger_delay, (GLOBALS['Red_MOT_Frq_fin']+0.5*GLOBALS['SisyphusPrecool_Frq'])/1e6, GLOBALS['SisyphusPrecool_Pow'], 5*us )
 
         tt+=Basler_Camera_abs.expose(tt-trigger_delay,'Atoms', frametype='tiff')
 
@@ -1210,7 +1222,7 @@ if True: # === MOTs ===
         tt+=Basler_Camera_abs_readout 
         TABLE_MODE_OFF('Sisyphus', tt) 
 
-        NEW_TABLE_LINE('Sisyphus', tt-trigger_delay, (GLOBALS['Red_MOT_Frq_fin']+0.5*GLOBALS['Sisyphus_Frq'])/1e6, GLOBALS['Sisyphus_Pow'], 5*us )
+        NEW_TABLE_LINE('Sisyphus', tt-trigger_delay, (GLOBALS['Red_MOT_Frq_fin']+0.5*GLOBALS['SisyphusPrecool_Frq'])/1e6, GLOBALS['SisyphusPrecool_Pow'], 5*us )
 
         tt+=Basler_Camera_abs.expose(tt-trigger_delay,'Probe', frametype='tiff')
         
@@ -1274,7 +1286,7 @@ if True: # === MOTs ===
         G_treD_MOT_Frq=GLOBALS['treD_MOT_Frq']/1e6
         G_Red_MOT_Frq=GLOBALS['Red_MOT_Frq_fin']/1e6
         G_ImagingTweez_Frq=GLOBALS['ImagingTweez_Frq']/1e6
-        G_Sisyphus_Frq=GLOBALS['Sisyphus_Frq']/1e6
+        G_Sisyphus_Frq=GLOBALS['SisyphusPrecool_Frq']/1e6
         G_Tweezers_Frq=GLOBALS['Tweezers_Frq']/1e6
             
         # G_Imaging_Pow=GLOBALS['Imaging_Pow']
@@ -1283,7 +1295,7 @@ if True: # === MOTs ===
         G_Red_MOT_Pow=GLOBALS['Red_MOT_Pow_fin']
         G_ImagingTweez_Pow=GLOBALS['ImagingTweez_Pow']
         G_dueD_MOT_Pow=GLOBALS['dueD_MOT_Pow']    
-        G_Sisyphus_Pow=GLOBALS['Sisyphus_Pow']
+        G_Sisyphus_Pow=GLOBALS['SisyphusPrecool_Pow']
         G_Tweezers_Pow=GLOBALS['Tweezers_Pow']
 
 

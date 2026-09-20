@@ -35,31 +35,43 @@ SAVE_CSV = True
 One_D = True
 
 if One_D:
-    PLOT_AXES = (4,)      # 1D: plot FluoImgPulse_Dt
+    PLOT_AXES = (4,)      # 1D: plot FluoImgPulse_Dt6
 else:
-    PLOT_AXES = (1, 2)    # 2D: plot FluoImgPulse_Dt × LAC_duration
+    PLOT_AXES = (2, 3)    # 2D: plot FluoImgPulse_Dt × LAC_duration
 
 
     
 SCAN_NAMES = [
-    "FluoImgPulse_Dt",
-    "LAC_duration",
-    "LAC_Frq",
-    "LAC_Pow",
-    "SisyphusImg_Frq",
-    "Sisyphus_Pow",
-    "ImagingTweez_Frq",
+    "FluoImgPulse_Dt", # 0
+    "LAC_duration", # 1
+    "LAC_Frq", # 2
+    "LAC_Pow", # 3 
+    "SisyphusImg_Frq", # 4
+    "SisyphusImg_Pow", # 5 
+    "Blue_LACPower_SetPoint",
+    # "SisyphusPrecool_Frq", # 6
+    # "SisyphusPrecool_Pow", # 7
+    # "ImagingTweez_Frq", # 8
+    # "FluoImaging_duration", # 9
+    # "ImagingFluo_SetPoint", # 10
+    # "TweezerCooling_duration"
 
 ]
 
 SCAN_UNITS = [
-    "ms",
-    "s",
-     "MHz",
-     "",
-     "MHz",
-     "dB",
-     "MHz",
+    "ms", # 0
+    "s", # 1
+     "MHz", # 2
+     "dB", # 3
+      "MHz", # 4
+     "dB", # 5
+     "V"
+    # "MHz", # 6
+    #  "dB", # 7
+    #  "MHz", # 8
+    # "ms", # 9
+    # "V", # 10
+    # "ms"
 ]
 
 # For more than two scan parameters:
