@@ -280,6 +280,223 @@ def Tweezers_scan_duo(values, title):
 
     if saving_plots: save_imag(plt, title)  #####################################################################
 
+def calculate_mean_images(paths):
+    """
+    Calculate two separate mean raw images over all shots
+    currently present in the Lyse dataframe.
+
+    First mean:
+        TweezFluo
+
+    Second mean:
+        second-shot
+    """
+
+    first_sum = None
+    second_sum = None
+
+    first_count = 0
+    second_count = 0
+
+    for file_path in paths:
+
+        try:
+            with Run(file_path).open("r") as shot:
+
+                # ==================================================
+                # FIRST SHOT
+                # ==================================================
+
+                try:
+                    image = shot.get_image(
+                        "Orca_Camera",
+                        "TweezFluo",
+                        "frame",
+                    )
+
+                    image = np.asarray(image, dtype=np.float64)
+
+                    # If there are multiple frames, average them
+                    if image.ndim == 3:
+                        image = np.mean(image, axis=0)
+
+                    if image.ndim != 2:
+                        raise ValueError(
+                            f"Unexpected FIRST image shape: {image.shape}"
+                        )
+
+                    if first_sum is None:
+                        first_sum = np.zeros_like(
+                            image,
+                            dtype=np.float64,
+                        )
+
+                    if image.shape == first_sum.shape:
+                        first_sum += image
+                        first_count += 1
+
+                except Exception as exc:
+                    print(
+                        f"FIRST image not available in {file_path}: {exc}"
+                    )
+
+                # ==================================================
+                # SECOND SHOT
+                # ==================================================
+
+                try:
+                    image = shot.get_image(
+                        "Orca_Camera",
+                        "second-shot",
+                        "frame",
+                    )
+
+                    image = np.asarray(image, dtype=np.float64)
+
+                    # If there are multiple frames, average them
+                    if image.ndim == 3:
+                        image = np.mean(image, axis=0)
+
+                    if image.ndim != 2:
+                        raise ValueError(
+                            f"Unexpected SECOND image shape: {image.shape}"
+                        )
+
+                    if second_sum is None:
+                        second_sum = np.zeros_like(
+                            image,
+                            dtype=np.float64,
+                        )
+
+                    if image.shape == second_sum.shape:
+                        second_sum += image
+                        second_count += 1
+
+                except Exception as exc:
+                    print(
+                        f"SECOND image not available in {file_path}: {exc}"
+                    )
+
+        except Exception as exc:
+            print(
+                f"Could not open {file_path}: {exc}"
+            )
+
+    # ==============================================================
+    # Calculate the two independent means
+    # ==============================================================
+
+    mean_first = None
+    mean_second = None
+
+    if first_count > 0:
+        mean_first = (
+            first_sum / first_count
+        )
+
+    if second_count > 0:
+        mean_second = (
+            second_sum / second_count
+        )
+
+    print()
+    print(
+        f"Mean FIRST image: {first_count} shots"
+    )
+    print(
+        f"Mean SECOND image: {second_count} shots"
+    )
+
+    return (
+        mean_first,
+        mean_second,
+        first_count,
+        second_count,
+    )
+
+
+def plot_mean_images(
+    mean_first,
+    mean_second,
+    first_count,
+    second_count,
+):
+    """
+    Plot FIRST and SECOND mean images in a separate figure.
+    """
+
+    available = []
+
+    if mean_first is not None:
+        available.append(
+            (
+                mean_first,
+                f"Mean FIRST shot\n({first_count} shots)",
+            )
+        )
+
+    if mean_second is not None:
+        available.append(
+            (
+                mean_second,
+                f"Mean SECOND shot\n({second_count} shots)",
+            )
+        )
+
+    if not available:
+        print("No images available for mean image.")
+        return None
+
+    fig, axes = plt.subplots(
+        1,
+        len(available),
+        figsize=(8 * len(available), 7),
+        squeeze=False,
+    )
+
+    axes = axes.ravel()
+
+    for ax, (image, title) in zip(
+        axes,
+        available,
+    ):
+
+        im = ax.imshow(
+            image,
+            cmap="plasma",
+            origin="upper",
+            interpolation="nearest",
+        )
+
+        ax.set_title(title)
+        ax.set_xlabel("x pixel")
+        ax.set_ylabel("y pixel")
+
+        fig.colorbar(
+        im,
+        ax=ax,
+        label="Raw camera counts",
+    )
+
+    fig.suptitle(
+        "Mean raw images"
+    )
+
+    # Do not use tight_layout() here:
+    # it is incompatible with the colorbar
+    # in this Matplotlib layout engine.
+    fig.subplots_adjust(
+        top=0.88,
+        bottom=0.10,
+        left=0.07,
+        right=0.92,
+        wspace=0.25,
+    )
+
+    return fig
+
+    return fig
+
 ################################### 
 ################################### 
 
@@ -290,6 +507,7 @@ saving_location=True
 n_tweezer=36
 saving_data=True
 second_shot = 1
+MEAN_IMAGE = False
 
 
 para1_name='ImagingFluo_SetPoint' #'n_shot'
@@ -362,6 +580,44 @@ try:
         second_background = finite_values(
             FluoAnalyser["background_integral_2nd"].to_numpy()
         )
+        # ============================================================
+        # SURVIVAL PROBABILITY
+        # ============================================================
+
+        total_atoms_first = 0
+        total_survived = 0
+
+        for ii in range(1, n_tweezer + 1):
+
+            first = np.asarray(
+                FluoAnalyser[f"tw{ii}_integral"],
+                dtype=float
+            )
+
+            second = np.asarray(
+                FluoAnalyser[f"tw{ii}_integral_2nd"],
+                dtype=float
+            )
+
+            # Consider only shots where both measurements exist
+            valid = np.isfinite(first) & np.isfinite(second)
+
+            first = first[valid]
+            second = second[valid]
+
+            # Atom present if counts > threshold
+            atom_first = first > threshold_first
+            atom_second = second > threshold_second
+
+            total_atoms_first += np.sum(atom_first)
+            total_survived += np.sum(atom_first & atom_second)
+
+        if total_atoms_first > 0:
+            survival_probability = total_survived / total_atoms_first
+        else:
+            survival_probability = np.nan
+
+        print(f"Survival probability = {survival_probability:.4f}")
 
         images.append(
             (
@@ -467,6 +723,10 @@ try:
                 f"Mean Below: {mean_below:.2f}\n"
                 f"Std Below: {std_below:.2f}",
             ),
+            (
+            0.20,
+            f"Survival: {survival_probability:.2%}",
+            ),
         ]
 
         for y, text in annotations:
@@ -567,7 +827,40 @@ try:
 
     plt.show()
 
+
+    if MEAN_IMAGE:
+    
+        (
+            mean_first,
+            mean_second,
+            first_count,
+            second_count,
+        ) = calculate_mean_images(paths)
+
+        mean_image_figure = plot_mean_images(
+            mean_first,
+            mean_second,
+            first_count,
+            second_count,
+        )
+
+        if mean_image_figure is not None:
+
+            if saving_plots:
+                mean_image_figure.savefig(
+                    os.path.join(
+                        two_levels_up,
+                        list_name + "_mean_images.png",
+                    ),
+                    dpi=200,
+                    bbox_inches="tight",
+                )
+
+            mean_image_figure.show()
+
     plt.show()
+
+    
 
 except Exception as e:
     import traceback

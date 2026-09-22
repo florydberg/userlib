@@ -71,8 +71,8 @@ if True: ## Selects ##
             
 pid_settle_time = 1.2*ms
 pid_hold_before_aom_off = 100*usec
-shutter_time_open = 7*ms
-shutter_time_close = 6*ms
+shutter_time_open = 10*ms
+shutter_time_close = 10*ms
 
 aom_dark_before_shutter = 2*usec
 start()
@@ -403,8 +403,8 @@ for i in range(0,GLOBALS['n_loop']):
                     # Turn on the blue light using the held PID output.
                     BlueImaging_AOM_TTL(tt, True)
 
-                    # Release HOLD after the light has appeared.
-                    PID_blue_HOLD_TTL(tt + dt, False)
+                    # # Release HOLD after the light has appeared.
+                    # PID_blue_HOLD_TTL(tt + dt, False)
 
                     # Freeze the corrected output 100 us before AOM-off.
                     PID_blue_HOLD_TTL(
@@ -618,8 +618,8 @@ for i in range(0,GLOBALS['n_loop']):
                     # Start the blue imaging pulse.
                     BlueImaging_AOM_TTL(tt, True)
 
-                    # Release HOLD one dt after the light turns on
-                    PID_blue_HOLD_TTL(tt + dt, False)
+                    # # Release HOLD one dt after the light turns on
+                    # PID_blue_HOLD_TTL(tt + dt, False)
 
                     # Hold the PID value 100 us before pulse end.
                     PID_blue_HOLD_TTL(tt + delta_imaging - pid_hold_before_aom_off, True) # pid_hold_before_aom_off=100us
@@ -628,7 +628,7 @@ for i in range(0,GLOBALS['n_loop']):
 
                     tt += delta_imaging
 
-                TABLE_MODE_OFF('Sisyphus', tt)  #solution that turns off Sisyphus beam
+                # TABLE_MODE_OFF('Sisyphus', tt)  #solution that turns off Sisyphus beam
 
 
                 # Close the shutter while the AOM is off and HOLD is on.

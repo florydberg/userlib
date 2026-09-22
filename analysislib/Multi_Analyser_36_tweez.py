@@ -35,20 +35,23 @@ SAVE_CSV = True
 One_D = True
 
 if One_D:
-    PLOT_AXES = (4,)      # 1D: plot FluoImgPulse_Dt6
+    PLOT_AXES = (2,)      # 1D: plot FluoImgPulse_Dt6
 else:
     PLOT_AXES = (2, 3)    # 2D: plot FluoImgPulse_Dt × LAC_duration
 
 
     
 SCAN_NAMES = [
-    "FluoImgPulse_Dt", # 0
-    "LAC_duration", # 1
+    # "FluoImgPulse_Dt", # 0
+    # "LAC_duration", # 1
     "LAC_Frq", # 2
     "LAC_Pow", # 3 
     "SisyphusImg_Frq", # 4
     "SisyphusImg_Pow", # 5 
     "Blue_LACPower_SetPoint",
+    "FluoImaging_duration",
+    "ImagingFluo_SetPoint",
+    "ImagingTweez_Frq",
     # "SisyphusPrecool_Frq", # 6
     # "SisyphusPrecool_Pow", # 7
     # "ImagingTweez_Frq", # 8
@@ -59,13 +62,16 @@ SCAN_NAMES = [
 ]
 
 SCAN_UNITS = [
-    "ms", # 0
-    "s", # 1
+    # "ms", # 0
+    # "s", # 1
      "MHz", # 2
      "dB", # 3
       "MHz", # 4
      "dB", # 5
-     "V"
+     "V",
+     "ms",
+     "V",
+     "MHz",
     # "MHz", # 6
     #  "dB", # 7
     #  "MHz", # 8
@@ -78,9 +84,9 @@ SCAN_UNITS = [
 # Which two parameters should be displayed as the heatmap axes?
 # Indices refer to SCAN_NAMES.
 FIXED_VALUES = {
-    "LAC_Frq": -1.2,
-    "LAC_Pow": 17,
-    "SisyphusImg_Frq": -2.9,
+    # "LAC_Frq": -1.2,
+    # "LAC_Pow": 17,
+    # "SisyphusImg_Frq": -2.9,
 }
 # Fix dimensions not included in PLOT_AXES.
 # Example:
@@ -288,20 +294,24 @@ def aggregate_nd_scan(
     return pd.DataFrame(rows)
 
 
-def choose_fixed_value(
-    results: pd.DataFrame,
-    parameter_name: str,
-) -> float:
-    """Use a user-selected fixed value or the middle measured scan value."""
+def choose_fixed_value(results, parameter_name):
+    available = np.sort(
+        results[parameter_name].dropna().unique()
+    )
+    available = available[np.isfinite(available)]
+
+    if available.size == 0:
+        raise ValueError(
+            f"No valid values found for {parameter_name}."
+        )
+
     if parameter_name in FIXED_VALUES:
         requested = FIXED_VALUES[parameter_name]
-        available = np.sort(results[parameter_name].unique())
+        return available[
+            np.argmin(np.abs(available - requested))
+        ]
 
-        return available[np.argmin(np.abs(available - requested))]
-
-    available = np.sort(results[parameter_name].unique())
     return available[len(available) // 2]
-
 
 def plot_1d(results: pd.DataFrame, dataset_label: str):
     """Plot both fluorescence shots for a one-parameter scan."""
@@ -465,7 +475,7 @@ def plot_nd(
             for name, value in fixed_dimensions.items()
         )
 
-        title = f"Tweezer ROI integral — {dataset_label}"
+        title = f"Tweezer ROI integral - {dataset_label}"
         if fixed_text:
             title += f"\n{fixed_text}"
 
@@ -599,10 +609,10 @@ def main():
         .head(5)
     )
 
-    print("\nTOP 5 — FIRST IMAGE")
+    print("\nTOP 5 - FIRST IMAGE")
     print(top_five_first.to_string(index=False))
 
-    print("\nTOP 5 — SECOND IMAGE")
+    print("\nTOP 5 - SECOND IMAGE")
     print(top_five_second.to_string(index=False))
 
     top_five = pd.concat(

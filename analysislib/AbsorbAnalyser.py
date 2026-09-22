@@ -511,7 +511,7 @@ try:
         if True:# mot_blue:
             if mot_red:
                 if mot_red_sf:
-                    P0=(450, 550) #450)   # Starting point for the atoms ROIxxxxx previous (270,600) 
+                    P0=(550, 650) #450)   # Starting point for the atoms ROIxxxxx previous (270,600) 
                     RX=300 #300
                     RY=300 #300 
                     # P0=(80, 20) #450)   # Starting point for the atoms ROIxxxxx previous (270,600) 

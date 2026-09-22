@@ -21,8 +21,8 @@ from lyse import Run, data, path
 NROWS = 6
 NCOLS = 6
 
-X0 = 107
-Y0 = 69
+X0 = 109
+Y0 = 68
 DX = 18
 DY = 18
 
