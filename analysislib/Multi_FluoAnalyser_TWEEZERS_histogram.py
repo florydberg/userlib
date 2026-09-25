@@ -162,6 +162,7 @@ def Tweezers_scan(value, title):
     # plt.xscale('log')
     # plt.ylim(0,1)
     if saving_plots: save_imag(plt, title)  #####################################################################
+
 def plot_individual_tweezer_histograms(
     analyser,
     bins,
@@ -226,6 +227,7 @@ def plot_individual_tweezer_histograms(
     fig.supylabel("occurrences")
 
     return fig
+
 def Tweezers_scan_tot(value, title):
     plt.figure()  ##################################################################### 
     all_y = []
@@ -507,6 +509,7 @@ saving_location=True
 n_tweezer=36
 saving_data=True
 second_shot = 1
+third_shot = 1
 MEAN_IMAGE = False
 
 
@@ -534,10 +537,13 @@ try:
     nbin = 50
 
     threshold_first = 200
-    upper_threshold_first = 800
+    upper_threshold_first = 2000
 
     threshold_second = 200
-    upper_threshold_second = 800
+    upper_threshold_second = 2000
+
+    threshold_third = 100
+    upper_threshold_third = 2000
     # ------------------------------------------
 
     def finite_values(values):
@@ -613,11 +619,11 @@ try:
             total_survived += np.sum(atom_first & atom_second)
 
         if total_atoms_first > 0:
-            survival_probability = total_survived / total_atoms_first
+            survival_probability12 = total_survived / total_atoms_first
         else:
-            survival_probability = np.nan
+            survival_probability12 = np.nan
 
-        print(f"Survival probability = {survival_probability:.4f}")
+        print(f"Survival probability 1-2= {survival_probability12:.4f}")
 
         images.append(
             (
@@ -626,6 +632,74 @@ try:
                 second_background,
                 threshold_second,
                 upper_threshold_second,
+            )
+        )
+
+    if third_shot:
+        third_columns = [
+            f"tw{i}_integral_3rd"
+            for i in range(1, n_tweezer + 1)
+        ]
+
+        third_photons = finite_values(
+            FluoAnalyser[third_columns].to_numpy()
+        )
+        third_background = finite_values(
+            FluoAnalyser["background_integral_3rd"].to_numpy()
+        )
+        # ============================================================
+        # SURVIVAL PROBABILITY
+        # ============================================================
+
+        total_atoms_second = 0
+        total_survived = 0
+
+        for ii in range(1, n_tweezer + 1):
+
+            first = np.asarray(
+                FluoAnalyser[f"tw{ii}_integral"],
+                dtype=float
+            )
+
+            second = np.asarray(
+                FluoAnalyser[f"tw{ii}_integral_2nd"],
+                dtype=float
+            )
+
+            third = np.asarray(
+                FluoAnalyser[f"tw{ii}_integral_3rd"],
+                dtype=float
+            )
+
+            # Consider only shots where both measurements exist
+            valid = np.isfinite(first) & np.isfinite(second) & np.isfinite(third)
+
+            first = first[valid]
+            second = second[valid]
+            third = third[valid]
+
+            # Atom present if counts > threshold
+            # atom_first = first > threshold_first
+            atom_second = second > threshold_second
+            atom_third = third > threshold_third
+
+            total_atoms_second += np.sum(atom_second)
+            total_survived += np.sum( atom_second & atom_third)
+
+        if total_atoms_first > 0:
+            survival_probability23 = total_survived / total_atoms_second
+        else:
+            survival_probability23 = np.nan
+
+        print(f"Survival probability 2-3= {survival_probability23:.4f}")
+
+        images.append(
+            (
+                "Third Shot",
+                third_photons,
+                third_background,
+                threshold_third,
+                upper_threshold_third,
             )
         )
 
@@ -654,22 +728,11 @@ try:
     fig = plt.figure(1, figsize=(16, 7))
     fig.clear()
 
-    axes = fig.subplots(
-        1,
-        len(images),
-        sharex=True,
-        squeeze=False,
-    )[0]
+    axes = fig.subplots( 1, len(images), sharex=True, squeeze=False, )[0]
 
     csv_rows = []
 
-    for ax, (
-        label,
-        photons,
-        background,
-        threshold,
-        upper_threshold,
-    ) in zip(axes, images):
+    for ax, (        label,        photons,        background,        threshold,        upper_threshold,   ) in zip(axes, images):
 
         # Your original histogram style: solid blue and red bars.
         counts, _, _ = ax.hist(
@@ -691,16 +754,10 @@ try:
         ax.set_ylabel("occurrences")
         ax.legend()
 
-        selected = photons[
-            (photons > threshold) &
-            (photons < upper_threshold)
-        ]
+        selected = photons[(photons > threshold) & (photons < upper_threshold) ]
         below = photons[photons <= threshold]
 
-        fraction = (
-            selected.size / photons.size
-            if photons.size else np.nan
-        )
+        fraction = ( selected.size / photons.size if photons.size else np.nan)
 
         mean_above = selected.mean() if selected.size else np.nan
         std_above = selected.std() if selected.size else np.nan
@@ -723,11 +780,11 @@ try:
                 f"Mean Below: {mean_below:.2f}\n"
                 f"Std Below: {std_below:.2f}",
             ),
-            (
-            0.20,
-            f"Survival: {survival_probability:.2%}",
-            ),
         ]
+        if label.lower()=='second shot':
+            annotations.append( ( 0.20, f"Survival: {survival_probability12:.2%}", ),)
+        elif label.lower()=='third shot':
+            annotations.append( ( 0.20, f"Survival: {survival_probability23:.2%}", ),)
 
         for y, text in annotations:
             ax.text(

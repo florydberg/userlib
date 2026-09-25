@@ -74,8 +74,11 @@ pid_hold_before_aom_off = 100*usec
 shutter_time_open = 10*ms
 shutter_time_close = 10*ms
 
+delta_imaging = 0
+
 aom_dark_before_shutter = 2*usec
 start()
+t += GLOBALS['stop_buffering_time']
 
 t+=dt
 TABLE_MODE_ON('RedMOT', t)
@@ -88,7 +91,6 @@ t=set_CompCoils(t, "ON")
 MOT_Blue3D_Shutter_TTL(t, True)   
 # t+=dt +500*ms #+ Orca_preparation_time
 t+=dt +0*ms #set to 10 ms to check
-
 
 
 
@@ -160,7 +162,7 @@ for i in range(0,GLOBALS['n_loop']):
     if shieldSingle:
         NEW_TABLE_LINE('RedMOT', t, GLOBALS['Red_MOT_Frq_fin']/1e6, GLOBALS['Red_MOT_Pow_fin'])
 
-        t+=3*dt
+        t+=5*dt
 
         MOT_Red3D_multiFrq_TTL(t, False) 
         MOT_Red3D_singleFrq_TTL(t, True) 
@@ -234,13 +236,13 @@ for i in range(0,GLOBALS['n_loop']):
             pow_f=GLOBALS['Red_MOT_Pow_fin']
             red_duration=GLOBALS['MOT_RED_SF_duration']
             if n_steps==1:
-                NEW_TABLE_LINE('RedMOT', t-5*usec, frq_f/1e6, pow_f)
+                NEW_TABLE_LINE('RedMOT', t-6*usec, frq_f/1e6, pow_f)
                 MOT_Red3D_singleFrq_TTL(t, True)
                 t+=GLOBALS['MOT_RED_SF_duration']
             else:
                 MOT_Red3D_singleFrq_TTL(t, True)
                 for i in range(int(n_steps)):
-                    NEW_TABLE_LINE('RedMOT', t-5*usec, (frq_i + (frq_f-frq_i)*i/n_steps)/1e6, pow_i + (pow_f-pow_i)*i/n_steps) #GLOBALS['Red_MOT_Pow_fin']+(n_steps-i)/n_steps*GLOBALS['Red_MOT_Pow_fin']*0.15
+                    NEW_TABLE_LINE('RedMOT', t-6*usec, (frq_i + (frq_f-frq_i)*i/n_steps)/1e6, pow_i + (pow_f-pow_i)*i/n_steps) #GLOBALS['Red_MOT_Pow_fin']+(n_steps-i)/n_steps*GLOBALS['Red_MOT_Pow_fin']*0.15
                     t+=red_duration/n_steps
             t+=dt    
 
@@ -298,33 +300,7 @@ for i in range(0,GLOBALS['n_loop']):
             # Bfiled_test(t+dt, "ON")
        
             t+=4*dt 
-            #cooling before first image (lots of atoms)
 
-            # NEW_TABLE_LINE('Sisyphus', t, GLOBALS['Sisyphus_Frq']/1e6, GLOBALS['Sisyphus_Pow'])
-            # t += NEW_TABLE_LINE('Sisyphus', t, (GLOBALS['Red_MOT_Frq_fin']+0.5*GLOBALS['SisyphusPrecool_Frq'])/1e6, GLOBALS['SisyphusPrecool_Pow'], GLOBALS['TweezerCooling_duration']) #trigger half time to avoid interplay between 
-            # t += 1000*usec
-
-
-
-            # if GLOBALS['LAC']: 
-            #     # ImagingBeam.DDS.setfreq(t, GLOBALS['ImagingTweez_Frq']/1e6*1e3)
-            #     # ImagingBeam.DDS.setamp(t, GLOBALS['blue_LAC_Pow']*1e2)
-            #     t+=dt
-            #     # BlueImaging_AOM_TTL(t,True) #blue cathalyzing
-                
-
-            #     t+=5*dt
-            #     # NEW_TABLE_LINE('Sisyphus', t, GLOBALS['LAC_Frq']/1e6, GLOBALS['LAC_Pow'])
-            #     t+=NEW_TABLE_LINE('Sisyphus', t, (GLOBALS['Red_MOT_Frq_fin']+0.5*GLOBALS['LAC_Frq'])/1e6, GLOBALS['LAC_Pow'], GLOBALS['LAC_duration'])
-            #     t+=10*dt
-            #     # t+=dt
-            #     # # Sisyphus_AOM_TTL(t,True)
-            #     # t+=3*dt
-            #     # t+=GLOBALS['LAC_duration']
-            #     # t+=3*dt
-            #     # BlueImaging_AOM_TTL(t,False)
-            #     t+=dt
-            #     # Sisyphus_AOM_TTL(t,False)
 
             if GLOBALS["LAC"]:
                 
@@ -360,28 +336,13 @@ for i in range(0,GLOBALS['n_loop']):
                     - 2*dt
                 )
 
-                Setpoint_imaging.constant(
-                    setpoint_time,
-                    GLOBALS["Blue_LACPower_SetPoint"],
-                )
+                Setpoint_imaging.constant( setpoint_time, GLOBALS["Blue_LACPower_SetPoint"], )
 
-                PID_blue_HOLD_TTL(
-                    setpoint_time + 2*dt + pid_settle_time,
-                    True,
-                )
+                PID_blue_HOLD_TTL( setpoint_time + 2*dt + pid_settle_time, True, )
 
-                BlueImaging_AOM_TTL(
-                    setpoint_time
-                    + 2*dt
-                    + pid_settle_time
-                    + pid_hold_before_aom_off,
-                    False,
-                )
+                BlueImaging_AOM_TTL( setpoint_time + 2*dt + pid_settle_time + pid_hold_before_aom_off,  False, )
 
-                Shutter_ImagingBlue_TTL(
-                    first_blue_lac_pulse - shutter_time_open,
-                    False,
-                )
+                Shutter_ImagingBlue_TTL( first_blue_lac_pulse - shutter_time_open, False,)
 
                 # ----------------------------------
                 # Start the continuous red LAC table
@@ -461,9 +422,6 @@ for i in range(0,GLOBALS['n_loop']):
                 # The shutter is closed and the AOM is already on.
                 # ---------------------------------------------------------
 
-
-
-
                 # imaging_pid_feedback_start = t + dt
             # else:
                 
@@ -490,8 +448,6 @@ for i in range(0,GLOBALS['n_loop']):
             #     imaging_pid_feedback_start = t + 3*dt
                 
             t+=4*dt 
-            TABLE_MODE_OFF('Sisyphus', t)
-            t+=dt
 
             
             t+=GLOBALS['holdTime_fluoImg'] #to not see mot fluo # wait for the fluo imaging to evaluate the trap lifetime
@@ -502,10 +458,9 @@ for i in range(0,GLOBALS['n_loop']):
     ##### ALL OFF #################  IMAGING SECTION STARTS HERE
     if not sel_tweezer:
         t += GLOBALS['TOF']  # wait for time of flight
+
         if GLOBALS['blow_atoms']:
             t+=NEW_TABLE_LINE('Sisyphus', t, (GLOBALS['Red_MOT_Frq_fin']+0.5*GLOBALS['SisyphusPrecool_Frq'])/1e6, GLOBALS['SisyphusPrecool_Pow'],2*ms)
-            Sisyphus_AOM_TTL(t,True)
-            Sisyphus_AOM_TTL(t+dt,False)
             TABLE_MODE_OFF('Sisyphus', t+5*dt)
 
         
@@ -542,38 +497,11 @@ for i in range(0,GLOBALS['n_loop']):
                 delta_imaging=GLOBALS['FluoImgPulse_Dt']
                 delta_cooling=GLOBALS['FluoImgCooling_Dt']
                 tt=t
-                Sisyphus_AOM_TTL(t,True)
-                Sisyphus_AOM_TTL(t+dt,False)
+
                 print(f"Start imaging Sisyphus: {t} us")
+
                 NEW_TABLE_LINE('Sisyphus', t, (GLOBALS['Red_MOT_Frq_fin']+0.5*GLOBALS['SisyphusImg_Frq'])/1e6, GLOBALS['SisyphusImg_Pow'], GLOBALS['FluoImaging_duration'] )
-        
- 
-                # # Measured and conservative timing values
-                # pid_settle_time = 1.2*ms # Total time from samplehold_OFF until the PID and PD are settled: approximately 1 ms measured + 200 us margin
-                # pid_hold_before_aom_off = 100*usec # Conservative time between engaging HOLD and turning off the AOM
-                # shutter_time = 2*ms # Shutter motion is approximately 1.5 ms we use 2 ms conservatively
 
-                # # Setpoint is changed 3.304 ms before the shutter is fully open.
-                # setpoint_time = t - 3.304*ms
-
-
-                # PID_blue_HOLD_TTL(setpoint_time - dt, True) 
-
-                # Setpoint_imaging.constant(setpoint_time, GLOBALS["ImagingFluo_SetPoint"])
-
-                # # Turn on the AOM 1 us after changing the setpoint.
-                # BlueImaging_AOM_TTL(setpoint_time + dt,True)
-
-                # # Release HOLD 1 us after AOM-on.
-                # PID_blue_HOLD_TTL(setpoint_time + 2*dt, False)
-
-                # # Allow 1.2 ms for the PID to settle, then engage HOLD.
-                # PID_blue_HOLD_TTL( setpoint_time + 2*dt + 1.2*ms, True)
-
-                # # Wait another 100 us, then turn off the AOM.
-                # BlueImaging_AOM_TTL(setpoint_time+ 2*dt + 1.2*ms + 100*usec, False)
-                # # Wait another 2 us, then start opening the shutter.
-                # Shutter_ImagingBlue_TTL(setpoint_time + 2*dt- 1.2*ms  + 100*usec+ 2*usec, False) # light unblocked
                 if not GLOBALS["LAC"]:
                     first_imaging_start = t
 
@@ -600,14 +528,12 @@ for i in range(0,GLOBALS['n_loop']):
                     # Start opening the shutter 2 us after AOM-off.
                     # It should be fully open at first_imaging_start.
                     Shutter_ImagingBlue_TTL(
-                        first_imaging_start - shutter_time_open,
+                        first_imaging_start - shutter_time_open+dt,
                         False,
                     )
 
-
-
-
                 while tt-t < GLOBALS['FluoImaging_duration'] - dt/2: #dt/2 added for floating point tolerance
+
                     if GLOBALS['FluoCoolingPulsing']:  #alternating cooling during fluorescence
                         NEW_TABLE_LINE('Sisyphus', tt+dt, (GLOBALS['Red_MOT_Frq_fin']+0.5*GLOBALS['SisyphusImg_Frq'])/1e6, GLOBALS['SisyphusImg_Pow'])
                         tt+=delta_cooling
@@ -617,9 +543,6 @@ for i in range(0,GLOBALS['n_loop']):
  
                     # Start the blue imaging pulse.
                     BlueImaging_AOM_TTL(tt, True)
-
-                    # # Release HOLD one dt after the light turns on
-                    # PID_blue_HOLD_TTL(tt + dt, False)
 
                     # Hold the PID value 100 us before pulse end.
                     PID_blue_HOLD_TTL(tt + delta_imaging - pid_hold_before_aom_off, True) # pid_hold_before_aom_off=100us
@@ -646,19 +569,6 @@ for i in range(0,GLOBALS['n_loop']):
 
                 tt += 4*dt
 
-                # # Close the shutter while the AOM remains off
-                # Shutter_ImagingBlue_TTL(tt+2*dt, True)
-
-                # # Wait until it is physically closed before relocking the PID
-                # tt += shutter_time #this is the shutter fall time
-
-                # BlueImaging_AOM_TTL(tt, True)
-                # PID_blue_HOLD_TTL(tt + dt, False) # release HOLD, PID begins relocking
-
-                # tt += dt + pid_settle_time # PID should now be settled
-
-
-                #Sisyphus_AOM_TTL(t+dt+ GLOBALS['FluoImaging_duration']+delta_cooling,False)
                 if not GLOBALS['repumpers_always_on']:
                     tt+=dt
                     # Re707_AOM_TTL(tt, False)
@@ -675,6 +585,7 @@ for i in range(0,GLOBALS['n_loop']):
         elif sel_imaging_beam=='tweez':
             BlueImagingTweez_AOM_TTL(t, True)
             BlueImagingTweez_AOM_TTL(t+GLOBALS['FluoImaging_duration']+dt, False)
+
         elif sel_imaging_beam=='3Dmot':
             MOT_Blue3D_AOM_TTL(t, True)
             MOT_Blue3D_AOM_TTL(t+GLOBALS['FluoImaging_duration']+dt, False)
@@ -725,13 +636,8 @@ for i in range(0,GLOBALS['n_loop']):
             Basler_Camera_extra.expose(t+500*usec+5*usec,'Fluo', frametype='tiff')
             t+=Orca_Camera.expose(t-orca_trigger_delay-Orca_Labscript_delay,'TweezFluo', trigger_duration=10, saving=True)+orca_trigger_delay+Orca_Labscript_delay #+5 for sync with fluo
 
-
-        # t+=GLOBALS['FluoImaging_duration'] + camera_readout
-
-        # t+=t_ahead_fluoimag ############### TIME MACHINE  ############################
-
         t += GLOBALS['FluoImaging_duration'] + camera_readout
-        t += t_ahead_fluoimag
+        t += t_ahead_fluoimag ############### TIME MACHINE  ############################
 
         # Continue after all first-image events have finished.
         if sel_tweezer and sel_imaging_beam == "abs":
@@ -743,11 +649,6 @@ for i in range(0,GLOBALS['n_loop']):
         tt = t - Orca_Camera_fluo_readout - GLOBALS['FluoImaging_duration'] - orca_trigger_delay - Orca_Labscript_delay + 100*ms
         t0=tt
 
-        Sisyphus_AOM_TTL(tt,True)
-        Sisyphus_AOM_TTL(tt+dt,False)
-        print(f"Start imaging Sisyphus: {tt} us")
-        # NEW_TABLE_LINE('Sisyphus', tt, (GLOBALS['Red_MOT_Frq_fin']+0.5*GLOBALS['Sisyphus_Frq'])/1e6, GLOBALS['Sisyphus_Pow'], GLOBALS['FluoImaging_duration'] )
-        NEW_TABLE_LINE('Sisyphus', tt, (GLOBALS['Red_MOT_Frq_fin']+0.5*GLOBALS['SisyphusImg_Frq'])/1e6, GLOBALS['SisyphusImg_Pow'])
 
         # t+=Orca_Camera.expose(tt+5*msec,'second-shot', trigger_duration=10, saving=True)+orca_trigger_delay+Orca_Labscript_delay #+5 for sync with fluo
         t += (
@@ -764,27 +665,6 @@ for i in range(0,GLOBALS['n_loop']):
         pid_settle_time = 1.2*ms # Total time from samplehold_OFF until the PID and PD are settled: approximately 1 ms measured + 200 us margin
         pid_hold_before_aom_off = 100*usec # Conservative time between engaging HOLD and turning off the AOM
 
-        # # Setpoint is changed 3.304 ms before the shutter is fully open.
-        # second_imaging_start = tt
-        # setpoint_time = second_imaging_start - 3.304*ms       
-
-        # PID_blue_HOLD_TTL(setpoint_time - dt, True) 
-
-        # Setpoint_imaging.constant(setpoint_time, GLOBALS["ImagingFluo_SetPoint"])
-
-        # # Turn on the AOM 1 us after changing the setpoint.
-        # BlueImaging_AOM_TTL(setpoint_time + dt,True)
-
-        # # Release HOLD 1 us after AOM-on.
-        # PID_blue_HOLD_TTL(setpoint_time + 2*dt, False)
-
-        # # Allow 1.2 ms for the PID to settle, then engage HOLD.
-        # PID_blue_HOLD_TTL( setpoint_time + 2*dt + 1.2*ms, True)
-
-        # # Wait another 100 us, then turn off the AOM.
-        # BlueImaging_AOM_TTL(setpoint_time+ 2*dt + 1.2*ms + 100*usec, False)
-        # # Wait another 2 us, then start opening the shutter.
-        # Shutter_ImagingBlue_TTL(setpoint_time + 2*dt- 1.2*ms  + 100*usec+ 2*usec, False) # light unblocked
         second_imaging_start = tt
         # Hold the settled output before turning off the AOM.
         PID_blue_HOLD_TTL(
@@ -807,23 +687,7 @@ for i in range(0,GLOBALS['n_loop']):
             second_imaging_start - shutter_time_open,
             False,
         )
-        # # Store the already-settled PID output.
-        # PID_blue_HOLD_TTL(
-        #     second_imaging_start - 5.102*ms,
-        #     True,
-        # )
 
-        # # Turn off the AOM 100 us later.
-        # BlueImaging_AOM_TTL(
-        #     second_imaging_start - 5.002*ms,
-        #     False,
-        # )
-
-        # # Begin opening the shutter 5 ms before imaging.
-        # Shutter_ImagingBlue_TTL(
-        #     second_imaging_start - 5*ms,
-        #     False,
-        # )        
 
         while tt-t0 < GLOBALS['FluoImaging_duration']:
             if GLOBALS['FluoCoolingPulsing']:  #alternating cooling during fluorescence
@@ -845,7 +709,91 @@ for i in range(0,GLOBALS['n_loop']):
 
             tt += delta_imaging
 
-        TABLE_MODE_OFF('Sisyphus', tt)  #solution that turns off Sisyphus beam
+        # TABLE_MODE_OFF('Sisyphus', tt)  #solution that turns off Sisyphus beam
+
+        t = max(t, tt)
+
+        # Close the shutter while the AOM remains off
+        Shutter_ImagingBlue_TTL(tt+2*dt, True)
+
+        # Wait until it is physically closed before relocking the PID
+        tt += 2*dt + shutter_time_close
+        BlueImaging_AOM_TTL(tt, True)
+        PID_blue_HOLD_TTL(tt + dt, False) # release HOLD, PID begins relocking
+
+        tt += dt + pid_settle_time # PID should now be settled
+
+        tt+=4*dt
+
+        # Continue after the second-shot events have finished.
+        
+   
+
+    if GLOBALS['second_shot'] and GLOBALS['third_shot']:
+
+        tt = t - Orca_Camera_fluo_readout - orca_trigger_delay - Orca_Labscript_delay + 100*ms
+        t0 = tt
+
+
+        # t+=Orca_Camera.expose(tt+5*msec,'second-shot', trigger_duration=10, saving=True)+orca_trigger_delay+Orca_Labscript_delay #+5 for sync with fluo
+        t += (
+            Orca_Camera.expose(
+                tt + 4*msec - orca_trigger_delay - Orca_Labscript_delay,
+                "third-shot",
+                trigger_duration=10,
+                saving=True,
+            )
+            + orca_trigger_delay
+            + Orca_Labscript_delay
+        )
+        # Measured and conservative timing values
+        pid_settle_time = 1.2*ms # Total time from samplehold_OFF until the PID and PD are settled: approximately 1 ms measured + 200 us margin
+        pid_hold_before_aom_off = 100*usec # Conservative time between engaging HOLD and turning off the AOM
+
+        third_imaging_start = tt
+        # Hold the settled output before turning off the AOM.
+        PID_blue_HOLD_TTL(
+            third_imaging_start
+            - shutter_time_open
+            - aom_dark_before_shutter
+            - pid_hold_before_aom_off,
+            True,
+        )
+
+        # Make the beam dark before opening the shutter.
+        BlueImaging_AOM_TTL(
+            third_imaging_start
+            - shutter_time_open
+            - aom_dark_before_shutter,
+            False,
+        )
+
+        Shutter_ImagingBlue_TTL(
+            third_imaging_start - shutter_time_open,
+            False,
+        )
+
+        while tt-t0 < GLOBALS['FluoImaging_duration']:
+            if GLOBALS['FluoCoolingPulsing']:  #alternating cooling during fluorescence
+                NEW_TABLE_LINE('Sisyphus', tt+dt, (GLOBALS['Red_MOT_Frq_fin']+0.5*GLOBALS['SisyphusImg_Frq'])/1e6, GLOBALS['SisyphusImg_Pow'])
+                tt+=delta_cooling
+                TABLE_MODE_OFF('Sisyphus', tt) 
+            else:
+                tt+=delta_cooling
+            # Start the blue imaging pulse.
+            BlueImaging_AOM_TTL(tt, True)
+
+            # Release HOLD one dt after the light turns on
+            PID_blue_HOLD_TTL(tt + dt, False)
+
+            # Hold the PID value 100 us before pulse end.
+            PID_blue_HOLD_TTL(tt + delta_imaging - pid_hold_before_aom_off, True) # pid_hold_before_aom_off=100us
+            # End the imaging pulse.
+            BlueImaging_AOM_TTL(tt + delta_imaging, False)
+
+            tt += delta_imaging
+
+        # TABLE_MODE_OFF('Sisyphus', tt)  #solution that turns off Sisyphus beam
 
         # Close the shutter while the AOM remains off
         Shutter_ImagingBlue_TTL(tt+2*dt, True)
@@ -860,7 +808,7 @@ for i in range(0,GLOBALS['n_loop']):
         tt+=4*dt
 
         second_shot_duration = tt - t0
-        print(f"second shot duration {second_shot_duration}")
+        print(f"third shot duration {second_shot_duration}")
 
         # Continue after the second-shot events have finished.
         t = max(t, tt)
@@ -880,23 +828,17 @@ for i in range(0,GLOBALS['n_loop']):
             Andor_Camera_abs_readout=(1024*1024/30e6*sec+1024*2.2*usec)+30*msec # Horizontal readout + vertical shift times + buffer
             beam_duration = 500*usec
 
-            # Orca_Camera_trigger.go_high(t-andor_trigger_delay)
-            # Orca_Camera_trigger.go_low(t-andor_trigger_delay+100*usec)
+
             t+=dt
-            # basler_trigger_delay=100*usec+5*usec #100 for camera activation + 5 as safety buffer
-            # Basler_Camera_fluo_trigger.go_high(t-basler_trigger_delay)
-            # Basler_Camera_fluo_trigger.go_low(t+1*msec)
-            # t+=dt
+
             BlueImagingTweez_AOM_TTL(t, True)
             BlueImagingTweez_AOM_TTL(t+beam_duration, False)
             t+=beam_duration+Andor_Camera_abs_readout
-            # Orca_Camera_trigger.go_high(t-andor_trigger_delay)
-            # Orca_Camera_trigger.go_low(t-andor_trigger_delay+100*usec)
+
             BlueImagingTweez_AOM_TTL(t, True)
             BlueImagingTweez_AOM_TTL(t+beam_duration, False)
             t+=beam_duration+Andor_Camera_abs_readout
-            # Orca_Camera_trigger.go_high(t-andor_trigger_delay)
-            # Orca_Camera_trigger.go_low(t-andor_trigger_delay+100*usec)
+
             t+=beam_duration+Andor_Camera_abs_readout
 
         elif sel_camera_abs =='basler_abs':
@@ -931,7 +873,7 @@ t=standby(t)
 Shutter_ImagingBlue.go_high(t) 
 t+=dt
 # MOT_Blue3D_AOM_TTL(t, True) #re-open blue mot aom after switch off 
-
+TABLE_MODE_OFF('Sisyphus', t) 
 # stop(t+GLOBALS['stop_buffering_time'])
 shot_end = t + GLOBALS['stop_buffering_time']
 print(f"Programmed shot duration: {shot_end / sec:.3f} seconds")

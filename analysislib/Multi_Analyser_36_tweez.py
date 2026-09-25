@@ -30,6 +30,7 @@ import seaborn as sns
 # =============================================================================
 
 N_TWEEZERS = 36
+PLOT_INDIVIDUAL_TWEEZERS = False
 SAVE_PLOTS = True
 SAVE_CSV = True
 One_D = True
@@ -286,6 +287,9 @@ def aggregate_nd_scan(
             "n_repetitions": len(shot_indices),
         }
 
+        for i, value in enumerate(tweezer_means, start=1):
+            row[f"tw{i}_mean"] = value
+
         for name, value in zip(SCAN_NAMES, coordinate):
             row[name] = value
 
@@ -515,9 +519,61 @@ def plot_nd(
 
     return figures
 
+def plot_individual_tweezers(results, dataset_label):
+    parameter = SCAN_NAMES[PLOT_AXES[0]]
+    unit = SCAN_UNITS[PLOT_AXES[0]]
+
+    fig, axes = plt.subplots(
+        6, 6,
+        figsize=(18, 16),
+        constrained_layout=True,
+    )
+
+    axes = axes.flatten()
+
+    for tweezer in range(1, N_TWEEZERS + 1):
+        ax = axes[tweezer - 1]
+
+        for shot_name, color, marker in (
+            ("first", "black", "o"),
+            ("second", "tab:blue", "s"),
+        ):
+            data = results[
+                results["shot"] == shot_name
+            ].copy()
+
+            data = data.sort_values(parameter)
+
+            ax.plot(
+                data[parameter],
+                data[f"tw{tweezer}_mean"],
+                f"{marker}--",
+                color=color,
+                markersize=3,
+                label=shot_name.capitalize(),
+            )
+
+        ax.set_title(f"TW {tweezer}", fontsize=10)
+        ax.grid(alpha=0.25)
+
+    fig.suptitle(
+        f"Individual tweezer ROI - {dataset_label}",
+        fontsize=16,
+    )
+
+    # Una sola legenda per tutta la figura
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(
+        handles,
+        labels,
+        loc="upper right",
+    )
+
+    return [("individual_tweezers", fig)]
 
 def main():
     df = lyse.data()
+    print(df["filepath"].iloc[0])
 
     if df.empty:
         raise RuntimeError("Lyse has no loaded shots to analyse.")
@@ -575,9 +631,28 @@ def main():
 
 
 
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    date = Path(paths.iloc[0]).name[:10]
+
+    # Numeri degli shot effettivamente analizzati
+    shot_numbers = (
+        paths.str.extract(r"_(\d{4})_")[0]
+        .dropna()
+        .astype(int)
+        .unique()
+    )
+
+    shot_numbers = sorted(shot_numbers)
+
+    if len(shot_numbers) == 1:
+        shot_label = f"shot_{shot_numbers[0]:04d}"
+    else:
+        shot_label = "shots_" + "_".join(
+            f"{number:04d}" for number in shot_numbers
+        )
+
     output_dir = output_directory(paths)
-    stem = f"{timestamp}_{'_'.join(SCAN_NAMES)}_ND_tweezer_ROI"
+
+    stem = f"{date}_{shot_label}_{'_'.join(SCAN_NAMES[index] for index in PLOT_AXES)}_ND_tweezer_ROI"
 
     if SAVE_CSV:
         csv_path = output_dir / f"{stem}.csv"
@@ -585,6 +660,9 @@ def main():
         print(f"Saved complete N-D data: {csv_path}")
     
     figures = plot_nd(results, dataset_label)
+
+    if PLOT_INDIVIDUAL_TWEEZERS:
+        figures += plot_individual_tweezers(results, dataset_label)
 
     if SAVE_PLOTS:
         for suffix, figure in figures:

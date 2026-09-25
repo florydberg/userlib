@@ -286,21 +286,21 @@ if True: #Envelope of ttl and analog
         channel_trigger = globals().get(trigger_name)
 
         channel_trigger.go_high(tt)
-        channel_trigger.go_low(tt+dt)
+        channel_trigger.go_low(tt+5*dt)
 
     def TABLE_MODE_OFF(channel_name, tt): 
 
         channel = globals().get(channel_name)
         channel.DDS.setamp(tt, 0e2)
-        channel.DDS.setfreq(tt, 10e3)
+        # channel.DDS.setfreq(tt, 10e3)
     
         trigger_name = channel_name+'_trigger'
         channel_trigger = globals().get(trigger_name)
 
         channel_trigger.go_high(tt)
-        channel_trigger.go_low(tt+dt)
+        channel_trigger.go_low(tt+5*dt)
 
-    def NEW_TABLE_LINE(channel_name, tt, frequency, amplitude, duration=dt):
+    def NEW_TABLE_LINE(channel_name, tt, frequency, amplitude, duration=11*dt):
 
         channel = globals().get(channel_name)
         channel.DDS.setamp(tt, amplitude*1e2)
@@ -311,7 +311,7 @@ if True: #Envelope of ttl and analog
 
         if duration<10*usec: duration=10*usec
         channel_trigger.go_high(tt)
-        channel_trigger.go_low(tt+duration)
+        channel_trigger.go_low(tt+duration-10*dt)
         return duration
 
     def MOT_Blue2D_AOM_TTL(tt, control=True):
