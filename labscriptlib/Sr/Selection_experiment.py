@@ -655,13 +655,52 @@ for i in range(0,GLOBALS['n_loop']):
         # Continue after all first-image events have finished.
         if sel_tweezer and sel_imaging_beam == "abs":
             t = max(t, tt)
+        # ============================================================
+        # mJ = 0 LOSS SPECTROSCOPY
+        #
+        # Sequence:
+        # first image
+        # -> red Sisyphus-only spectroscopy pulse
+        # -> second image
+        #
+        # Scan MJ0_Spectroscopy_Frq.
+        # Blue imaging light remains blocked during this pulse.
+        # ============================================================
 
+    if GLOBALS["MJ0_Spectroscopy"]:
+
+        if not GLOBALS["second_shot"]:
+            raise ValueError(
+                "MJ0 spectroscopy requires second_shot = True "
+                "because survival is measured between image 1 and image 2."
+            )
+
+        print("mJ=0 loss spectroscopy")
+
+        # Only the 689-nm Sisyphus beam is applied.
+        # Red_MOT_Frq_fin + 0.5 * detuning
+        mj0_duration = NEW_TABLE_LINE("Sisyphus",t,(GLOBALS["Red_MOT_Frq_fin"]+ 0.5 * GLOBALS["SisyphusMJ0_Freq"]) / 1e6, GLOBALS["SisyphusMJ0_Pow"],GLOBALS["MJ0_Spectroscopy_duration"],)
+
+        t += mj0_duration
+        t += 2*dt
+        mj0_end = t
     
     if GLOBALS['second_shot']:
         main_board.WAIT(t, rack=0)
         t += dt
 
         tt = t - Orca_Camera_fluo_readout - GLOBALS['FluoImaging_duration'] - orca_trigger_delay - Orca_Labscript_delay + 100*ms
+        # Make sure second-shot camera preparation does not
+        # start before the mJ=0 spectroscopy pulse has finished.
+        if GLOBALS["MJ0_Spectroscopy"]:
+            tt = max(
+            tt,
+            mj0_end
+            + orca_trigger_delay
+            + Orca_Labscript_delay
+            - 4*msec
+            + 2*dt
+            )
         t0=tt
 
 
@@ -676,6 +715,9 @@ for i in range(0,GLOBALS['n_loop']):
             + orca_trigger_delay
             + Orca_Labscript_delay
         )
+
+
+
         # Measured and conservative timing values
         pid_settle_time = 1.2*ms # Total time from samplehold_OFF until the PID and PD are settled: approximately 1 ms measured + 200 us margin
         pid_hold_before_aom_off = 100*usec # Conservative time between engaging HOLD and turning off the AOM
