@@ -21,8 +21,8 @@ from lyse import Run, data, path
 NROWS = 6
 NCOLS = 6
 
-X0 = 109
-Y0 = 68
+X0 = 107
+Y0 = 92
 DX = 18
 DY = 18
 
@@ -41,7 +41,7 @@ SAVE_SCRIPT = True
 
 # One common intensity scale for every panel.
 VMIN = 0
-VMAX = 50
+VMAX = 100
 
 MOSAIC_GAP = 2
 
@@ -400,6 +400,7 @@ centers = np.array(
 metadata = data(path)
 n_loop = int(metadata["n_loop"])
 second_shot = bool(metadata["second_shot"])
+third_shot = bool(metadata["third_shot"])
 camera_roi = str(metadata["Orca_ROI"])
 
 images = []
@@ -526,6 +527,57 @@ with Run(path).open("r+") as shot:
         images.append(second_corrected)
         roi_sets.append(second_rois)
         labels.append("second shot")
+
+
+    if third_shot:
+        third_image = load_image(shot, "third-shot", n_loop)
+
+        if camera_roi == "full":
+            raise ValueError(
+                "third-shot analysis with Orca_ROI='full' needs "
+                "explicit crop-relative tweezer coordinates."
+            )
+
+        if USE_SAME_BACKGROUND_MASK:
+            if third_image.shape == first_image.shape:
+                third_mask = first_mask
+            else:
+                third_mask = background_mask(
+                    third_image.shape,
+                    [BACKGROUND_CENTER],
+                    BACKGROUND_RADIUS,
+                )
+        else:
+            # Preserve the original third-shot exclusion regions.
+            third_mask = background_mask(
+                third_image.shape,
+                centers,
+                BACKGROUND_RADIUS,
+            )
+
+        third_background = np.mean(third_image[third_mask])
+        shot.save_result("background_mean_3rd", third_background)
+
+        # Corrected: use the THIRD image for this diagnostic.
+        if third_image.shape[0] < 32 or third_image.shape[1] < 32:
+            raise ValueError("Third image is too small for the test ROI.")
+
+        test_roi = third_image[29:32, 29:32]
+        shot.save_result(
+            "background_integral_3rd",
+            np.mean(test_roi - third_background),
+        )
+
+        third_corrected = third_image - third_background
+        third_rois = extract_rois(third_corrected, centers)
+        third_integrals = third_rois.sum(axis=(1, 2))
+
+        for index, integral in enumerate(third_integrals, start=1):
+            shot.save_result(f"tw{index}_integral_3rd", integral)
+
+        images.append(third_corrected)
+        roi_sets.append(third_rois)
+        labels.append("third shot")
 
 analysis_finished = time.perf_counter()
 

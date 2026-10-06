@@ -55,7 +55,7 @@ if True: ## Selects ##
         ##add +=1ms to ORCA delay
         Orca_Camera.camera_attributes['SUBARRAY HSIZE'] = 240 # 120*2
         Orca_Camera.camera_attributes['SUBARRAY VSIZE'] = 240 # 120*2
-        Orca_Camera.camera_attributes['SUBARRAY HPOS'] =  1160 #1960
+        Orca_Camera.camera_attributes['SUBARRAY HPOS'] =  1360 #1960
         Orca_Camera.camera_attributes['SUBARRAY VPOS'] =  820 #840
 
         Orca_Camera.camera_attributes['SUBARRAY MODE'] = 2
@@ -92,8 +92,19 @@ MOT_Blue3D_Shutter_TTL(t, True)
 # t+=dt +500*ms #+ Orca_preparation_time
 t+=dt +0*ms #set to 10 ms to check
 
+# WAIT() sets data bit 30: select that bit as the stop trigger.
+# For this test, start immediately when BLACS starts the shot.
+# Reserve in_0 for restarting after WAIT.
+main_board.set_start_trigger('None', 'low level')
 
+# Pause when the programmed WAIT bit is reached.
+main_board.set_stop_trigger('data bits 28-31','offset bit 0')
 
+# Restart using the physical in_0 connector.
+main_board.set_restart_trigger('input 0','rising edge')
+
+# Monitor WAIT on the physical out_0 connector.
+main_board.set_ctrl_out({'output 0': ('fixed', 'high level')})
 if sel_tweezer:
     # Keep the shutter closed during the existing PID preparation.
     Shutter_ImagingBlue.go_high(t)
@@ -236,7 +247,7 @@ for i in range(0,GLOBALS['n_loop']):
             pow_f=GLOBALS['Red_MOT_Pow_fin']
             red_duration=GLOBALS['MOT_RED_SF_duration']
             if n_steps==1:
-                NEW_TABLE_LINE('RedMOT', t-6*usec, frq_f/1e6, pow_f)
+                NEW_TABLE_LINE('RedMOT', t-10*usec, frq_f/1e6, pow_f)
                 MOT_Red3D_singleFrq_TTL(t, True)
                 t+=GLOBALS['MOT_RED_SF_duration']
             else:
@@ -304,8 +315,8 @@ for i in range(0,GLOBALS['n_loop']):
 
             if GLOBALS["LAC"]:
                 
-                delta_cooling = 2*ms
-                delta_imaging = 1.4*ms
+                delta_cooling = 1*ms
+                delta_imaging = 1.2*ms
 
                 # Keep the original red LAC start time.
                 t += dt
@@ -338,7 +349,7 @@ for i in range(0,GLOBALS['n_loop']):
 
                 Setpoint_imaging.constant( setpoint_time, GLOBALS["Blue_LACPower_SetPoint"], )
 
-                PID_blue_HOLD_TTL( setpoint_time + 2*dt + pid_settle_time, True, )
+                PID_blue_HOLD_TTL( setpoint_time + 2*dt + pid_settle_time, True )
 
                 BlueImaging_AOM_TTL( setpoint_time + 2*dt + pid_settle_time + pid_hold_before_aom_off,  False, )
 
@@ -365,7 +376,7 @@ for i in range(0,GLOBALS['n_loop']):
                     BlueImaging_AOM_TTL(tt, True)
 
                     # # Release HOLD after the light has appeared.
-                    # PID_blue_HOLD_TTL(tt + dt, False)
+                    PID_blue_HOLD_TTL(tt + dt, False)
 
                     # Freeze the corrected output 100 us before AOM-off.
                     PID_blue_HOLD_TTL(
@@ -544,11 +555,13 @@ for i in range(0,GLOBALS['n_loop']):
                     # Start the blue imaging pulse.
                     BlueImaging_AOM_TTL(tt, True)
 
+                    # Release HOLD one dt after the light turns on
+                    PID_blue_HOLD_TTL(tt + dt, False)
+
                     # Hold the PID value 100 us before pulse end.
                     PID_blue_HOLD_TTL(tt + delta_imaging - pid_hold_before_aom_off, True) # pid_hold_before_aom_off=100us
                     # End the imaging pulse.
                     BlueImaging_AOM_TTL(tt + delta_imaging, False)
-
                     tt += delta_imaging
 
                 # TABLE_MODE_OFF('Sisyphus', tt)  #solution that turns off Sisyphus beam
@@ -645,6 +658,8 @@ for i in range(0,GLOBALS['n_loop']):
 
     
     if GLOBALS['second_shot']:
+        main_board.WAIT(t, rack=0)
+        t += dt
 
         tt = t - Orca_Camera_fluo_readout - GLOBALS['FluoImaging_duration'] - orca_trigger_delay - Orca_Labscript_delay + 100*ms
         t0=tt
@@ -874,6 +889,7 @@ Shutter_ImagingBlue.go_high(t)
 t+=dt
 # MOT_Blue3D_AOM_TTL(t, True) #re-open blue mot aom after switch off 
 TABLE_MODE_OFF('Sisyphus', t) 
+
 # stop(t+GLOBALS['stop_buffering_time'])
 shot_end = t + GLOBALS['stop_buffering_time']
 print(f"Programmed shot duration: {shot_end / sec:.3f} seconds")

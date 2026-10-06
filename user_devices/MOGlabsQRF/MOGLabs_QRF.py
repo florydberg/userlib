@@ -1149,7 +1149,6 @@ class MOGLabs_QRF_Worker(Worker):
             # for pid_setting in ['P', 'I', 'D', 'SetPoint']:
             #     self.program_PID(i, pid_setting, PID_values['channel %d' % i][pid_setting])
 
-        self.restore_imaging_am(2)
         values = self.check_remote_values()
         self._set_qrf_phase('manual')
         return values
@@ -1241,7 +1240,8 @@ class MOGLabs_QRF_Worker(Worker):
                     # self.dev.cmd(f'MODE,{channel+1},NSB') 
                     # init() already sets the blue imaging channel to NSB.
                     # Avoid resetting its mode before every shot.
-                    if not (self.device_name == "QRF_Blue" and channel == 2):
+                    # Both AM channels already remain in NSB mode.
+                    if not (self.device_name in ("QRF_Blue", "QRF_Red") and channel == 2):
                         self.dev.cmd(f'MODE,{channel+1},NSB')
                     self.dev.cmd(f"FREQ,{channel+1},{1e-3*static_data[-1]['freq']}") ##### BUG  TODO: FIX removing 1e-3 ask Andre #################
                     # self.dev.cmd(f"POW,{channel+1},{1e-2*static_data[-1]['amp']}")   ##### BUG  TODO: FIX removing 1e-2 ask Andre #################
@@ -1269,7 +1269,6 @@ class MOGLabs_QRF_Worker(Worker):
 
                     self.dev.cmd('ON,%i,ALL' % (channel+1))
         # Restore AM after all buffered-mode configuration.
-        self.restore_imaging_am(2)
 
         # Ready for the shot, not the timestamp of the actual FPGA start.
         self._set_qrf_phase('buffered_ready')
@@ -1281,57 +1280,43 @@ class MOGLabs_QRF_Worker(Worker):
     def abort_buffered(self):
         # TODO: untested
         return self.transition_to_manual(True)
-
+    
     def transition_to_manual(self, abort=False):
-        self._set_qrf_phase('aborting' if abort else 'returning_to_manual')
+        self._set_qrf_phase(
+            'aborting' if abort else 'returning_to_manual'
+        )
         print('Transition to manual')
+
         if self.dev is not None:
 
-            for channel in range(MAX_NUM_CHANNELS): 
-                # Leave blue imaging unchanged after a normally completed experiment.
-                if self.device_name == "QRF_Blue" and channel == 2 and not abort:
-                    continue
-                try:
-                    self.dev.cmd(f'TABLE,STOP,{channel+1}') 
-                    self.dev.cmd(f'TABLE,CLEAR,{channel+1}')  
-                    self.dev.cmd(f'MODE,%i,NSB' % (channel+1))
-                    self.dev.cmd(f"ON,{channel+1},SIG")
-                    print(f"Ch {channel} end of table mode")
-                except:
-                    print(f"Ch {channel} already in normal mode")
-                    self.dev.cmd('MODE,%i,NSB' % (channel+1))
-                    self.dev.cmd(f"ON,{channel+1},SIG")
-                # ask=self.dev.ask(f'PID,STATUS,{channel+1}')
-                # print(f'PID of channel {channel} is {str(ask)}')
+            for channel in range(MAX_NUM_CHANNELS):
 
-            # Restore connection="channel 2" after all mode changes.
-            # Blue imaging already has its AM configuration.
-            # Preserve the existing recovery behavior for aborted runs.
-            if abort or self.device_name != "QRF_Blue":
+                # Leave physical channel 3 unchanged on both QRFs
+                # after a successfully completed shot.
+                if (
+                    self.device_name in ("QRF_Blue", "QRF_Red")
+                    and channel == 2
+                    and not abort
+                ):
+                    continue
+
+                # Keep the existing cleanup for the other channels.
+                try:
+                    self.dev.cmd(f'TABLE,STOP,{channel+1}')
+                    self.dev.cmd(f'TABLE,CLEAR,{channel+1}')
+                    self.dev.cmd(f'MODE,{channel+1},NSB')
+                    self.dev.cmd(f'ON,{channel+1},SIG')
+
+                except Exception:
+                    # Preserve the existing fallback.
+                    self.dev.cmd(f'MODE,{channel+1},NSB')
+                    self.dev.cmd(f'ON,{channel+1},SIG')
+
+            # Abort recovery resets channel 3, so restore its AM.
+            # Successful shots leave its configuration untouched.
+            if abort:
                 self.restore_imaging_am(2)
 
-            if abort:
-                DDSs = [] # Andi to avoid problems
-                #pass
-                # If we're aborting the run, then we need to reset DDSs 2 and 3 to their initial values.
-                # 0 and 1 will already be in their initial values. We also need to invalidate the smart
-                # programming cache for them.
-                # values = self.initial_values
-                # DDSs = [2,3]
-                # self.smart_cache['STATIC_DATA'] = None
-            else:
-                # If we're not aborting the run, then we need to set DDSs 0 and 1 to their final values.
-                # 2 and 3 will already be in their final values.
-                values = self.final_values
-                DDSs = [0, 1, 2, 3]
-
-            # only program the channels that we need to
-            # for ddsnumber in DDSs:
-            #     channel_values = values['channel %d' % ddsnumber]
-            #     for subchnl in ['freq', 'amp', 'phase']:
-            #         self.program_static(ddsnumber, subchnl, channel_values[subchnl])
-
-        # return True to indicate we successfully transitioned back to manual mode
         self._set_qrf_phase('manual')
         return True
 

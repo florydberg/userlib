@@ -29,7 +29,7 @@ def publish_image(image: np.ndarray):
     msg = pickle.dumps(image, protocol=pickle.HIGHEST_PROTOCOL)
     socket.send(msg)
 
-take_and_save=True
+take_and_save=False
 
 # Don't import API yet so as not to throw an error, allow worker to run as a dummy
 # device, or for subclasses to import this module to inherit classes without requiring API

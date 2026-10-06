@@ -510,7 +510,7 @@ n_tweezer=36
 saving_data=True
 second_shot = 1
 third_shot = 1
-MEAN_IMAGE = False
+MEAN_IMAGE = True
 
 
 para1_name='ImagingFluo_SetPoint' #'n_shot'
@@ -536,13 +536,13 @@ try:
     # ---------------- Settings ----------------
     nbin = 50
 
-    threshold_first = 200
+    threshold_first = 500
     upper_threshold_first = 2000
 
-    threshold_second = 200
+    threshold_second = 500
     upper_threshold_second = 2000
 
-    threshold_third = 100
+    threshold_third = 500
     upper_threshold_third = 2000
     # ------------------------------------------
 
@@ -767,11 +767,11 @@ try:
         # Retain your framed statistics boxes.
         annotations = [
             (
-                0.65,
+                0.75,
                 f"Above Threshold: {fraction:.2%}",
             ),
             (
-                0.53,
+                0.65,
                 f"Mean Above: {mean_above:.2f}\n"
                 f"Std Above: {std_above:.2f}",
             ),
@@ -792,7 +792,7 @@ try:
                 y,
                 text,
                 transform=ax.transAxes,
-                fontsize=12,
+                fontsize=8,
                 ha="right",
                 va="top",
                 bbox=dict(

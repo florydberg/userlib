@@ -300,7 +300,7 @@ if True: #Envelope of ttl and analog
         channel_trigger.go_high(tt)
         channel_trigger.go_low(tt+5*dt)
 
-    def NEW_TABLE_LINE(channel_name, tt, frequency, amplitude, duration=11*dt):
+    def NEW_TABLE_LINE(channel_name, tt, frequency, amplitude, duration=15*dt):
 
         channel = globals().get(channel_name)
         channel.DDS.setamp(tt, amplitude*1e2)
@@ -426,9 +426,9 @@ if True: #Envelope of ttl and analog
 
     def PID_blue_HOLD_TTL(tt, control=True):
         if control:
-            PID_blue_HOLD.go_high(tt)
-        else:
             PID_blue_HOLD.go_low(tt)
+        else:
+            PID_blue_HOLD.go_high(tt)
 
     def Shutter_ImagingBlue_TTL(tt, control=True):
         if control:
