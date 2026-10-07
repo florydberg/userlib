@@ -73,7 +73,7 @@ pid_settle_time = 1.2*ms
 pid_hold_before_aom_off = 100*usec
 shutter_time_open = 10*ms
 shutter_time_close = 10*ms
-
+pid_relock_duration = 5*ms
 delta_imaging = 0
 
 aom_dark_before_shutter = 2*usec
@@ -267,7 +267,7 @@ for i in range(0,GLOBALS['n_loop']):
                 # NEW_TABLE_LINE('RedMOT', t, frq_f/1e6, pow_f*7/10)
                 t+=red_duration/8
                 
-
+    
             # MOT_Red3D_Switch_TTL(t, False)   #Global rf switch. obsolete     
             MOT_Red3D_singleFrq_TTL(t, False)
             t+=dt
@@ -564,23 +564,47 @@ for i in range(0,GLOBALS['n_loop']):
                     BlueImaging_AOM_TTL(tt + delta_imaging, False)
                     tt += delta_imaging
 
-                # TABLE_MODE_OFF('Sisyphus', tt)  #solution that turns off Sisyphus beam
+               # TABLE_MODE_OFF('Sisyphus', tt)  #solution that turns off Sisyphus beam
+                tt += 2*dt    
 
+                # ---------------------------------------------------------
+                # PID relock after image 1
+                # ---------------------------------------------------------
 
-                # Close the shutter while the AOM is off and HOLD is on.
+                # Close shutter while blue AOM is off
                 Shutter_ImagingBlue_TTL(tt + 2*dt, True)
                 tt += 2*dt + shutter_time_close
 
-                # Restore feedback behind the closed shutter.
-                BlueImaging_AOM_TTL(tt, True)
-                PID_blue_HOLD_TTL(tt + dt, False)
+                pid_relock_start = tt
 
-                # Allow the PID to settle at the existing imaging setpoint.
-                tt += dt + pid_settle_time
+                # Turn AOM on behind the closed shutter
+                BlueImaging_AOM_TTL(pid_relock_start, True)
+
+                # Release sample/hold so PID can correct
+                PID_blue_HOLD_TTL(
+                    pid_relock_start + dt,
+                    False,
+                )
+
+                # Freeze PID shortly before switching AOM off
+                PID_blue_HOLD_TTL(
+                    pid_relock_start
+                    + pid_relock_duration
+                    - pid_hold_before_aom_off,
+                    True,
+                )
+
+                # Explicitly end the 5 ms relock pulse
+                BlueImaging_AOM_TTL(
+                    pid_relock_start + pid_relock_duration,
+                    False,
+                )
+
+                tt = pid_relock_start + pid_relock_duration
+                tt += 2*dt
+
                 first_image_pid_ready_time = tt
-
-
-                tt += 4*dt
+                first_image_sequence_end = tt
 
                 if not GLOBALS['repumpers_always_on']:
                     tt+=dt
@@ -666,24 +690,59 @@ for i in range(0,GLOBALS['n_loop']):
         # Scan MJ0_Spectroscopy_Frq.
         # Blue imaging light remains blocked during this pulse.
         # ============================================================
-
     if GLOBALS["MJ0_Spectroscopy"]:
-
+        
         if not GLOBALS["second_shot"]:
             raise ValueError(
-                "MJ0 spectroscopy requires second_shot = True "
-                "because survival is measured between image 1 and image 2."
+                "MJ0 spectroscopy requires second_shot = True."
             )
 
         print("mJ=0 loss spectroscopy")
 
-        # Only the 689-nm Sisyphus beam is applied.
-        # Red_MOT_Frq_fin + 0.5 * detuning
-        mj0_duration = NEW_TABLE_LINE("Sisyphus",t,(GLOBALS["Red_MOT_Frq_fin"]+ 0.5 * GLOBALS["SisyphusMJ0_Freq"]) / 1e6, GLOBALS["SisyphusMJ0_Pow"],GLOBALS["MJ0_Spectroscopy_duration"],)
+        # Start MJ0 after the first-image PID relock.
+        # Until this point the Sisyphus beam simply remains at
+        # SisyphusImg_Frq / SisyphusImg_Pow.
+        mj0_start = first_image_sequence_end
 
-        t += mj0_duration
-        t += 2*dt
-        mj0_end = t
+        mj0_duration = GLOBALS["MJ0_Spectroscopy_duration"]
+
+        # ---------------------------------------------------------
+        # Switch Sisyphus beam from normal cooling -> MJ0 parameters
+        # ---------------------------------------------------------
+        NEW_TABLE_LINE(
+            "Sisyphus",
+            mj0_start,
+            (
+                GLOBALS["Red_MOT_Frq_fin"]
+                + 0.5 * GLOBALS["SisyphusMJ0_Freq"]
+            ) / 1e6,
+            GLOBALS["SisyphusMJ0_Pow"],
+            mj0_duration,
+        )
+
+        mj0_end = mj0_start + mj0_duration
+
+        # The previous table trigger goes low at mj0_end.
+        # Give it a tiny low time so the next rising edge is distinct.
+        restore_time = mj0_end + 2*dt
+
+        # ---------------------------------------------------------
+        # Restore normal Sisyphus imaging/cooling parameters
+        # ---------------------------------------------------------
+        NEW_TABLE_LINE(
+            "Sisyphus",
+            restore_time,
+            (
+                GLOBALS["Red_MOT_Frq_fin"]
+                + 0.5 * GLOBALS["SisyphusImg_Frq"]
+            ) / 1e6,
+            GLOBALS["SisyphusImg_Pow"],
+        )
+
+        mj0_end = restore_time + 2*dt
+
+        # Do not move t backwards.
+        t = max(t, mj0_end)
     
     if GLOBALS['second_shot']:
         main_board.WAIT(t, rack=0)
@@ -694,12 +753,12 @@ for i in range(0,GLOBALS['n_loop']):
         # start before the mJ=0 spectroscopy pulse has finished.
         if GLOBALS["MJ0_Spectroscopy"]:
             tt = max(
-            tt,
-            mj0_end
-            + orca_trigger_delay
-            + Orca_Labscript_delay
-            - 4*msec
-            + 2*dt
+                tt,
+                mj0_end
+                + shutter_time_open
+                + aom_dark_before_shutter
+                + pid_hold_before_aom_off
+                + 2*dt
             )
         t0=tt
 
@@ -770,18 +829,36 @@ for i in range(0,GLOBALS['n_loop']):
 
         t = max(t, tt)
 
-        # Close the shutter while the AOM remains off
-        Shutter_ImagingBlue_TTL(tt+2*dt, True)
+        # ---------------------------------------------------------
+        # PID relock after image 2
+        # ---------------------------------------------------------
 
-        # Wait until it is physically closed before relocking the PID
+        Shutter_ImagingBlue_TTL(tt + 2*dt, True)
         tt += 2*dt + shutter_time_close
-        BlueImaging_AOM_TTL(tt, True)
-        PID_blue_HOLD_TTL(tt + dt, False) # release HOLD, PID begins relocking
 
-        tt += dt + pid_settle_time # PID should now be settled
+        pid_relock_start = tt
 
-        tt+=4*dt
+        BlueImaging_AOM_TTL(pid_relock_start, True)
 
+        PID_blue_HOLD_TTL(
+            pid_relock_start + dt,
+            False,
+        )
+
+        PID_blue_HOLD_TTL(
+            pid_relock_start
+            + pid_relock_duration
+            - pid_hold_before_aom_off,
+            True,
+        )
+
+        BlueImaging_AOM_TTL(
+            pid_relock_start + pid_relock_duration,
+            False,
+        )
+
+        tt = pid_relock_start + pid_relock_duration
+        tt += 2*dt
         # Continue after the second-shot events have finished.
         
    
@@ -852,18 +929,32 @@ for i in range(0,GLOBALS['n_loop']):
 
         # TABLE_MODE_OFF('Sisyphus', tt)  #solution that turns off Sisyphus beam
 
-        # Close the shutter while the AOM remains off
-        Shutter_ImagingBlue_TTL(tt+2*dt, True)
-
-        # Wait until it is physically closed before relocking the PID
+        Shutter_ImagingBlue_TTL(tt + 2*dt, True)
         tt += 2*dt + shutter_time_close
-        BlueImaging_AOM_TTL(tt, True)
-        PID_blue_HOLD_TTL(tt + dt, False) # release HOLD, PID begins relocking
 
-        tt += dt + pid_settle_time # PID should now be settled
+        pid_relock_start = tt
 
-        tt+=4*dt
+        BlueImaging_AOM_TTL(pid_relock_start, True)
 
+        PID_blue_HOLD_TTL(
+            pid_relock_start + dt,
+            False,
+        )
+
+        PID_blue_HOLD_TTL(
+            pid_relock_start
+            + pid_relock_duration
+            - pid_hold_before_aom_off,
+            True,
+        )
+
+        BlueImaging_AOM_TTL(
+            pid_relock_start + pid_relock_duration,
+            False,
+        )
+
+        tt = pid_relock_start + pid_relock_duration
+        tt += 2*dt
         second_shot_duration = tt - t0
         print(f"third shot duration {second_shot_duration}")
 

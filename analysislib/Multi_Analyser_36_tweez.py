@@ -33,7 +33,7 @@ import seaborn as sns
 
 N_TWEEZERS = 36
 # TWEEZERS_TO_PLOT = list(range(1, N_TWEEZERS + 1))
-TWEEZERS_TO_PLOT = [1,2,3]  # solo alcuni
+TWEEZERS_TO_PLOT = [6]  # solo alcuni
 # TWEEZERS_TO_PLOT = [4]                  # un solo tweezer
 
 
@@ -43,7 +43,7 @@ PLOT_INDIVIDUAL_TWEEZERS = False
 PLOT_ALL_TWEEZERS = False
 SAVE_PLOTS = True
 SAVE_CSV = False
-One_D = False
+One_D = True
 
 if One_D:
     PLOT_AXES = (2,)      # 1D: plot FluoImgPulse_Dt6
@@ -146,7 +146,414 @@ def scalar_per_shot(values, name: str) -> np.ndarray:
 
     return np.asarray(output, dtype=float)
 
+def plot_mj0_survival(
+    df: pd.DataFrame,
+    analyser: pd.DataFrame,
+    dataset_label: str,
+):
+    """
+    Plot conditional survival versus SisyphusMJ0_Freq.
 
+    For each frequency:
+
+        P_survival =
+            sum(N_survived) / sum(N_initial)
+
+    where N_initial is the number of occupied tweezers in image 1,
+    and N_survived is the number of those same tweezers occupied
+    in image 2.
+    """
+
+    figure_name = "MJ0 loss spectroscopy"
+
+    # ---------------------------------------------------------
+    # Check required globals/results
+    # ---------------------------------------------------------
+
+    required_globals = [
+        "MJ0_Spectroscopy",
+        "SisyphusMJ0_Freq",
+    ]
+
+    required_results = [
+        "mj0_n_initial",
+        "mj0_n_survived",
+    ]
+
+    missing_globals = [
+        name for name in required_globals
+        if name not in df.columns
+    ]
+
+    missing_results = [
+        name for name in required_results
+        if name not in analyser.columns
+    ]
+
+    if missing_globals or missing_results:
+        print(
+            "Skipping MJ0 plot. Missing:",
+            missing_globals + missing_results,
+        )
+        return None
+
+
+    # ---------------------------------------------------------
+    # Read values for every loaded shot
+    # ---------------------------------------------------------
+
+    mj0_raw = scalar_per_shot(
+        df["MJ0_Spectroscopy"],
+        "MJ0_Spectroscopy",
+    )
+
+    mj0_enabled = (
+        np.isfinite(mj0_raw)
+        & (mj0_raw != 0)
+    )
+
+    # If the CURRENT shot does not have MJ0 enabled,
+    # do not show an old/stale spectroscopy plot.
+    if not mj0_enabled[-1]:
+        plt.close(figure_name)
+        return None
+
+
+    frequencies = scalar_per_shot(
+        df["SisyphusMJ0_Freq"],
+        "SisyphusMJ0_Freq",
+    )
+
+    n_initial = scalar_per_shot(
+        analyser["mj0_n_initial"],
+        "mj0_n_initial",
+    )
+
+    n_survived = scalar_per_shot(
+        analyser["mj0_n_survived"],
+        "mj0_n_survived",
+    )
+
+
+    # ---------------------------------------------------------
+    # Only use valid MJ0 shots
+    # ---------------------------------------------------------
+
+    valid = (
+        mj0_enabled
+        & np.isfinite(frequencies)
+        & np.isfinite(n_initial)
+        & np.isfinite(n_survived)
+        & (n_initial > 0)
+    )
+
+    if not np.any(valid):
+        print("No valid MJ0 spectroscopy shots yet.")
+        return None
+
+
+    mj0_data = pd.DataFrame({
+        "frequency": frequencies[valid],
+        "n_initial": n_initial[valid],
+        "n_survived": n_survived[valid],
+    })
+
+
+    # ---------------------------------------------------------
+    # Combine repetitions at each frequency
+    # ---------------------------------------------------------
+
+    grouped = (
+        mj0_data
+        .groupby("frequency", sort=True)
+        .agg(
+            n_initial=("n_initial", "sum"),
+            n_survived=("n_survived", "sum"),
+            n_shots=("frequency", "size"),
+        )
+        .reset_index()
+    )
+
+    grouped["survival"] = (
+        grouped["n_survived"]
+        / grouped["n_initial"]
+    )
+
+    # Binomial standard error
+    grouped["sem"] = np.sqrt(
+        grouped["survival"]
+        * (1.0 - grouped["survival"])
+        / grouped["n_initial"]
+    )
+
+
+    # ---------------------------------------------------------
+    # Plot
+    # ---------------------------------------------------------
+
+    fig = plt.figure(
+        figure_name,
+        figsize=(9, 6),
+    )
+
+    fig.clear()
+
+    ax = fig.add_subplot(111)
+
+    ax.errorbar(
+        grouped["frequency"],
+        grouped["survival"],
+        yerr=grouped["sem"],
+        fmt="o-",
+        capsize=4,
+    )
+
+    ax.set_xlabel("SisyphusMJ0_Freq")
+    ax.set_ylabel(
+        r"$P(\mathrm{image\ 2\ occupied}\mid"
+        r"\mathrm{image\ 1\ occupied})$"
+    )
+
+    ax.set_ylim(-0.05, 1.05)
+
+    ax.set_title(
+        f"mJ = 0 loss spectroscopy - {dataset_label}"
+    )
+
+    ax.grid(alpha=0.25)
+
+    fig.tight_layout()
+
+
+    # ---------------------------------------------------------
+    # Useful terminal output
+    # ---------------------------------------------------------
+
+    print("\nMJ0 CONDITIONAL SURVIVAL:")
+
+    print(
+        grouped.to_string(
+            index=False,
+            formatters={
+                "frequency": "{:.6f}".format,
+                "survival": "{:.4f}".format,
+                "sem": "{:.4f}".format,
+            },
+        )
+    )
+
+    return fig
+
+def plot_mj0_survival_per_tweezer(
+    df: pd.DataFrame,
+    analyser: pd.DataFrame,
+    dataset_label: str,
+):
+    """
+    Plot conditional survival versus SisyphusMJ0_Freq
+    separately for selected tweezers.
+
+    For tweezer i:
+
+        P_i =
+            N(first occupied AND second occupied)
+            / N(first occupied)
+
+    Only tweezers listed in TWEEZERS_TO_PLOT are shown.
+    """
+
+    figure_name = "MJ0 survival per tweezer"
+
+    # ---------------------------------------------------------
+    # Check globals
+    # ---------------------------------------------------------
+
+    if "MJ0_Spectroscopy" not in df.columns:
+        return None
+
+    if "SisyphusMJ0_Freq" not in df.columns:
+        return None
+
+    mj0_raw = scalar_per_shot(
+        df["MJ0_Spectroscopy"],
+        "MJ0_Spectroscopy",
+    )
+
+    mj0_enabled = (
+        np.isfinite(mj0_raw)
+        & (mj0_raw != 0)
+    )
+
+    # Do not show a stale MJ0 plot if current shot has MJ0 off
+    if not mj0_enabled[-1]:
+        plt.close(figure_name)
+        return None
+
+    frequencies = scalar_per_shot(
+        df["SisyphusMJ0_Freq"],
+        "SisyphusMJ0_Freq",
+    )
+
+    fig = plt.figure(
+        figure_name,
+        figsize=(10, 6),
+    )
+    fig.clear()
+
+    ax = fig.add_subplot(111)
+
+    colors = plt.cm.turbo(
+        np.linspace(0, 1, N_TWEEZERS)
+    )
+
+    # ---------------------------------------------------------
+    # One survival curve per selected tweezer
+    # ---------------------------------------------------------
+
+    for tweezer in TWEEZERS_TO_PLOT:
+
+        first_column = f"tw{tweezer}_occupied"
+        second_column = f"tw{tweezer}_occupied_2nd"
+
+        if first_column not in analyser.columns:
+            print(
+                f"Skipping TW {tweezer}: "
+                f"missing {first_column}"
+            )
+            continue
+
+        if second_column not in analyser.columns:
+            print(
+                f"Skipping TW {tweezer}: "
+                f"missing {second_column}"
+            )
+            continue
+
+        first_occ = scalar_per_shot(
+            analyser[first_column],
+            first_column,
+        )
+
+        second_occ = scalar_per_shot(
+            analyser[second_column],
+            second_column,
+        )
+
+        valid = (
+            mj0_enabled
+            & np.isfinite(frequencies)
+            & np.isfinite(first_occ)
+            & np.isfinite(second_occ)
+        )
+
+        unique_frequencies = np.sort(
+            np.unique(frequencies[valid])
+        )
+
+        survival_values = []
+        survival_errors = []
+
+        for frequency in unique_frequencies:
+
+            frequency_mask = (
+                valid
+                & np.isclose(
+                    frequencies,
+                    frequency,
+                )
+            )
+
+            # Only repetitions where THIS tweezer
+            # contained an atom in image 1
+            initially_loaded = (
+                frequency_mask
+                & (first_occ == 1)
+            )
+
+            n_initial = np.count_nonzero(
+                initially_loaded
+            )
+
+            survived = (
+                initially_loaded
+                & (second_occ == 1)
+            )
+
+            n_survived = np.count_nonzero(
+                survived
+            )
+
+            if n_initial > 0:
+
+                p_survival = (
+                    n_survived / n_initial
+                )
+
+                sem = np.sqrt(
+                    p_survival
+                    * (1.0 - p_survival)
+                    / n_initial
+                )
+
+            else:
+
+                p_survival = np.nan
+                sem = np.nan
+
+            survival_values.append(
+                p_survival
+            )
+
+            survival_errors.append(
+                sem
+            )
+
+        color = colors[tweezer - 1]
+
+        ax.errorbar(
+            unique_frequencies,
+            survival_values,
+            yerr=survival_errors,
+            fmt="o-",
+            capsize=3,
+            markersize=5,
+            linewidth=1.2,
+            color=color,
+            label=f"TW {tweezer}",
+        )
+
+    # ---------------------------------------------------------
+    # Figure formatting
+    # ---------------------------------------------------------
+
+    ax.set_xlabel(
+        "SisyphusMJ0_Freq (MHz)"
+    )
+
+    ax.set_ylabel(
+        "Conditional survival"
+    )
+
+    ax.set_ylim(
+        -0.05,
+        1.05,
+    )
+
+    ax.set_title(
+        f"mJ = 0 loss spectroscopy - "
+        f"{dataset_label}"
+    )
+
+    ax.grid(alpha=0.25)
+
+    ax.legend(
+        title="Tweezer",
+        ncol=2,
+    )
+
+    fig.tight_layout()
+
+    return fig
 
 def validate_scan_configuration(df: pd.DataFrame):
     """Check scan-parameter and plot configuration before running."""
@@ -1089,7 +1496,32 @@ def main():
         print(f"Saved complete N-D data: {csv_path}")
     
     figures = plot_nd(results, dataset_label)
+        # =========================================================
+        # mJ = 0 LOSS SPECTROSCOPY
+        # =========================================================
+    mj0_figure = plot_mj0_survival_per_tweezer(
+        df=df,
+        analyser=analyser,
+        dataset_label=dataset_label,
+    )
 
+    if mj0_figure is not None:
+        figures.append(
+            (
+                "MJ0_survival_per_tweezer",
+                mj0_figure,
+            )
+        )
+    mj0_figure = plot_mj0_survival(
+        df=df,
+        analyser=analyser,
+        dataset_label=dataset_label,
+    )
+
+    if mj0_figure is not None:
+        figures.append(
+            ("MJ0_loss_spectroscopy", mj0_figure)
+        )
     if PLOT_INDIVIDUAL_TWEEZERS:
         figures += plot_individual_tweezers(results, dataset_label)
 

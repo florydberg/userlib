@@ -38,7 +38,8 @@ PLOT_RAW_IMAGE = False
 PLOT_BACKGROUND_MASK = False
 SAVE_PLOT = False
 SAVE_SCRIPT = True
-
+ATOM_THRESHOLD_FIRST = 350.0
+ATOM_THRESHOLD_SECOND = 350.0
 # One common intensity scale for every panel.
 VMIN = 0
 VMAX = 100
@@ -470,6 +471,25 @@ with Run(path).open("r+") as shot:
 
     first_rois = extract_rois(first_corrected, centers)
     first_integrals = first_rois.sum(axis=(1, 2))
+    # ------------------------------------------------------------
+    # Binary occupation vector for image 1
+    # 1 = atom present
+    # 0 = empty
+    # ------------------------------------------------------------
+
+    first_occupancy = (
+        first_integrals > ATOM_THRESHOLD_FIRST
+    ).astype(np.uint8)
+
+    print("First-shot occupancy:")
+    print(first_occupancy)
+
+
+    for index, occupied in enumerate(first_occupancy, start=1):
+        shot.save_result(
+            f"tw{index}_occupied",
+            int(occupied),
+        )
 
     for index, integral in enumerate(first_integrals, start=1):
         shot.save_result(f"tw{index}_integral", integral)
@@ -520,7 +540,78 @@ with Run(path).open("r+") as shot:
         second_corrected = second_image - second_background
         second_rois = extract_rois(second_corrected, centers)
         second_integrals = second_rois.sum(axis=(1, 2))
+        # ------------------------------------------------------------
+        # Binary occupation vector for image 2
+        # ------------------------------------------------------------
 
+        second_occupancy = (
+            second_integrals > ATOM_THRESHOLD_SECOND
+        ).astype(np.uint8)
+
+
+        for index, occupied in enumerate(second_occupancy, start=1):
+            shot.save_result(
+                f"tw{index}_occupied_2nd",
+                int(occupied),
+            )
+
+        for index, integral in enumerate(second_integrals, start=1):
+            shot.save_result(f"tw{index}_integral_2nd", integral)
+        print("Second-shot occupancy:")
+        print(second_occupancy)
+
+
+        # ------------------------------------------------------------
+        # Conditional survival:
+        #
+        # P(atom in image 2 | atom in image 1)
+        # ------------------------------------------------------------
+
+        initially_loaded = first_occupancy == 1
+
+        n_initial = np.count_nonzero(initially_loaded)
+
+        if n_initial > 0:
+
+            survived = (
+                (first_occupancy == 1)
+                & (second_occupancy == 1)
+            )
+
+            n_survived = np.count_nonzero(survived)
+
+            conditional_survival = (
+                n_survived / n_initial
+            )
+
+        else:
+
+            n_survived = 0
+            conditional_survival = np.nan
+
+
+        print(
+            f"MJ0 conditional survival: "
+            f"{n_survived}/{n_initial} "
+            f"= {conditional_survival:.4f}"
+        )
+
+
+        # Save scalar results so the multishot analyser can plot them
+        shot.save_result(
+            "mj0_n_initial",
+            n_initial,
+        )
+
+        shot.save_result(
+            "mj0_n_survived",
+            n_survived,
+        )
+
+        shot.save_result(
+            "mj0_conditional_survival",
+            conditional_survival,
+        )
         for index, integral in enumerate(second_integrals, start=1):
             shot.save_result(f"tw{index}_integral_2nd", integral)
 
