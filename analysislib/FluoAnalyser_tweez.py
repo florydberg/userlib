@@ -22,7 +22,7 @@ NROWS = 6
 NCOLS = 6
 
 X0 = 107
-Y0 = 92
+Y0 = 94
 DX = 18
 DY = 18
 
@@ -40,6 +40,8 @@ SAVE_PLOT = False
 SAVE_SCRIPT = True
 ATOM_THRESHOLD_FIRST = 350.0
 ATOM_THRESHOLD_SECOND = 350.0
+ATOM_THRESHOLD_THIRD = 350.0
+
 # One common intensity scale for every panel.
 VMIN = 0
 VMAX = 100
@@ -162,7 +164,150 @@ def make_roi_mosaic(rois):
         mosaic[y:y + height, x:x + width] = roi
 
     return mosaic
+def plot_mj1_survival():
+    
+    figure_name = "MJ1 cooling spectroscopy"
 
+    # Load all shots currently available in Lyse.
+    df = data()
+
+    required_globals = [
+        "MJ1_Spectroscopy",
+        "SisyphusMJ1_Freq",
+        "FluoAnalyser_tweez",
+    ]
+
+    missing = [
+        name for name in required_globals
+        if name not in df.columns
+    ]
+
+    if missing:
+        print("Skipping MJ1 plot. Missing:", missing)
+        return None
+
+    analyser = df["FluoAnalyser_tweez"]
+
+    required_results = [
+        "recapture_n_initial",
+        "recapture_n_survived",
+    ]
+
+    missing = [
+        name for name in required_results
+        if name not in analyser.columns
+    ]
+
+    if missing:
+        print("Skipping MJ1 plot. Missing results:", missing)
+        return None
+
+    # ---------------------------------------------------------
+    # Read all shots with MJ1 spectroscopy enabled.
+    # ---------------------------------------------------------
+
+    enabled = np.asarray(
+        df["MJ1_Spectroscopy"],
+        dtype=bool,
+    )
+
+    frequencies = np.asarray(
+        df["SisyphusMJ1_Freq"],
+        dtype=float,
+    )
+
+    n_initial = np.asarray(
+        analyser["recapture_n_initial"],
+        dtype=float,
+    )
+
+    n_survived = np.asarray(
+        analyser["recapture_n_survived"],
+        dtype=float,
+    )
+
+    valid = (
+        enabled
+        & np.isfinite(frequencies)
+        & np.isfinite(n_initial)
+        & np.isfinite(n_survived)
+        & (n_initial > 0)
+        & (n_survived >= 0)
+        & (n_survived <= n_initial)
+    )
+
+    if not np.any(valid):
+        print("No valid MJ1 spectroscopy shots available.")
+        return None
+
+    # ---------------------------------------------------------
+    # Group repetitions at each spectroscopy frequency.
+    # ---------------------------------------------------------
+
+    unique_frequencies = np.sort(
+        np.unique(frequencies[valid])
+    )
+
+    survival_values = []
+    survival_errors = []
+
+    for frequency in unique_frequencies:
+
+        mask = valid & (frequencies == frequency)
+
+        total_initial = np.sum(n_initial[mask])
+        total_survived = np.sum(n_survived[mask])
+
+        survival = total_survived / total_initial
+
+        # Binomial standard error, same as MJ0.
+        sem = np.sqrt(
+            survival * (1 - survival) / total_initial
+        )
+
+        survival_values.append(survival)
+        survival_errors.append(sem)
+
+        print(
+            f"MJ1 freq = {frequency:.6f}, "
+            f"survival = {total_survived:.0f}/{total_initial:.0f} "
+            f"= {survival:.4f} +/- {sem:.4f}"
+        )
+
+    # ---------------------------------------------------------
+    # Plot
+    # ---------------------------------------------------------
+
+    fig = plt.figure(
+        figure_name,
+        figsize=(9, 6),
+    )
+
+    fig.clear()
+    ax = fig.add_subplot(111)
+
+    ax.errorbar(
+        unique_frequencies,
+        survival_values,
+        yerr=survival_errors,
+        fmt="o-",
+        capsize=4,
+        markersize=6,
+    )
+
+    ax.set_xlabel("SisyphusMJ1_Freq")
+    ax.set_ylabel(
+        r"$P(\mathrm{image\ 3\ occupied}\mid"
+        r"\mathrm{image\ 2\ occupied})$"
+    )
+
+    ax.set_ylim(-0.05, 1.05)
+    ax.set_title("MJ1 cooling spectroscopy - survival")
+    ax.grid(alpha=0.3)
+
+    fig.tight_layout()
+
+    return fig
 
 def save_script_copy(shot_path):
     """Archive this script once, using a single writable file handle."""
@@ -190,8 +335,98 @@ def save_script_copy(shot_path):
             data=script_text,
             dtype=h5py.string_dtype(encoding="utf-8"),
         )
+def plot_release_recapture():
+    
+    df = data()  # All shots currently loaded in Lyse
 
+    required = [
+        "release_time",
+        "release_recapture",
+        "FluoAnalyser_tweez",
+    ]
 
+    if any(name not in df.columns for name in required):
+        print("Missing release-recapture data in Lyse.")
+        return None
+
+    analyser = df["FluoAnalyser_tweez"]
+
+    required_results = [
+        "recapture_n_initial",
+        "recapture_n_survived",
+    ]
+
+    if any(name not in analyser.columns for name in required_results):
+        print("Missing recapture results.")
+        return None
+
+    # Read all previous shots.
+    release_times = np.asarray(df["release_time"], dtype=float) * 1e6
+    enabled = np.asarray(df["release_recapture"], dtype=bool)
+
+    n_initial = np.asarray(analyser["recapture_n_initial"], dtype=float)
+    n_survived = np.asarray(analyser["recapture_n_survived"], dtype=float)
+
+    valid = (
+        enabled
+        & np.isfinite(release_times)
+        & np.isfinite(n_initial)
+        & np.isfinite(n_survived)
+        & (n_initial > 0)
+    )
+
+    if not np.any(valid):
+        print("No valid release-recapture data.")
+        return None
+
+    # Group repeated measurements at identical release times.
+    unique_times = np.unique(release_times[valid])
+
+    survival_values = []
+    survival_errors = []
+
+    for release_time in unique_times:
+
+        mask = valid & np.isclose(
+            release_times,
+            release_time,
+            rtol=0,
+            atol=1e-6,
+        )
+
+        total_initial = np.sum(n_initial[mask])
+        total_survived = np.sum(n_survived[mask])
+
+        p = total_survived / total_initial
+
+        # Binomial standard error.
+        sem = np.sqrt(p * (1 - p) / total_initial)
+
+        survival_values.append(p)
+        survival_errors.append(sem)
+
+    fig = plt.figure("Release and recapture", figsize=(9, 6))
+    fig.clear()
+    ax = fig.add_subplot(111)
+
+    ax.errorbar(
+        unique_times,
+        survival_values,
+        yerr=survival_errors,
+        fmt="o-",
+        capsize=4,
+        markersize=6,
+    )
+
+    ax.set_xlabel("Release time (100us)")
+    ax.set_ylabel("Recapture probability")
+    ax.set_ylim(-0.05, 1.05)
+    ax.set_title("Release-and-recapture survival")
+    ax.grid(alpha=0.3)
+
+    fig.tight_layout()
+
+    return fig
 def plot_diagnostic_images(image, background_mask_array, centers, background_value):
     
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
@@ -612,8 +847,6 @@ with Run(path).open("r+") as shot:
             "mj0_conditional_survival",
             conditional_survival,
         )
-        for index, integral in enumerate(second_integrals, start=1):
-            shot.save_result(f"tw{index}_integral_2nd", integral)
 
         images.append(second_corrected)
         roi_sets.append(second_rois)
@@ -663,8 +896,60 @@ with Run(path).open("r+") as shot:
         third_rois = extract_rois(third_corrected, centers)
         third_integrals = third_rois.sum(axis=(1, 2))
 
+        # ------------------------------------------------------------
+        # Binary occupancy vector for Image 3
+        # ------------------------------------------------------------
+        third_occupancy = (
+            third_integrals > ATOM_THRESHOLD_THIRD
+        ).astype(np.uint8)
+
+        print("Third-shot occupancy:")
+        print(third_occupancy)
+
+        for index, occupied in enumerate(third_occupancy, start=1):
+            shot.save_result(
+                f"tw{index}_occupied_3rd",
+                int(occupied),
+            )
+
         for index, integral in enumerate(third_integrals, start=1):
             shot.save_result(f"tw{index}_integral_3rd", integral)
+
+        # ------------------------------------------------------------
+        # Release-and-recapture: Image 2 -> Image 3
+        # Same calculation as MJ0, shifted by one image.
+        # ------------------------------------------------------------
+        if second_shot:
+
+            initially_loaded = second_occupancy == 1
+
+            n_initial = np.count_nonzero(initially_loaded)
+
+            if n_initial > 0:
+                survived = (
+                    (second_occupancy == 1)
+                    & (third_occupancy == 1)
+                )
+
+                n_survived = np.count_nonzero(survived)
+                conditional_survival = n_survived / n_initial
+
+            else:
+                n_survived = 0
+                conditional_survival = np.nan
+
+            print(
+                f"Recapture conditional survival: "
+                f"{n_survived}/{n_initial} "
+                f"= {conditional_survival:.4f}"
+            )
+
+            shot.save_result("recapture_n_initial", int(n_initial))
+            shot.save_result("recapture_n_survived", int(n_survived))
+            shot.save_result(
+                "recapture_conditional_survival",
+                conditional_survival,
+            )
 
         images.append(third_corrected)
         roi_sets.append(third_rois)
@@ -679,6 +964,7 @@ if SAVE_SCRIPT:
 archive_finished = time.perf_counter()
 
 figure = plot_results(images, roi_sets, labels, centers)
+
 
 if SAVE_PLOT and figure is not None:
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")

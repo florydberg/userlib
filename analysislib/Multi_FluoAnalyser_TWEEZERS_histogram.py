@@ -19,6 +19,15 @@ dt=datetime.datetime.now().date()
 dtf = datetime.datetime.now()
 show_tweezer_histograms = False
 
+duo=0
+saturation_conversion=False
+saving_plots=True
+saving_location=True
+n_tweezer=36
+saving_data=True
+second_shot = 1
+third_shot = 1
+MEAN_IMAGE = False
 
 def saturation(dBm):
         Imag_beam_Power=140e-6/28*dBm #W   #TODO: update this value with the measure we have to take
@@ -497,20 +506,9 @@ def plot_mean_images(
 
     return fig
 
-    return fig
 
-################################### 
-################################### 
 
-duo=0
-saturation_conversion=False
-saving_plots=True
-saving_location=True
-n_tweezer=36
-saving_data=True
-second_shot = 1
-third_shot = 1
-MEAN_IMAGE = True
+
 
 
 para1_name='ImagingFluo_SetPoint' #'n_shot'
@@ -532,6 +530,27 @@ try:
 
     one_level_up = os.path.dirname(str(paths.iloc[-1]))
     two_levels_up = os.path.dirname(one_level_up)
+
+    date = os.path.basename(str(paths.iloc[0]))[:10]
+
+    shot_numbers = (
+        paths.str.extract(r"_(\d{4})_")[0]
+        .dropna()
+        .astype(int)
+        .unique()
+    )
+
+    shot_numbers = sorted(shot_numbers)
+
+    if len(shot_numbers) == 0:
+        raise ValueError("No shot numbers found in HDF5 filenames.")
+
+    if len(shot_numbers) == 1:
+        shot_label = f"shot_{shot_numbers[0]:04d}"
+    else:
+        shot_label = "shots_" + "_".join(
+            f"{number:04d}" for number in shot_numbers
+        )
 
     # ---------------- Settings ----------------
     nbin = 50
@@ -824,11 +843,10 @@ try:
     else:
         fig.tight_layout()
 
-    # Save both histograms together with one CSV write.
-    list_name = (
-        datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S_%f")
-        + "_" + para1_name
-    )
+    # Save using acquisition date and shot numbers.
+
+    list_name = f"{date}_{shot_label}_{para1_name}"
+
     if duo:
         list_name += "_" + para2_name
 

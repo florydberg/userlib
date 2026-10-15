@@ -309,7 +309,7 @@ if True: #Envelope of ttl and analog
         trigger_name = channel_name+'_trigger'
         channel_trigger = globals().get(trigger_name)
 
-        if duration<10*usec: duration=10*usec
+        if duration<10*usec: duration=15*usec
         channel_trigger.go_high(tt)
         channel_trigger.go_low(tt+duration-10*dt)
         return duration
@@ -429,7 +429,11 @@ if True: #Envelope of ttl and analog
             PID_blue_HOLD.go_low(tt)
         else:
             PID_blue_HOLD.go_high(tt)
-
+    def PID_Tweez_HOLD_TTL(tt, control=True):
+        if control:
+            PID_Tweez_HOLD.go_low(tt)
+        else:
+            PID_Tweez_HOLD.go_high(tt)
     def Shutter_ImagingBlue_TTL(tt, control=True):
         if control:
             Shutter_ImagingBlue.go_high(tt)
@@ -1302,9 +1306,9 @@ if True: # === MOTs ===
         # RedMOT.DDS.setfreq(tt, G_Red_MOT_Frq*1e3)  ##################### VERY VERY  BAD THINGS TO CIRCUMVENT DRIVER BUG  TODO: FIX removing 1e3or2 ask Andre #################
         # RedMOT.DDS.setamp(tt, G_Red_MOT_Pow*1e2)
 
-        if GLOBALS['table_red']: 
-            RedMOT_gate.go_high(tt+dt)
-            RedMOT_gate.go_low(tt+2*dt)
+        #if GLOBALS['table_red']: 
+        #    RedMOT_gate.go_high(tt+dt)
+         #   RedMOT_gate.go_low(tt+2*dt)
 
 
         # ImagingBeam.DDS.setfreq(tt, G_Imaging_Frq*1e3)

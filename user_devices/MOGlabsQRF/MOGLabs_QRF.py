@@ -1226,8 +1226,67 @@ class MOGLabs_QRF_Worker(Worker):
                         command = 'TABLE,APPEND,%d,10,0x0,0,0x1, TRIG' % (channel+1)
                         print(f"A line in the table of Ch {channel} has changed sending command", command)
                         self.dev.cmd(command)
+                        # -------------------------------------------------
+                    # RedMOT output diagnostic
+                    # -------------------------------------------------
 
-                    self.dev.cmd('TABLE,ARM,%i' % (channel+1))
+                    if self.device_name == "QRF_Red" and channel == 1:
+
+                        print(
+                            "REDMOT STATUS BEFORE ON ALL:",
+                            self.dev.ask("STATUS,2"),
+                        )
+
+                        self.dev.cmd("ON,2,ALL")
+
+                        print(
+                            "REDMOT STATUS AFTER ON ALL:",
+                            self.dev.ask("STATUS,2"),
+                        )
+
+
+                    # -------------------------------------------------
+                    # ARM EVERY TABLE-MODE CHANNEL
+                    # -------------------------------------------------
+
+                    self.dev.cmd(
+                        'TABLE,ARM,%i' % (channel + 1)
+                    )
+
+
+                    # -------------------------------------------------
+                    # RedMOT diagnostics after ARM
+                    # -------------------------------------------------
+
+                    if self.device_name == "QRF_Red" and channel == 1:
+
+                        print(
+                            "REDMOT OUTPUT STATUS AFTER ARM:",
+                            self.dev.ask("STATUS,2"),
+                        )
+
+                        print(
+                            "REDMOT TABLE STATUS AFTER ARM:",
+                            self.dev.ask("TABLE,STATUS,2"),
+                        )
+
+
+                    print(
+                        f"QRF {device_name} channel {channel + 1} "
+                        f"table status after ARM: "
+                        f"{self.dev.ask('TABLE,STATUS,%i' % (channel + 1))}"
+                    )
+
+                    table_data = None
+                    print('table armed')
+                    status = self.dev.ask(
+                        'TABLE,STATUS,%i' % (channel + 1)
+                    )
+
+                    print(
+                        f"QRF {device_name} channel {channel + 1} "
+                        f"after ARM: {status}"
+                    )
                     print('table armed')
                     # self.dev.cmd('TABLE,START,%i' % (channel+1))
                     # print('table started')
@@ -1280,11 +1339,12 @@ class MOGLabs_QRF_Worker(Worker):
     def abort_buffered(self):
         # TODO: untested
         return self.transition_to_manual(True)
-    
     def transition_to_manual(self, abort=False):
+        
         self._set_qrf_phase(
             'aborting' if abort else 'returning_to_manual'
         )
+
         print('Transition to manual')
 
         if self.dev is not None:
@@ -1300,24 +1360,180 @@ class MOGLabs_QRF_Worker(Worker):
                 ):
                     continue
 
-                # Keep the existing cleanup for the other channels.
                 try:
-                    self.dev.cmd(f'TABLE,STOP,{channel+1}')
-                    self.dev.cmd(f'TABLE,CLEAR,{channel+1}')
-                    self.dev.cmd(f'MODE,{channel+1},NSB')
-                    self.dev.cmd(f'ON,{channel+1},SIG')
 
-                except Exception:
-                    # Preserve the existing fallback.
-                    self.dev.cmd(f'MODE,{channel+1},NSB')
-                    self.dev.cmd(f'ON,{channel+1},SIG')
+                    # =========================================================
+                    # RED MOT DIAGNOSTIC BEFORE CLEANUP
+                    # Python channel 1 = physical QRF channel 2
+                    # =========================================================
+                    if (
+                        self.device_name == "QRF_Red"
+                        and channel == 1
+                    ):
 
-            # Abort recovery resets channel 3, so restore its AM.
-            # Successful shots leave its configuration untouched.
+                        try:
+                            print(
+                                "======= REDMOT END OF SHOT ======="
+                            )
+
+                            print(
+                                "REDMOT BEFORE CLEANUP:",
+                                self.dev.ask(
+                                    "TABLE,STATUS,2"
+                                ),
+                            )
+
+                        except Exception as error:
+                            print(
+                                "REDMOT BEFORE CLEANUP ERROR:",
+                                repr(error),
+                            )
+
+
+                    # =========================================================
+                    # STOP TABLE
+                    # =========================================================
+                    self.dev.cmd(
+                        f'TABLE,STOP,{channel+1}'
+                    )
+
+
+                    if (
+                        self.device_name == "QRF_Red"
+                        and channel == 1
+                    ):
+
+                        try:
+                            print(
+                                "REDMOT AFTER STOP:",
+                                self.dev.ask(
+                                    "TABLE,STATUS,2"
+                                ),
+                            )
+
+                        except Exception as error:
+                            print(
+                                "REDMOT AFTER STOP ERROR:",
+                                repr(error),
+                            )
+
+
+                    # =========================================================
+                    # CLEAR TABLE
+                    # =========================================================
+                    self.dev.cmd(
+                        f'TABLE,CLEAR,{channel+1}'
+                    )
+
+
+                    if (
+                        self.device_name == "QRF_Red"
+                        and channel == 1
+                    ):
+
+                        try:
+                            print(
+                                "REDMOT AFTER CLEAR:",
+                                self.dev.ask(
+                                    "TABLE,STATUS,2"
+                                ),
+                            )
+
+                        except Exception as error:
+                            print(
+                                "REDMOT AFTER CLEAR ERROR:",
+                                repr(error),
+                            )
+
+
+                    # =========================================================
+                    # RETURN TO NORMAL / STATIC MODE
+                    #
+                    # DIAGNOSTIC:
+                    # Do NOT switch RedMOT physical channel 2
+                    # (Python channel 1) back to NSB.
+                    # Leave it in table mode between shots.
+                    # =========================================================
+                    if not (
+                        self.device_name == "QRF_Red"
+                        and channel == 1
+                    ):
+                        self.dev.cmd(
+                            f'MODE,{channel+1},NSB'
+                        )
+
+
+                    # Keep RF signal enabled.
+                    self.dev.cmd(
+                        f'ON,{channel+1},SIG'
+                    )
+
+
+                    if (
+                        self.device_name == "QRF_Red"
+                        and channel == 1
+                    ):
+
+                        try:
+                            print(
+                                "REDMOT TABLE STATUS AFTER CLEANUP:",
+                                self.dev.ask(
+                                    "TABLE,STATUS,2"
+                                ),
+                            )
+                        except Exception as error:
+                            print(
+                                "REDMOT TABLE STATUS AFTER CLEANUP ERROR:",
+                                repr(error),
+                            )
+
+                        print(
+                            "REDMOT OUTPUT STATUS AFTER CLEANUP:",
+                            self.dev.ask(
+                                "STATUS,2"
+                            ),
+                        )
+
+                        print(
+                            "=================================="
+                        )
+
+
+                except Exception as error:
+
+                    print(
+                        f"transition_to_manual cleanup error "
+                        f"on {self.device_name} "
+                        f"channel {channel}: {repr(error)}"
+                    )
+
+                    # Preserve existing fallback behaviour.
+                    #
+                    # Also avoid forcing RedMOT back to NSB
+                    # during this diagnostic.
+                    if not (
+                        self.device_name == "QRF_Red"
+                        and channel == 1
+                    ):
+                        self.dev.cmd(
+                            f'MODE,{channel+1},NSB'
+                        )
+
+                    self.dev.cmd(
+                        f'ON,{channel+1},SIG'
+                    )
+
+
+            # Abort recovery resets channel 3,
+            # so restore its AM configuration.
+            # Successful shots leave it untouched.
             if abort:
+
                 self.restore_imaging_am(2)
 
+
         self._set_qrf_phase('manual')
+
         return True
 
     def shutdown(self):

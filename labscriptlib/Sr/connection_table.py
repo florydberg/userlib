@@ -75,6 +75,7 @@ if f:
     DigitalOut(name='RedMOT_singleFrq_gate', parent_device=DO2, connection=str(2))
     DigitalOut(name='Shutter_Blue', parent_device=DO2, connection=str(3))
     DigitalOut(name='Shutter_ImagingBlue', parent_device=DO2, connection=str(5))
+    DigitalOut(name='PID_Tweez_HOLD', parent_device=DO2, connection=str(6))
 
     DigitalOut(name='re707_switch', parent_device=DO2, connection=str(9))
     DigitalOut(name='re679_switch', parent_device=DO2, connection=str(10))

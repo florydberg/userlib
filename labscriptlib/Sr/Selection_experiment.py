@@ -77,9 +77,11 @@ pid_relock_duration = 5*ms
 delta_imaging = 0
 
 aom_dark_before_shutter = 2*usec
-start()
-t += GLOBALS['stop_buffering_time']
 
+start()
+t += dt
+PID_Tweez_HOLD_TTL(t, False)  # Normal feedback before loading/imaging.
+t += GLOBALS['stop_buffering_time']
 t+=dt
 TABLE_MODE_ON('RedMOT', t)
 t+=dt
@@ -95,16 +97,16 @@ t+=dt +0*ms #set to 10 ms to check
 # WAIT() sets data bit 30: select that bit as the stop trigger.
 # For this test, start immediately when BLACS starts the shot.
 # Reserve in_0 for restarting after WAIT.
-main_board.set_start_trigger('None', 'low level')
+# main_board.set_start_trigger('None', 'low level')
 
-# Pause when the programmed WAIT bit is reached.
-main_board.set_stop_trigger('data bits 28-31','offset bit 0')
+# # Pause when the programmed WAIT bit is reached.
+# main_board.set_stop_trigger('data bits 28-31','offset bit 0')
 
-# Restart using the physical in_0 connector.
-main_board.set_restart_trigger('input 0','rising edge')
+# # Restart using the physical in_0 connector.
+# main_board.set_restart_trigger('input 0','rising edge')
 
-# Monitor WAIT on the physical out_0 connector.
-main_board.set_ctrl_out({'output 0': ('fixed', 'high level')})
+# # Monitor WAIT on the physical out_0 connector.
+# main_board.set_ctrl_out({'output 0': ('fixed', 'high level')})
 if sel_tweezer:
     # Keep the shutter closed during the existing PID preparation.
     Shutter_ImagingBlue.go_high(t)
@@ -269,8 +271,16 @@ for i in range(0,GLOBALS['n_loop']):
                 
     
             # MOT_Red3D_Switch_TTL(t, False)   #Global rf switch. obsolete     
-            MOT_Red3D_singleFrq_TTL(t, False)
-            t+=dt
+
+            if GLOBALS['MOT_Spectroscopy']:
+                    NEW_TABLE_LINE('RedMOT', t,(GLOBALS['Red_MOT_Frq_fin']+0.5*GLOBALS['MOT_RED_spectroscopy_frq'])/1e6, GLOBALS['MOT_RED_spectroscopy_pow'])
+            else:
+                MOT_Red3D_singleFrq_TTL(t, False)
+
+            t += dt
+
+            # MOT_Red3D_singleFrq_TTL(t, False)
+            # t+=dt
 
             fluo_delay=GLOBALS['fluo_delay']
 
@@ -426,7 +436,26 @@ for i in range(0,GLOBALS['n_loop']):
                 Shutter_ImagingBlue_TTL(t, False)
                 t += shutter_time_open
 
+                # Precooling before imaging.
+                t += NEW_TABLE_LINE(
+                    'Sisyphus',
+                    t,
+                    (
+                        GLOBALS['Red_MOT_Frq_fin']
+                        + 0.5 * GLOBALS['SisyphusPrecool_Frq']
+                    ) / 1e6,
+                    GLOBALS['SisyphusPrecool_Pow'],
+                    50 * ms,
+                )
+
+                t += 5 * dt
+                TABLE_MODE_OFF('Sisyphus', t)
+
+                t += 2 * dt
+
+                # Prevent the later imaging-time rewind from entering precooling.
                 imaging_ready_time = t
+
 
                 # ---------------------------------------------------------
                 # Change from the LAC setpoint to the imaging setpoint.
@@ -743,9 +772,26 @@ for i in range(0,GLOBALS['n_loop']):
 
         # Do not move t backwards.
         t = max(t, mj0_end)
-    
+    # ============================================================
+    # mJ = Â±1 COOLING SPECTROSCOPY
+    # Image 1 -> 461 heating -> scanned 689 cooling
+    # -> release/recapture -> restore imaging cooling -> Image 2
+    # ============================================================
+
+    # ============================================================
+    # mJ = ±1 COOLING SPECTROSCOPY
+    #
+    # Image 1
+    # -> 461 nm heating
+    # -> scanned 689 nm cooling
+    # -> tweezer PID sample-and-hold
+    # -> release and recapture
+    # -> restore normal Sisyphus cooling
+    # -> Image 2
+    # ============================================================
+
     if GLOBALS['second_shot']:
-        main_board.WAIT(t, rack=0)
+        # main_board.WAIT(t, rack=0)
         t += dt
 
         tt = t - Orca_Camera_fluo_readout - GLOBALS['FluoImaging_duration'] - orca_trigger_delay - Orca_Labscript_delay + 100*ms
@@ -760,6 +806,8 @@ for i in range(0,GLOBALS['n_loop']):
                 + pid_hold_before_aom_off
                 + 2*dt
             )
+
+        tt += GLOBALS['holdTime_between_images_1_2']
         t0=tt
 
 
@@ -863,11 +911,260 @@ for i in range(0,GLOBALS['n_loop']):
         
    
 
+    # ============================================================
+    # MJ1 NOW REQUIRES THREE IMAGES
+    # ============================================================
+
+    if GLOBALS["MJ1_Spectroscopy"] and not (
+        GLOBALS["second_shot"] and GLOBALS["third_shot"]
+    ):
+        raise ValueError(
+            "MJ1 spectroscopy requires second_shot=True "
+            "and third_shot=True."
+        )
+
+    # ============================================================
+    # IMAGE 2 -> MJ1 SPECTROSCOPY -> IMAGE 3
+    # ============================================================
+
     if GLOBALS['second_shot'] and GLOBALS['third_shot']:
 
-        tt = t - Orca_Camera_fluo_readout - orca_trigger_delay - Orca_Labscript_delay + 100*ms
-        t0 = tt
+        # Preserve the original Image 3 timing reference.
+        third_image_base_t = t
 
+        # Do not perform two separate release-and-recapture pulses.
+        if GLOBALS["MJ1_Spectroscopy"] and GLOBALS["release_recapture"]:
+            raise ValueError(
+                "MJ1 spectroscopy already includes release-and-recapture. "
+                "Set release_recapture=False."
+            )
+
+        # ========================================================
+        # MJ1 SPECTROSCOPY BETWEEN IMAGE 2 AND IMAGE 3
+        # ========================================================
+
+        if GLOBALS["MJ1_Spectroscopy"]:
+
+            heating_duration = GLOBALS["MJ1_461Heating_duration"]
+            cooling_duration = GLOBALS["MJ1_Spectroscopy_duration"]
+            release_duration = GLOBALS["MJ1_Recap_Release_duration"]
+
+            if not (
+                sel_fluo_image
+                and sel_tweezer
+                and sel_imaging_beam == "abs"
+            ):
+                raise ValueError(
+                    "MJ1 spectroscopy requires tweezer fluorescence imaging."
+                )
+
+            if GLOBALS["MJ0_Spectroscopy"]:
+                raise ValueError(
+                    "MJ0_Spectroscopy and MJ1_Spectroscopy "
+                    "cannot both be True."
+                )
+
+            if heating_duration <= 0:
+                raise ValueError("MJ1 heating duration must be positive.")
+
+            if cooling_duration <= 0:
+                raise ValueError("MJ1 cooling duration must be positive.")
+
+            if release_duration <= 0:
+                raise ValueError("MJ1 release duration must be positive.")
+
+            # ----------------------------------------------------
+            # Start after Image 2 and its blue PID relock.
+            #
+            # tt is the end of Image 2's relock sequence.
+            # ----------------------------------------------------
+
+            mj1_cursor = tt + 2*dt
+
+            # Turn off normal 689 nm Sisyphus light.
+            TABLE_MODE_OFF("Sisyphus", mj1_cursor)
+            mj1_cursor += 2*dt
+
+            # ====================================================
+            # 1. FIXED 461 nm HEATING
+            # ====================================================
+
+            # Open blue imaging shutter.
+            Shutter_ImagingBlue_TTL(mj1_cursor, False)
+
+            mj1_heating_start = mj1_cursor + shutter_time_open
+
+            # Apply heating pulse.
+            BlueImaging_AOM_TTL(mj1_heating_start, False)
+
+            mj1_heating_end = mj1_heating_start + heating_duration
+
+            # End heating pulse.
+            BlueImaging_AOM_TTL(mj1_heating_end, False)
+
+            # Close blue imaging shutter.
+            mj1_cursor = mj1_heating_end + aom_dark_before_shutter
+
+            Shutter_ImagingBlue_TTL(mj1_cursor, False)
+
+            mj1_cursor += shutter_time_close + 2*dt
+
+            # ====================================================
+            # 2. SCANNED 689 nm MJ1 COOLING
+            # ====================================================
+
+            mj1_cooling_start = mj1_cursor
+
+            actual_mj1_cooling_duration = NEW_TABLE_LINE(
+                "Sisyphus",
+                mj1_cooling_start,
+                (
+                    GLOBALS["Red_MOT_Frq_fin"]
+                    + 0.5 * GLOBALS["SisyphusMJ1_Freq"]
+                ) / 1e6,
+                GLOBALS["SisyphusMJ1_Pow"],
+                cooling_duration,
+            )
+
+            mj1_cooling_end = (
+                mj1_cooling_start + actual_mj1_cooling_duration
+            )
+
+            mj1_cursor = mj1_cooling_end + dt
+
+            # Turn off MJ1 cooling.
+            TABLE_MODE_OFF("Sisyphus", mj1_cursor)
+
+            mj1_cursor += 2*dt
+
+            # ====================================================
+            # 3. TWEEZER RELEASE AND RECAPTURE
+            #    WITH PID SAMPLE-AND-HOLD
+            # ====================================================
+
+            tweez_hold_margin = max(100*usec, 2*dt)
+
+            mj1_release_start = mj1_cursor
+
+            # Freeze tweezer PID while light is ON.
+            PID_Tweez_HOLD_TTL(mj1_release_start, True)
+
+            # Wait before switching off.
+            mj1_tweezer_off = (
+                mj1_release_start + tweez_hold_margin
+            )
+
+            Tweezers_AOM_TTL(mj1_tweezer_off, False)
+
+            # Release for exactly the configured duration.
+            mj1_recapture_time = (
+                mj1_tweezer_off + release_duration
+            )
+
+            # Recapture while PID is still held.
+            Tweezers_AOM_TTL(mj1_recapture_time, True)
+
+            # Resume feedback after tweezer light returns.
+            mj1_feedback_resume = (
+                mj1_recapture_time + tweez_hold_margin
+            )
+
+            PID_Tweez_HOLD_TTL(mj1_feedback_resume, False)
+
+            mj1_cursor = mj1_feedback_resume + 2*dt
+
+            # ====================================================
+            # 4. RESTORE NORMAL SISYPHUS COOLING
+            # ====================================================
+
+            NEW_TABLE_LINE(
+                "Sisyphus",
+                mj1_cursor,
+                (
+                    GLOBALS["Red_MOT_Frq_fin"]
+                    + 0.5 * GLOBALS["SisyphusImg_Frq"]
+                ) / 1e6,
+                GLOBALS["SisyphusImg_Pow"],
+            )
+
+            mj1_end = mj1_cursor + 2*dt
+
+            t = max(t, mj1_end)
+
+            print(
+                f"MJ1 spectroscopy between Images 2 and 3 completed. "
+                f"Release: {release_duration/usec:.3f} us"
+            )
+
+        # ========================================================
+        # INDEPENDENT RELEASE AND RECAPTURE
+        #
+        # Used when MJ1 spectroscopy is disabled.
+        # ========================================================
+
+        if GLOBALS['release_recapture']:
+
+            release_duration = GLOBALS['release_time']
+
+            if release_duration <= 0:
+                raise ValueError("release_time must be positive.")
+
+            release_start = max(t, tt) + 2*dt
+
+            tweez_hold_margin = max(100*usec, 2*dt)
+
+            PID_Tweez_HOLD_TTL(release_start, True)
+
+            tweezer_off = release_start + tweez_hold_margin
+            Tweezers_AOM_TTL(tweezer_off, False)
+
+            tweezer_on = tweezer_off + release_duration
+            Tweezers_AOM_TTL(tweezer_on, True)
+
+            feedback_resume = tweezer_on + tweez_hold_margin
+            PID_Tweez_HOLD_TTL(feedback_resume, False)
+
+            release_recapture_end = feedback_resume + 2*dt
+
+            t = max(t, release_recapture_end)
+
+        # ========================================================
+        # 5. IMAGE 3 TIMING
+        # ========================================================
+
+        # Original Image 3 timing reference.
+        tt = (
+            third_image_base_t
+            - Orca_Camera_fluo_readout
+            - orca_trigger_delay
+            - Orca_Labscript_delay
+            + 100*ms
+        )
+
+        # Image 3 must not begin until the preceding
+        # spectroscopy/release sequence has finished.
+        if GLOBALS["MJ1_Spectroscopy"] or GLOBALS["release_recapture"]:
+
+            preparation_lead = max(
+                shutter_time_open
+                + aom_dark_before_shutter
+                + pid_hold_before_aom_off,
+                orca_trigger_delay
+                + Orca_Labscript_delay
+                - 4*msec,
+            )
+
+            if GLOBALS["MJ1_Spectroscopy"]:
+                sequence_end = mj1_end
+            else:
+                sequence_end = release_recapture_end
+
+            tt = max(
+                tt,
+                sequence_end + preparation_lead + 2*dt,
+            )
+        tt += GLOBALS['holdTime_between_images_2_3']
+        t0 = tt
 
         # t+=Orca_Camera.expose(tt+5*msec,'second-shot', trigger_duration=10, saving=True)+orca_trigger_delay+Orca_Labscript_delay #+5 for sync with fluo
         t += (
@@ -991,6 +1288,8 @@ for i in range(0,GLOBALS['n_loop']):
 
         elif sel_camera_abs =='basler_abs':
             t=take_absorbImaging(t, GLOBALS['AbsImgPulse_duration'])
+            if GLOBALS['MOT_Spectroscopy']:
+                MOT_Red3D_singleFrq_TTL(t + dt, False)
 
     t+=500*us
     # 2*t+=250*ms #removed to meke the sequence faster... to be checked, why is this here?

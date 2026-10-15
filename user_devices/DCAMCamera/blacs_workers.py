@@ -64,7 +64,7 @@ class DCAM_Camera(object):
         Args:
             serial_number (int): serial number of camera to connect to
         """
-        self.timeout = 240000
+        self.timeout = 2000000
 
         global dcamAPI
         import user_devices.DCAMCamera.dcam as dcamAPI

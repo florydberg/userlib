@@ -518,9 +518,9 @@ try:
                     # RX=700 #300
                     # RY=1100 #300                     
                 else:
-                    P0=(150,500)   # Starting point for the atoms ROIxxxxx previous (200,400)
-                    RX=400+200
-                    RY=400+200
+                    P0=(550,650)   # Starting point for the atoms ROIxxxxx previous (200,400)
+                    RX=300
+                    RY=300
             else:
                 P0=(250-200,450-200)   # Starting point for the atoms ROI
                 RX=600+200
