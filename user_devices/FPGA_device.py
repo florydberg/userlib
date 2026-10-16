@@ -123,9 +123,9 @@ if True: #Andre: easier to read
 
     # default special data bits
     BIT_NOP             = 31                        # no operation bit (at the moment cannot be changed since is hard-coded in driver!)
-    BIT_STOP            = 30                        # data stop trigger bit
+    BIT_STOP            = 28                        # data stop trigger bit
     BIT_TRST            = 29                        # time reset bit (not implemented)
-    BIT_IRQ             = 28                        # data IRQ bit
+    BIT_IRQ             = 30                        # data IRQ bit
     BIT_STRB            = 23                        # data strobe bit
     BIT_NOP_SH          = (1<<BIT_NOP)
     BIT_STOP_SH         = (1<<BIT_STOP)
@@ -2387,6 +2387,9 @@ def connect(timeout, con):
 #   if recv_bytes == 0 save_prints 'output' + number of sent bytes
 #   if recv_bytes == 2 save_prints 'output' + information if ACK/NACK received
 #   if recv_bytes > 2  save_prints 'output' + number of received bytes
+# def send_recv_data(sock, data, timeout, recv_bytes=2, output=None):
+
+# def _send_recv_data_original(sock, data, timeout, recv_bytes=2, output=None):
 def send_recv_data(sock, data, timeout, recv_bytes=2, output=None):
     size = None
     if (data is None) and (recv_bytes > 0):

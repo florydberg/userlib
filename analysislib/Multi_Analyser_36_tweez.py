@@ -39,13 +39,14 @@ TWEEZERS_TO_PLOT = list(range(1, N_TWEEZERS + 1))
 
 
 
-PLOT_SURV_PROB=True
+PLOT_SURV_PROB=False
+PLOT_SURV_PROB_SCAN= True
 PLOT_INDIVIDUAL_TWEEZERS = False
-PLOT_SURVIVAL_PER_TWEEZER = True
+PLOT_SURVIVAL_PER_TWEEZER = False
 PLOT_ALL_TWEEZERS = False
 SAVE_PLOTS = True
 SAVE_CSV = False
-One_D = True
+One_D = False
 FIT_MJ0_LOSS_GAUSSIAN = False
 MJ0_FIT_X_MIN = None
 MJ0_FIT_X_MAX = None
@@ -57,9 +58,9 @@ sigma_array = np.full(N_TWEEZERS, np.nan)
 PLOT_SIGMA = False
 
 if One_D:
-    PLOT_AXES = (2,)      # 1D: plot FluoImgPulse_Dt6
+    PLOT_AXES = (4,)      # 1D: plot FluoImgPulse_Dt6
 else:
-    PLOT_AXES = (2, 4)    # 2D: plot FluoImgPulse_Dt × LAC_duration
+    PLOT_AXES = (2, 3)    # 2D: plot FluoImgPulse_Dt × LAC_duration
 
 if One_D:
     MJ1_SCAN_NAME = "MJ1_Recap_Release_duration"
@@ -76,7 +77,7 @@ SCAN_NAMES = [
     "LAC_Frq", # 2
     "LAC_Pow", # 3 
     "SisyphusImg_Frq", # 4
-    "SisyphusPrecool_Pow", # 5 
+    "SisyphusImg_Pow", # 5 
     # "Blue_LACPower_SetPoint",
     # "FluoImaging_duration",
     # "ImagingFluo_SetPoint",
@@ -84,7 +85,7 @@ SCAN_NAMES = [
     "QuantizAxis_Y_Coils_Current",
     "MJ1_Recap_Release_duration", # 6
     # "SisyphusPrecool_Pow", # 7
-    # "ImagingTweez_Frq", # 8
+    "ImagingTweez_Frq", # 8
     "FluoImaging_duration", # 9
     # "ImagingFluo_SetPoint", # 10
     # "TweezerCooling_duration"
@@ -106,7 +107,7 @@ SCAN_UNITS = [
      "us",
     # "MHz", # 6
     #  "dB", # 7
-    #  "MHz", # 8
+     "MHz", # 8
     "ms", # 9
     # "V", # 10
     # "ms"
@@ -2206,6 +2207,355 @@ def plot_hold_survival_1_2(df, analyser, dataset_label):
     return fig
 
 
+def plot_hold_survival_per_tweezer_1_2(df, analyser, dataset_label):
+
+    figure_name = "Hold survival per tweezer 1 to 2"
+    scan_name = "holdTime_between_images_1_2"
+
+    if scan_name not in df.columns or "second_shot" not in df.columns:
+        print("Missing hold time or second_shot global.")
+        return None
+
+    enabled = scalar_per_shot(
+        df["second_shot"], "second_shot"
+    ) != 0
+
+    if not enabled[-1]:
+        plt.close(figure_name)
+        return None
+
+    # Lyse stores ms; plot seconds.
+    hold_times = np.round(
+        scalar_per_shot(df[scan_name], scan_name) / 1000,
+        9
+    )
+
+    fig = plt.figure(figure_name, figsize=(10, 6))
+    fig.clear()
+    ax = fig.add_subplot(111)
+
+    colors = plt.cm.turbo(
+        np.linspace(0, 1, N_TWEEZERS)
+    )
+
+    plotted = 0
+
+    for tweezer in TWEEZERS_TO_PLOT:
+
+        first_column = f"tw{tweezer}_occupied"
+        second_column = f"tw{tweezer}_occupied_2nd"
+
+        if (
+            first_column not in analyser.columns
+            or second_column not in analyser.columns
+        ):
+            print(f"Missing occupancy data for TW {tweezer}")
+            continue
+
+        first_occ = scalar_per_shot(
+            analyser[first_column], first_column
+        )
+
+        second_occ = scalar_per_shot(
+            analyser[second_column], second_column
+        )
+
+        valid = (
+            enabled
+            & np.isfinite(hold_times)
+            & np.isfinite(first_occ)
+            & np.isfinite(second_occ)
+        )
+
+        unique_times = np.sort(
+            np.unique(hold_times[valid])
+        )
+
+        survival_values = []
+        survival_errors = []
+
+        for hold_time in unique_times:
+
+            time_mask = valid & (hold_times == hold_time)
+
+            initially_loaded = (
+                time_mask & (first_occ == 1)
+            )
+
+            n_initial = np.count_nonzero(initially_loaded)
+
+            n_survived = np.count_nonzero(
+                initially_loaded & (second_occ == 1)
+            )
+
+            if n_initial > 0:
+                p_survival = n_survived / n_initial
+                sem = np.sqrt(
+                    p_survival * (1 - p_survival) / n_initial
+                )
+            else:
+                p_survival = np.nan
+                sem = np.nan
+
+            survival_values.append(p_survival)
+            survival_errors.append(sem)
+
+        if not np.any(np.isfinite(survival_values)):
+            continue
+
+        color = colors[tweezer - 1]
+
+        ax.errorbar(
+            unique_times,
+            survival_values,
+            yerr=survival_errors,
+            fmt="o-",
+            capsize=3,
+            markersize=5,
+            linewidth=1.2,
+            color=color,
+            label=f"TW {tweezer}",
+        )
+
+        plotted += 1
+
+    if plotted == 0:
+        plt.close(fig)
+        print("No valid individual tweezer survival data.")
+        return None
+
+    ax.set_xlabel("Hold time between images 1 and 2 (s)")
+    ax.set_ylabel("Conditional survival probability")
+    ax.set_ylim(-0.05, 1.05)
+    ax.set_title(f"Survival Image 1 -> 2 - {dataset_label}")
+    ax.grid(alpha=0.25)
+
+    ax.legend(
+        title="Tweezer",
+        ncol=2,
+    )
+
+    fig.tight_layout()
+
+    return fig
+
+
+
+def plot_survival_vs_scan(df, analyser, dataset_label):
+
+    figure_name = "Survival vs scan parameter"
+
+    if len(PLOT_AXES) not in (1, 2):
+        print("Survival plot requires 1 or 2 PLOT_AXES.")
+        return None
+
+    if "second_shot" not in df.columns:
+        print("Missing global: second_shot")
+        return None
+
+    # Parameters used as plot axes
+    parameters = [SCAN_NAMES[i] for i in PLOT_AXES]
+    units = [SCAN_UNITS[i] for i in PLOT_AXES]
+
+    # Fix all other scan dimensions
+    fixed_dimensions = {
+        name: choose_fixed_value(df, name)
+        for name in SCAN_NAMES
+        if name not in parameters
+    }
+
+    valid = scalar_per_shot(
+        df["second_shot"], "second_shot"
+    ) != 0
+
+    # Select the requested N-D slice
+    for name, value in fixed_dimensions.items():
+        values = scalar_per_shot(df[name], name)
+        valid &= np.isfinite(values)
+        valid &= np.isclose(values, value, rtol=1e-7, atol=1e-9)
+
+    scan_values = {}
+
+    for name in parameters:
+        values = scalar_per_shot(df[name], name)
+        valid &= np.isfinite(values)
+        scan_values[name] = np.round(values, 6)
+
+    # Number of initially loaded and surviving atoms per shot
+    n_initial = np.zeros(len(df))
+    n_survived = np.zeros(len(df))
+
+    for tweezer in TWEEZERS_TO_PLOT:
+
+        col1 = f"tw{tweezer}_occupied"
+        col2 = f"tw{tweezer}_occupied_2nd"
+
+        if col1 not in analyser.columns or col2 not in analyser.columns:
+            print(f"Missing occupancy data for TW {tweezer}")
+            continue
+
+        occ1 = scalar_per_shot(analyser[col1], col1)
+        occ2 = scalar_per_shot(analyser[col2], col2)
+
+        valid_occ = (
+            np.isfinite(occ1)
+            & np.isfinite(occ2)
+        )
+
+        n_initial += (
+            valid_occ & (occ1 == 1)
+        ).astype(int)
+
+        n_survived += (
+            valid_occ & (occ1 == 1) & (occ2 == 1)
+        ).astype(int)
+
+    valid &= n_initial > 0
+
+    if not np.any(valid):
+        print("No valid survival data for scan.")
+        return None
+
+    measurements = pd.DataFrame({
+        name: values[valid]
+        for name, values in scan_values.items()
+    })
+
+    measurements["n_initial"] = n_initial[valid]
+    measurements["n_survived"] = n_survived[valid]
+
+    # Group repeated measurements at each scan coordinate
+    grouped = (
+        measurements
+        .groupby(parameters, sort=True)
+        .agg(
+            n_initial=("n_initial", "sum"),
+            n_survived=("n_survived", "sum"),
+        )
+        .reset_index()
+    )
+
+    grouped["survival"] = (
+        grouped["n_survived"] / grouped["n_initial"]
+    )
+
+    grouped["sem"] = np.sqrt(
+        grouped["survival"]
+        * (1 - grouped["survival"])
+        / grouped["n_initial"]
+    )
+
+    # =========================================================
+    # 1D SCAN
+    # =========================================================
+
+    if len(PLOT_AXES) == 1:
+
+        parameter = parameters[0]
+        unit = units[0]
+
+        fig = plt.figure(figure_name, figsize=(10, 6))
+        fig.clear()
+        ax = fig.add_subplot(111)
+
+        grouped = grouped.sort_values(parameter)
+
+        ax.errorbar(
+            grouped[parameter],
+            grouped["survival"],
+            yerr=grouped["sem"],
+            fmt="o-",
+            capsize=4,
+            markersize=6,
+        )
+
+        ax.set_xlabel(f"{parameter} ({unit})")
+        ax.set_ylabel("Conditional survival probability")
+        ax.set_ylim(-0.05, 1.05)
+        ax.grid(alpha=0.25)
+
+    # =========================================================
+    # 2D SCAN
+    # =========================================================
+
+    else:
+
+        x_parameter = parameters[0]
+        y_parameter = parameters[1]
+
+        x_unit = units[0]
+        y_unit = units[1]
+
+        heatmap = grouped.pivot(
+            index=y_parameter,
+            columns=x_parameter,
+            values="survival",
+        )
+
+        heatmap = (
+            heatmap
+            .sort_index()
+            .sort_index(axis=1)
+        )
+
+        fig = plt.figure(figure_name, figsize=(10, 8))
+        fig.clear()
+        ax = fig.add_subplot(111)
+
+        sns.heatmap(
+            heatmap,
+            cmap="viridis",
+            vmin=0,
+            vmax=1,
+            annot=True,
+            fmt=".3f",
+            linewidths=0.4,
+            mask=heatmap.isna(),
+            cbar_kws={
+                "label": "Conditional survival probability"
+            },
+            ax=ax,
+        )
+
+        ax.set_xlabel(f"{x_parameter} ({x_unit})")
+        ax.set_ylabel(f"{y_parameter} ({y_unit})")
+
+        ax.set_xticklabels(
+            [f"{x:g}" for x in heatmap.columns],
+            rotation=45,
+        )
+
+        ax.set_yticklabels(
+            [f"{y:g}" for y in heatmap.index],
+            rotation=0,
+        )
+
+    # =========================================================
+    # TITLE AND OUTPUT
+    # =========================================================
+
+    fixed_text = ", ".join(
+        f"{name}={value:g}"
+        for name, value in fixed_dimensions.items()
+    )
+
+    title = f"Survival Image 1 -> 2 - {dataset_label}"
+
+    if fixed_text:
+        title += f"\n{fixed_text}"
+
+    ax.set_title(title)
+
+    fig.tight_layout()
+
+    print("\nSURVIVAL VS SCAN:")
+    print(grouped.to_string(index=False))
+
+    return fig
+
+
+
+
 def main():
     df = lyse.data()
     print(df["filepath"].iloc[0])
@@ -2224,30 +2574,53 @@ def main():
     # SURVIVAL ANALYSIS: MJ0, MJ1 OR RELEASE-AND-RECAPTURE
     # =========================================================
 
+
     paths = df["filepath"]
     analyser = df["FluoAnalyser_tweez"]
     dataset_label = make_dataset_label(paths)
     output_dir = output_directory(paths)
 
     if PLOT_SURV_PROB:
+
         hold_survival_figure = plot_hold_survival_1_2(
-        df=df,
-        analyser=analyser,
-        dataset_label=dataset_label,
+            df=df,
+            analyser=analyser,
+            dataset_label=dataset_label,
         )
 
-        if hold_survival_figure is not None:
+        hold_individual_figure = None
+
+        if PLOT_SURVIVAL_PER_TWEEZER:
+            hold_individual_figure = plot_hold_survival_per_tweezer_1_2(
+                df=df,
+                analyser=analyser,
+                dataset_label=dataset_label,
+            )
+
+        hold_figures = [
+            ("hold_survival_1_2", hold_survival_figure),
+            ("hold_survival_per_tweezer_1_2", hold_individual_figure),
+        ]
+
+        for suffix, fig in hold_figures:
+
+            if fig is None:
+                continue
+
             if SAVE_PLOTS:
                 output_path = output_dir / (
-                    f"{dataset_label.replace(' ', '_')}_hold_survival_1_2.png"
+                    f"{dataset_label.replace(' ', '_')}_{suffix}.png"
                 )
-                hold_survival_figure.savefig(
+
+                fig.savefig(
                     output_path,
                     dpi=200,
                     bbox_inches="tight",
                 )
+
                 print(f"Saved hold survival plot: {output_path}")
 
+        if any(fig is not None for _, fig in hold_figures):
             plt.show()
 
     survival_figure = None
@@ -2255,6 +2628,7 @@ def main():
 
     individual_figure = None
     individual_suffix = None
+
 
     # Check which experiment is enabled in the latest shot.
     mj0_enabled = (
@@ -2493,10 +2867,25 @@ def main():
         results.to_csv(csv_path, index=False)
         print(f"Saved complete N-D data: {csv_path}")
     
+
     figures = plot_nd(results, dataset_label)
- 
+
+    if PLOT_SURV_PROB_SCAN:
+
+        survival_scan_figure = plot_survival_vs_scan(
+            df=df,
+            analyser=analyser,
+            dataset_label=dataset_label,
+        )
+
+        if survival_scan_figure is not None:
+            figures.append(
+                ("survival_vs_scan", survival_scan_figure)
+            )
+
     if PLOT_INDIVIDUAL_TWEEZERS:
         figures += plot_individual_tweezers(results, dataset_label)
+
 
     if PLOT_ALL_TWEEZERS:
         figures += plot_all_tweezers_three_shots(

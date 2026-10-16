@@ -298,6 +298,7 @@ class MOGLabs_QRF(PseudoclockDevice):
                     if False:
                         print(IM)
                     for dds in IM.child_devices:
+                        dds.setpoint=0
                         #print(dds.name)
                         try:
                             prefix, channel = dds.connection.split()
@@ -341,7 +342,7 @@ class MOGLabs_QRF(PseudoclockDevice):
                         out_table['freq'][:]  = dds.frequency.raw_output
                         out_table['amp'][:]   = dds.amplitude.raw_output
                         out_table['phase'][:] = dds.phase.raw_output
-                        out_table['pid_setpoint'][:] = dds.setpoint.raw_output #"setpoint_flag" #dds.PIDbox.setpoint
+                        # out_table['pid_setpoint'][:] = dds.setpoint.raw_output #"setpoint_flag" #dds.PIDbox.setpoint
 
                         if IM.table_mode:
                             grp.create_dataset('TABLE_DATA%i'%channel, compression=config.compression, data=out_table)

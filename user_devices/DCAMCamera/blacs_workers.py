@@ -18,23 +18,135 @@ import sys
 import numpy as np
 import threading
 import zmq
-import pickle
-
-context = zmq.Context()
-socket = context.socket(zmq.PUB)
-socket.bind("tcp://*:5556")
-
-def publish_image(image: np.ndarray):
-    print("Publishing image to ZMQ...")
-    msg = pickle.dumps(image, protocol=pickle.HIGHEST_PROTOCOL)
-    socket.send(msg)
-
-take_and_save=False
+import queue
 
 # Don't import API yet so as not to throw an error, allow worker to run as a dummy
 # device, or for subclasses to import this module to inherit classes without requiring API
 dcamAPI = None
 
+occupancy_queue = queue.Queue(maxsize=1)
+
+NROWS = 6
+NCOLS = 6
+
+X0 = 107
+Y0 = 94
+
+DX = 18
+DY = 18
+
+TRAY = 3
+THRESHOLD = 300.0
+
+BACKGROUND_CENTER = (130, 120)
+BACKGROUND_RADIUS = 55
+
+class FastOccupancyDetector:
+
+    def __init__(self, image_shape):
+        height, width = image_shape
+
+        centers = [
+            (X0 + col * DX, Y0 + row * DY)
+            for row in range(NROWS)
+            for col in range(NCOLS)
+        ]
+
+        # Precompute all 36 ROI pixel indices.
+        roi_y = []
+        roi_x = []
+
+        for cx, cy in centers:
+            ys = np.arange(cy - TRAY + 1, cy + TRAY)
+            xs = np.arange(cx - TRAY + 1, cx + TRAY)
+
+            if (
+                ys.min() < 0 or ys.max() >= height
+                or xs.min() < 0 or xs.max() >= width
+            ):
+                raise ValueError("ROI lies outside camera image")
+
+            yy, xx = np.meshgrid(ys, xs, indexing="ij")
+
+            roi_y.append(yy.ravel())
+            roi_x.append(xx.ravel())
+
+        self.roi_y = np.asarray(roi_y)
+        self.roi_x = np.asarray(roi_x)
+
+        # Identical background exclusion to your Lyse code.
+        cx, cy = BACKGROUND_CENTER
+        r = BACKGROUND_RADIUS
+
+        mask = np.ones(image_shape, dtype=bool)
+
+        mask[
+            max(cy-r, 0):min(cy+r+1, height),
+            max(cx-r, 0):min(cx+r+1, width)
+        ] = False
+
+        if not mask.any():
+            raise ValueError("No background pixels available")
+
+        self.background_mask = mask
+        self.roi_pixels = self.roi_x.shape[1]
+
+    def detect(self, image):
+
+        # Raw ROI integrals; use a wide integer accumulator.
+        roi_values = image[self.roi_y, self.roi_x]
+        integrals = roi_values.sum(axis=1, dtype=np.int64)
+
+        # Background correction.
+        background = np.mean(image[self.background_mask])
+
+        corrected_integrals = (
+            integrals - background * self.roi_pixels
+        )
+
+        # 36 occupancy bits in row-major order.
+        occupancy = corrected_integrals > THRESHOLD
+
+        bitstring = "".join(
+            "1" if occupied else "0"
+            for occupied in occupancy
+        )
+
+        return bitstring
+
+def occupancy_publisher():
+
+    context = zmq.Context.instance()
+    publisher = context.socket(zmq.PUB)
+    publisher.setsockopt(zmq.SNDHWM, 1)
+    publisher.bind("tcp://127.0.0.1:5556")
+
+    while True:
+        message = occupancy_queue.get()
+
+        try:
+            publisher.send(message)
+        finally:
+            occupancy_queue.task_done()
+
+
+threading.Thread(
+    target=occupancy_publisher,
+    daemon=True
+).start()
+
+
+def publish_occupancy(bitstring):
+
+    message = bitstring.encode("ascii")
+
+    try:
+        occupancy_queue.put_nowait(message)
+    except queue.Full:
+        raise RuntimeError(
+            "Previous occupancy has not been transmitted"
+        )
+    
 class DCAM_Camera(object):
     """The backend hardware interface class for the DCAMCamera.
     
@@ -374,24 +486,62 @@ class DCAMCameraWorker(IMAQdxCameraWorker):
                 dset.attrs['IMAGE_WHITE_IS_ZERO'] = np.uint8(0)
 
     def acquire_and_save(self, n_images, images):
-        """Acquire and save n_images to the images list."""
+        """Acquire every frame; optionally publish first TweezFluo occupancy."""
+
+        first_tweezfluo_processed = False
 
         print(f"Attempting to grab {n_images} images.")
+
         for i in range(n_images):
             if self.camera._abort_acquisition:
                 print("Abort during acquisition.")
                 self.camera._abort_acquisition = False
                 return
-            new_images=self.camera.grab(bufferNo=i)
 
-            publish_image(new_images)
-            images.append(new_images)
-            self.save_image_now(new_images, index=i)
+            image = self.camera.grab(bufferNo=i)
 
-            print(f"Got image {i+1} of {n_images}.")                    
+            # Always retain EVERY image for the normal saving pipeline.
+            images.append(image)
 
-        print(f"Got {len(images)} of {n_images} images.")
-        # return images       
+            if (
+                self.rearrangement_enabled
+                and not first_tweezfluo_processed
+            ):
+                name = self.exposures[i]["name"]
+
+                if isinstance(name, bytes):
+                    name = name.decode("utf-8")
+
+                if name == "TweezFluo":
+                    # Attempt only this frame, even if processing fails.
+                    first_tweezfluo_processed = True
+
+                    try:
+                        detector = FastOccupancyDetector(image.shape)
+                        bitstring = detector.detect(image)
+                        publish_occupancy(bitstring)
+
+                        print("Rearrangement occupancy:", bitstring)
+
+                    except Exception as exc:
+                        # Continue acquiring the remaining images.
+                        self.rearrangement_error = (
+                            f"{type(exc).__name__}: {exc}"
+                        )
+                        print(
+                            "Rearrangement processing failed:",
+                            self.rearrangement_error,
+                            file=sys.stderr,
+                            flush=True,
+                        )
+
+            # Preserve the existing immediate-saving option.
+            # if take_and_save:
+            #     self.save_image_now(image, index=i)
+
+            print(f"Got image {i + 1} of {n_images}.")
+
+        print(f"Got {len(images)} of {n_images} images.")      
 
     def get_attributes_as_dict(self, visibility_level):
         """Return a dict of the attributes of the camera for the given visibility
@@ -420,7 +570,13 @@ class DCAMCameraWorker(IMAQdxCameraWorker):
                 return {}
             self.h5_filepath = h5_filepath
             self.exposures = group['EXPOSURES'][:]
+            self.exposures.sort(order='t')
             self.n_images = len(self.exposures)
+
+            self.rearrangement_enabled = bool(
+                f['globals'].attrs.get('rearrangement', False)
+            )
+            self.rearrangement_error = None
 
             # Get the camera_attributes from the device_properties
             properties = labscript_utils.properties.get(
@@ -448,20 +604,13 @@ class DCAMCameraWorker(IMAQdxCameraWorker):
 
         # Start the acquisition thread to grab the images:
         
-        if take_and_save:
-            print("Starting Orca acquisition and saving thread.")
-            self.acquisition_thread = threading.Thread(
-                target=self.acquire_and_save,
-                args=(self.n_images, self.images),
-                daemon=True,
-            )
-        else:
-            print("Starting Orca acquisition thread.")
-            self.acquisition_thread = threading.Thread(
-                target=self.camera.grab_multiple,
-                args=(self.n_images, self.images),
-                daemon=True,
-            )
+        print("Starting Orca acquisition thread.")
+
+        self.acquisition_thread = threading.Thread(
+            target=self.acquire_and_save,
+            args=(self.n_images, self.images),
+            daemon=True,
+        )
         self.acquisition_thread.start()
         print(datetime.datetime.now())
         return {}
@@ -488,8 +637,8 @@ class DCAMCameraWorker(IMAQdxCameraWorker):
         print("Stopping acquisition.")
         self.camera.stop_acquisition()
 
-        if not take_and_save:
-            self.save_images()
+        # if not take_and_save:
+        self.save_images()
 
         # If the images are all the same shape, send them to the GUI for display:
         try:

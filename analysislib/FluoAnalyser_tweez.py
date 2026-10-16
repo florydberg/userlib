@@ -29,6 +29,8 @@ DY = 18
 # Preserves the original slice: centre-Tray+1 : centre+Tray.
 # Tray=3 therefore gives a 5 x 5 integration region.
 TRAY = 3
+# TRAY = 2
+
 
 EFFECTIVE_PIXEL_SIZE_UM = 1.127
 
@@ -38,13 +40,13 @@ PLOT_RAW_IMAGE = False
 PLOT_BACKGROUND_MASK = False
 SAVE_PLOT = False
 SAVE_SCRIPT = True
-ATOM_THRESHOLD_FIRST = 350.0
-ATOM_THRESHOLD_SECOND = 350.0
-ATOM_THRESHOLD_THIRD = 350.0
+ATOM_THRESHOLD_FIRST = 300.0
+ATOM_THRESHOLD_SECOND = 300.0
+ATOM_THRESHOLD_THIRD = 300.0
 
 # One common intensity scale for every panel.
-VMIN = 0
-VMAX = 100
+VMIN = 20
+VMAX = 50
 
 MOSAIC_GAP = 2
 

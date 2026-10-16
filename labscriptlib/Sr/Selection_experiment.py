@@ -32,42 +32,42 @@ if True: ## Selects ##
     if co:
         Orca_Camera.camera_attributes['EXPOSURE TIME'] = GLOBALS['FluoImaging_duration'] * 1e-6
 
-    Orca_Camera.camera_attributes['SUBARRAY MODE'] = 1
-
-    if GLOBALS['Orca_ROI'] == 'full':
-        Orca_Camera.camera_attributes['SUBARRAY HPOS'] = 0
-        Orca_Camera.camera_attributes['SUBARRAY VPOS'] = 0
-        Orca_Camera.camera_attributes['SUBARRAY HSIZE'] = 4096
-        Orca_Camera.camera_attributes['SUBARRAY VSIZE'] = 2304
-
         Orca_Camera.camera_attributes['SUBARRAY MODE'] = 1
 
-    elif GLOBALS['Orca_ROI'] == 'tweez':
-        # Orca_preparation_time=0.5*ms
-        Orca_Camera.camera_attributes['SUBARRAY HSIZE'] = 50*2
-        Orca_Camera.camera_attributes['SUBARRAY VSIZE'] = 50*2
-        Orca_Camera.camera_attributes['SUBARRAY HPOS'] = 2096
-        Orca_Camera.camera_attributes['SUBARRAY VPOS'] = 940
+        if GLOBALS['Orca_ROI'] == 'full':
+            Orca_Camera.camera_attributes['SUBARRAY HPOS'] = 0
+            Orca_Camera.camera_attributes['SUBARRAY VPOS'] = 0
+            Orca_Camera.camera_attributes['SUBARRAY HSIZE'] = 4096
+            Orca_Camera.camera_attributes['SUBARRAY VSIZE'] = 2304
 
-        Orca_Camera.camera_attributes['SUBARRAY MODE'] = 2 ##add +=1ms to ORCA delay
+            Orca_Camera.camera_attributes['SUBARRAY MODE'] = 1
 
-    elif GLOBALS['Orca_ROI'] == 'mot':
-        ##add +=1ms to ORCA delay
-        Orca_Camera.camera_attributes['SUBARRAY HSIZE'] = 240 # 120*2
-        Orca_Camera.camera_attributes['SUBARRAY VSIZE'] = 240 # 120*2
-        Orca_Camera.camera_attributes['SUBARRAY HPOS'] =  1360 #1960
-        Orca_Camera.camera_attributes['SUBARRAY VPOS'] =  820 #840
+        elif GLOBALS['Orca_ROI'] == 'tweez':
+            # Orca_preparation_time=0.5*ms
+            Orca_Camera.camera_attributes['SUBARRAY HSIZE'] = 50*2
+            Orca_Camera.camera_attributes['SUBARRAY VSIZE'] = 50*2
+            Orca_Camera.camera_attributes['SUBARRAY HPOS'] = 2096
+            Orca_Camera.camera_attributes['SUBARRAY VPOS'] = 940
 
-        Orca_Camera.camera_attributes['SUBARRAY MODE'] = 2
+            Orca_Camera.camera_attributes['SUBARRAY MODE'] = 2 ##add +=1ms to ORCA delay
 
-    elif GLOBALS['Orca_ROI'] == 'test':
-        ##add +=1ms to ORCA delay
-        Orca_Camera.camera_attributes['SUBARRAY HSIZE'] = 240*2
-        Orca_Camera.camera_attributes['SUBARRAY VSIZE'] = 240*2
-        Orca_Camera.camera_attributes['SUBARRAY HPOS'] = 640 * 4 - 120
-        Orca_Camera.camera_attributes['SUBARRAY VPOS'] = 230*4 - 120
+        elif GLOBALS['Orca_ROI'] == 'mot':
+            ##add +=1ms to ORCA delay
+            Orca_Camera.camera_attributes['SUBARRAY HSIZE'] = 240 # 120*2
+            Orca_Camera.camera_attributes['SUBARRAY VSIZE'] = 240 # 120*2
+            Orca_Camera.camera_attributes['SUBARRAY HPOS'] =  1360 #1960
+            Orca_Camera.camera_attributes['SUBARRAY VPOS'] =  820 #840
 
-        Orca_Camera.camera_attributes['SUBARRAY MODE'] = 2
+            Orca_Camera.camera_attributes['SUBARRAY MODE'] = 2
+
+        elif GLOBALS['Orca_ROI'] == 'test':
+            ##add +=1ms to ORCA delay
+            Orca_Camera.camera_attributes['SUBARRAY HSIZE'] = 240*2
+            Orca_Camera.camera_attributes['SUBARRAY VSIZE'] = 240*2
+            Orca_Camera.camera_attributes['SUBARRAY HPOS'] = 640 * 4 - 120
+            Orca_Camera.camera_attributes['SUBARRAY VPOS'] = 230*4 - 120
+
+            Orca_Camera.camera_attributes['SUBARRAY MODE'] = 2
             
 pid_settle_time = 1.2*ms
 pid_hold_before_aom_off = 100*usec
@@ -706,8 +706,17 @@ for i in range(0,GLOBALS['n_loop']):
         t += t_ahead_fluoimag ############### TIME MACHINE  ############################
 
         # Continue after all first-image events have finished.
+        # Continue after all first-image events have finished.
         if sel_tweezer and sel_imaging_beam == "abs":
             t = max(t, tt)
+
+        # ============================================================
+        # REARRANGEMENT AFTER IMAGE 1
+        # ============================================================
+
+        if GLOBALS["rearrangement"]:
+            rearrangement_end = t + 200*ms
+            t = rearrangement_end
         # ============================================================
         # mJ = 0 LOSS SPECTROSCOPY
         #
@@ -808,20 +817,38 @@ for i in range(0,GLOBALS['n_loop']):
             )
 
         tt += GLOBALS['holdTime_between_images_1_2']
-        t0=tt
 
+        if GLOBALS["rearrangement"]:
 
-        # t+=Orca_Camera.expose(tt+5*msec,'second-shot', trigger_duration=10, saving=True)+orca_trigger_delay+Orca_Labscript_delay #+5 for sync with fluo
-        t += (
-            Orca_Camera.expose(
-                tt + 4*msec - orca_trigger_delay - Orca_Labscript_delay,
-                "second-shot",
-                trigger_duration=10,
-                saving=True,
+            preparation_lead = max(
+                shutter_time_open
+                + aom_dark_before_shutter
+                + pid_hold_before_aom_off,
+
+                orca_trigger_delay
+                + Orca_Labscript_delay
+                - 4*ms,
             )
-            + orca_trigger_delay
-            + Orca_Labscript_delay
-        )
+
+            tt = max(
+                tt,
+                rearrangement_end + preparation_lead + 2*dt
+            )
+
+        t0 = tt
+
+        if co:
+            # t+=Orca_Camera.expose(tt+5*msec,'second-shot', trigger_duration=10, saving=True)+orca_trigger_delay+Orca_Labscript_delay #+5 for sync with fluo
+            t += (
+                Orca_Camera.expose(
+                    tt + 4*msec - orca_trigger_delay - Orca_Labscript_delay,
+                    "second-shot",
+                    trigger_duration=10,
+                    saving=True,
+                )
+                + orca_trigger_delay
+                + Orca_Labscript_delay
+            )
 
 
 
@@ -1166,17 +1193,18 @@ for i in range(0,GLOBALS['n_loop']):
         tt += GLOBALS['holdTime_between_images_2_3']
         t0 = tt
 
-        # t+=Orca_Camera.expose(tt+5*msec,'second-shot', trigger_duration=10, saving=True)+orca_trigger_delay+Orca_Labscript_delay #+5 for sync with fluo
-        t += (
-            Orca_Camera.expose(
-                tt + 4*msec - orca_trigger_delay - Orca_Labscript_delay,
-                "third-shot",
-                trigger_duration=10,
-                saving=True,
+        if co:
+            # t+=Orca_Camera.expose(tt+5*msec,'second-shot', trigger_duration=10, saving=True)+orca_trigger_delay+Orca_Labscript_delay #+5 for sync with fluo
+            t += (
+                Orca_Camera.expose(
+                    tt + 4*msec - orca_trigger_delay - Orca_Labscript_delay,
+                    "third-shot",
+                    trigger_duration=10,
+                    saving=True,
+                )
+                + orca_trigger_delay
+                + Orca_Labscript_delay
             )
-            + orca_trigger_delay
-            + Orca_Labscript_delay
-        )
         # Measured and conservative timing values
         pid_settle_time = 1.2*ms # Total time from samplehold_OFF until the PID and PD are settled: approximately 1 ms measured + 200 us margin
         pid_hold_before_aom_off = 100*usec # Conservative time between engaging HOLD and turning off the AOM
