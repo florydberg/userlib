@@ -15,11 +15,11 @@ import labscript_utils.properties
 import h5py
 from labscript_utils import dedent
 import sys
+import os
 import numpy as np
 import threading
 import zmq
 import queue
-
 # Don't import API yet so as not to throw an error, allow worker to run as a dummy
 # device, or for subclasses to import this module to inherit classes without requiring API
 dcamAPI = None
@@ -121,15 +121,35 @@ def occupancy_publisher():
     publisher.setsockopt(zmq.SNDHWM, 1)
     publisher.bind("tcp://127.0.0.1:5556")
 
+    # New publisher: notify QRF after Image 1.
+    # Port 5556 remains unchanged for C++ rearrangement.
+    qrf_publisher = context.socket(zmq.PUB)
+    qrf_publisher.setsockopt(zmq.SNDHWM, 10)
+
+    try:
+        qrf_publisher.bind("tcp://127.0.0.1:5557")
+    except zmq.ZMQError as exc:
+        print(
+            f"[ORCA] Cannot publish QRF events: {exc}",
+            flush=True
+        )
+        qrf_publisher.close()
+        qrf_publisher = None
+
     import time
     time.sleep(2)
 
     print("[ZMQ] Publisher ready on port 5556", flush=True)
 
     while True:
-        message = occupancy_queue.get()
+        item = occupancy_queue.get()
 
         try:
+            if isinstance(item, tuple):
+                message, shot_name = item
+            else:
+                message, shot_name = item, None
+
             occupancy = message.decode("ascii")
 
             # NEW: Handle ARM command
@@ -152,10 +172,32 @@ def occupancy_publisher():
 
             publisher.send_string(occupancy)
 
+            # Notify BLACS that Image 1 has been acquired.
+            if shot_name is not None and qrf_publisher is not None:
+                try:
+                    qrf_publisher.send_json(
+                        {
+                            "event": "image1_ready",
+                            "shot": shot_name
+                        },
+                        flags=zmq.NOBLOCK
+                    )
+
+                    print(
+                        f"[ORCA] QRF image1 event sent: {shot_name}",
+                        flush=True
+                    )
+
+                except zmq.Again:
+                    print(
+                        "[ORCA] WARNING: QRF event queue full",
+                        flush=True
+                    )
+
             print(
                 f"[ZMQ] SENT ({len(occupancy)} bits): {occupancy}",
                 flush=True
-            )
+            )               
 
         finally:
             occupancy_queue.task_done()
@@ -165,12 +207,14 @@ def publish_arm():
         print("[ZMQ] ARM queued", flush=True)
     except queue.Full:
         print("[ZMQ] ERROR: ARM could not be queued", flush=True)
-def publish_occupancy(bitstring):
-
+def publish_occupancy(bitstring, shot_name=None):
+    
     message = bitstring.encode("ascii")
 
     try:
-        occupancy_queue.put_nowait(message)
+        occupancy_queue.put_nowait(
+            (message, shot_name)
+        )
     except queue.Full:
         raise RuntimeError(
             "Previous occupancy has not been transmitted"
@@ -559,7 +603,10 @@ class DCAMCameraWorker(IMAQdxCameraWorker):
                             flush=True
                         )
 
-                        publish_occupancy(bitstring)
+                        publish_occupancy(
+                            bitstring,
+                            os.path.basename(self.h5_filepath)
+                        )
 
                     except Exception as exc:
                         # Continue acquiring the remaining images.

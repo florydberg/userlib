@@ -42,7 +42,8 @@ from PyQt5.QtWidgets import (
     QWidget, QGridLayout, QCheckBox, QLabel,
     QPushButton, QDoubleSpinBox, QHBoxLayout
 )
-from qtutils.qt.QtCore import Qt
+from qtutils.qt.QtCore import Qt, QTimer
+import zmq
 
 if True:
     # reduce number of log entries in logfile (labscript-suite/logs/BLACS.log)
@@ -979,6 +980,37 @@ class MOGLabs_QRF_Tab(DeviceTab):
             layout.addWidget(self.runtime_freq_button)
 
             self.get_tab_layout().addWidget(controls)
+            # ============================================================
+            # AUTOMATIC FREQUENCY CHANGE: ORCA EVENT LISTENER
+            # ============================================================
+
+            self._imaging_event_ctx = zmq.Context.instance()
+
+            self._imaging_event_sub = self._imaging_event_ctx.socket(
+                zmq.SUB
+            )
+
+            self._imaging_event_sub.setsockopt(
+                zmq.SUBSCRIBE, b""
+            )
+
+            self._imaging_event_sub.setsockopt(
+                zmq.RCVHWM, 10
+            )
+
+            self._imaging_event_sub.connect(
+                "tcp://127.0.0.1:5557"
+            )
+
+            # Check for ORCA notifications every 10 ms.
+            self._imaging_event_timer = QTimer()
+            self._imaging_event_timer.setInterval(10)
+
+            self._imaging_event_timer.timeout.connect(
+                self._poll_imaging_events
+            )
+
+            self._imaging_event_timer.start()
     @define_state(MODE_MANUAL | MODE_BUFFERED, True)
     def test_runtime_frequency(self):
 
@@ -996,6 +1028,62 @@ class MOGLabs_QRF_Tab(DeviceTab):
 
         self.logger.warning(
             f"RUNTIME FREQUENCY RESULT: {result} MHz"
+        )
+    def _poll_imaging_events(self):
+        """Receive first-image events from the ORCA worker."""
+
+        if self.device_name != "QRF_Blue":
+            return
+
+        for _ in range(10):
+
+            try:
+                event = self._imaging_event_sub.recv_json(
+                    flags=zmq.NOBLOCK
+                )
+
+            except zmq.Again:
+                break
+
+            except Exception:
+                self.logger.exception(
+                    "Invalid ORCA imaging-frequency event"
+                )
+                break
+
+            if event.get("event") != "image1_ready":
+                continue
+
+            shot_name = event.get("shot")
+
+            if (
+                not isinstance(shot_name, str)
+                or not shot_name.endswith(".h5")
+            ):
+                self.logger.warning(
+                    "Ignored bad ORCA shot event: %r",
+                    event
+                )
+                continue
+
+            self._automatic_imaging_frequency_change(
+                shot_name
+            )
+
+
+    @define_state(MODE_MANUAL | MODE_BUFFERED, True)
+    def _automatic_imaging_frequency_change(self, shot_name):
+
+        result = yield self.queue_work(
+            self.primary_worker,
+            "switch_to_second_imaging_frequency",
+            shot_name
+        )
+
+        self.logger.warning(
+            "AUTO_BLUE_FREQ shot=%s result=%r",
+            shot_name,
+            result
         )
     def get_save_data(self):
         # Andi: save user selection on shutdown
@@ -1249,6 +1337,70 @@ class MOGLabs_QRF_Worker(Worker):
         )
 
         return actual_freq
+    def switch_to_second_imaging_frequency(self, shot_name):
+        """Switch blue imaging frequency after Image 1."""
+
+        if self.device_name != "QRF_Blue":
+            return {
+                "ok": False,
+                "reason": "not_blue"
+            }
+
+        if getattr(self, "_qrf_phase", None) != "buffered_ready":
+            return {
+                "ok": False,
+                "reason": "not_buffered"
+            }
+
+        if shot_name != getattr(self, "_active_shot_name", None):
+            return {
+                "ok": False,
+                "reason": "wrong_shot",
+                "shot": shot_name
+            }
+
+        if getattr(self, "_second_freq_done", False):
+            return {
+                "ok": True,
+                "reason": "already_switched"
+            }
+
+        frequency_mhz = getattr(
+            self,
+            "_second_freq_mhz",
+            None
+        )
+
+        if frequency_mhz is None:
+            return {
+                "ok": False,
+                "reason": "no_second_frequency"
+            }
+
+        # Reuse the method already tested successfully.
+        actual = self.set_imaging_frequency_runtime(
+            frequency_mhz
+        )
+
+        if abs(actual - frequency_mhz) > 0.001:
+            raise RuntimeError(
+                f"QRF imaging frequency mismatch: "
+                f"wanted {frequency_mhz} MHz, "
+                f"got {actual} MHz"
+            )
+
+        self._second_freq_done = True
+
+        self.logger.warning(
+            "AUTO_BLUE_FREQ SUCCESS shot=%s actual=%.6f MHz",
+            shot_name,
+            actual
+        )
+
+        return {
+            "ok": True,
+            "frequency_mhz": actual
+        }
     def transition_to_buffered(self, device_name, h5file, initial_values, fresh):
         self.shot_file = h5file
         self._set_qrf_phase('preparing')
@@ -1270,7 +1422,50 @@ class MOGLabs_QRF_Worker(Worker):
         table_data = None
 
         self.shot_file = h5file
+
+        # ============================================================
+        # PREPARE AUTOMATIC IMAGE 2/3 FREQUENCY
+        # ============================================================
+
+        self._active_shot_name = os.path.basename(h5file)
+        self._second_freq_done = False
+        self._second_freq_mhz = None
+
         with h5py.File(self.shot_file, 'r') as hdf5_file:
+
+            if self.device_name == "QRF_Blue":
+
+                globals_attrs = hdf5_file["globals"].attrs
+
+                if bool(globals_attrs.get("rearrangement", False)):
+
+                    if "ImagingTweez_Frq_2" not in globals_attrs:
+                        raise RuntimeError(
+                            "Missing ImagingTweez_Frq_2 shot global"
+                        )
+
+                    # Global is in Hz; QRF command expects MHz.
+                    self._second_freq_mhz = (
+                        float(globals_attrs["ImagingTweez_Frq_2"])
+
+                    )
+
+                    if not (
+                        MIN_RF_FREQ
+                        <= self._second_freq_mhz
+                        <= MAX_RF_FREQ
+                    ):
+                        raise RuntimeError(
+                            f"Invalid imaging frequency: "
+                            f"{self._second_freq_mhz} MHz"
+                        )
+
+                    self.logger.warning(
+                        "AUTO_BLUE_FREQ ARMED shot=%s target=%.6f MHz",
+                        self._active_shot_name,
+                        self._second_freq_mhz
+                    )
+
             group = hdf5_file['/devices/' + device_name]
             for channel in range(MAX_NUM_CHANNELS):
                 # If there are values to set the unbuffered outputs to, set them now:
@@ -1418,10 +1613,23 @@ class MOGLabs_QRF_Worker(Worker):
         return self.transition_to_manual(True)
     def transition_to_manual(self, abort=False):
         
+        # Warn if Image 1 occurred but no automatic
+        # frequency change was confirmed.
+        if (
+            self.device_name == "QRF_Blue"
+            and getattr(self, "_second_freq_mhz", None) is not None
+            and not getattr(self, "_second_freq_done", False)
+            and not abort
+        ):
+            self.logger.error(
+                "AUTO_BLUE_FREQ MISSING for shot=%s: "
+                "Images 2/3 may have used Image-1 frequency!",
+                getattr(self, "_active_shot_name", "unknown")
+            )
+
         self._set_qrf_phase(
             'aborting' if abort else 'returning_to_manual'
         )
-
         print('Transition to manual')
 
         if self.dev is not None:

@@ -722,7 +722,7 @@ for i in range(0,GLOBALS['n_loop']):
         # ============================================================
 
 
-        # ============================================================
+# ============================================================
         # REARRANGEMENT AFTER IMAGE 1
         # ============================================================
 
@@ -738,7 +738,7 @@ for i in range(0,GLOBALS['n_loop']):
             rearrangement_start = first_image_sequence_end
 
             # Reserve 400 ms for rearrangement
-            rearrangement_end = rearrangement_start + 5000*ms
+            rearrangement_end = rearrangement_start + 400*ms
 
             # Timing diagnostics remain unchanged below
 
