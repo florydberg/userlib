@@ -13,6 +13,7 @@ import seaborn as sns
 import pandas as pd
 import matplotlib.ticker as ticker
 from scipy.special import ndtr
+import os 
 
 ts=time.time()
 dt=datetime.datetime.now().date()
@@ -247,7 +248,7 @@ n_order=1000 # order of digits in parameter values
 saving_data=True
 fit_gaussian1= False
 
-para1_name='Red_MOT_Frq_fin'#n_shot'
+para1_name='MOT_RED_spectroscopy_frq'#n_shot'
 para1_unit= 'MHz'    #'s' 
 if duo:
     para2_name='Sisyphus_Frq'

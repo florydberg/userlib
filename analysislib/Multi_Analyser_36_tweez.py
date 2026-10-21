@@ -22,6 +22,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+import os
 
 
 
@@ -38,15 +39,26 @@ TWEEZERS_TO_PLOT = list(range(1, N_TWEEZERS + 1))
 #TWEEZERS_TO_PLOT = [33]                  # un solo tweezer
 
 
+PLOT_4X4_FLUORESCENCE = True
+FIT_4X4_GAUSSIAN = True
+
+TARGET_ROIS_4X4 = [
+    7, 8, 9, 10,
+    13, 14, 15, 16,
+    19, 20, 21, 22,
+    25, 26, 27, 28
+]
+TWEEZERS_4X4_TO_PLOT = list(range(1, 17))
+#TWEEZERS_4X4_TO_PLOT = [1,]
 
 PLOT_SURV_PROB=False
-PLOT_SURV_PROB_SCAN= True
+PLOT_SURV_PROB_SCAN= False
 PLOT_INDIVIDUAL_TWEEZERS = False
 PLOT_SURVIVAL_PER_TWEEZER = False
 PLOT_ALL_TWEEZERS = False
 SAVE_PLOTS = True
 SAVE_CSV = False
-One_D = False
+One_D = True
 FIT_MJ0_LOSS_GAUSSIAN = False
 MJ0_FIT_X_MIN = None
 MJ0_FIT_X_MAX = None
@@ -58,7 +70,7 @@ sigma_array = np.full(N_TWEEZERS, np.nan)
 PLOT_SIGMA = False
 
 if One_D:
-    PLOT_AXES = (4,)      # 1D: plot FluoImgPulse_Dt6
+    PLOT_AXES = (7,)      # 1D: plot FluoImgPulse_Dt6
 else:
     PLOT_AXES = (2, 3)    # 2D: plot FluoImgPulse_Dt × LAC_duration
 
@@ -85,7 +97,7 @@ SCAN_NAMES = [
     "QuantizAxis_Y_Coils_Current",
     "MJ1_Recap_Release_duration", # 6
     # "SisyphusPrecool_Pow", # 7
-    "ImagingTweez_Frq", # 8
+    "ImagingTweez_Frq_2", # 8
     "FluoImaging_duration", # 9
     # "ImagingFluo_SetPoint", # 10
     # "TweezerCooling_duration"
@@ -358,6 +370,215 @@ def plot_mj0_survival(
     # )
 
     return fig
+
+
+def plot_4x4_fluorescence(results, dataset_label):
+
+    parameter = "SisyphusImg_Frq_2"
+
+
+    def gaussian(x, baseline, amplitude, center, sigma_left, sigma_right):
+        sigma = np.where(x < center, sigma_left, sigma_right)
+
+        return baseline + amplitude * np.exp(
+            -0.5 * ((x - center) / sigma) ** 2
+        )
+
+    if parameter not in results.columns:
+        print(f"Missing scan parameter: {parameter}")
+        return None
+
+    if any(tw < 1 or tw > 16 for tw in TWEEZERS_4X4_TO_PLOT):
+        raise ValueError("4x4 tweezer numbers must be 1-16.")
+
+    # Only use Image 2
+    data = results[
+        results["shot"] == "second"
+    ].copy()
+
+    # Select the same N-D slice as the cooling scan
+    fixed_dimensions = {
+        name: choose_fixed_value(results, name)
+        for name in SCAN_NAMES
+        if name != parameter
+    }
+
+    for name, value in fixed_dimensions.items():
+        data = data[
+            np.isclose(data[name], value)
+        ]
+
+    data = data.sort_values(parameter)
+
+    fig, ax = plt.subplots(
+        figsize=(12, 7),
+        constrained_layout=True
+    )
+
+    colors = plt.cm.turbo(np.linspace(0, 1, 16))
+
+    # One entry per 4x4 tweezer, row-major
+    peak_array = np.full(16, np.nan)
+    peak_errors = np.full(16, np.nan)
+
+    for tw in range(1, 17):
+
+        roi = TARGET_ROIS_4X4[tw - 1] +1
+
+        x = data[parameter].to_numpy(dtype=float)
+        y = data[f"tw{roi}_mean"].to_numpy(dtype=float)
+        yerr = data[f"tw{roi}_sem"].to_numpy(dtype=float)
+
+        valid = np.isfinite(x) & np.isfinite(y)
+        x = x[valid]
+        y = y[valid]
+        yerr = yerr[valid]
+
+        if x.size < 5 or np.unique(x).size < 5:
+            print(f"TW {tw}: insufficient points for Gaussian fit")
+            continue
+
+        color = colors[tw - 1]
+        show = tw in TWEEZERS_4X4_TO_PLOT
+
+
+        if show:
+            ax.errorbar(
+                x, y,
+                yerr=np.where(
+                    np.isfinite(yerr) & (yerr >= 0),
+                    yerr, 0
+                ),
+                fmt="o-",           # Points connected by solid lines
+                color=color,
+                capsize=3,
+                markersize=5,
+                linewidth=1.2,
+                alpha=0.8,
+                label=f"TW {tw} (ROI {roi})"
+            )
+
+
+        if not FIT_4X4_GAUSSIAN:
+            continue
+
+        # Initial parameter estimates
+        baseline_guess = float(np.min(y))
+        amplitude_guess = float(np.max(y) - baseline_guess)
+        center_guess = float(x[np.argmax(y)])
+        span = float(np.ptp(x))
+
+        if amplitude_guess <= 0 or span <= 0:
+            print(f"TW {tw}: no identifiable fluorescence peak")
+            continue
+
+        p0 = [
+            baseline_guess,
+            amplitude_guess,
+            center_guess,
+            span / 6,
+            span / 6
+        ]
+
+        use_weights = np.all(
+            np.isfinite(yerr) & (yerr > 0)
+        )
+
+        fit_kwargs = {}
+
+        if use_weights:
+            fit_kwargs["sigma"] = yerr
+            fit_kwargs["absolute_sigma"] = True
+
+        try:
+            popt, pcov = curve_fit(
+                gaussian,
+                x,
+                y,
+                p0=p0,
+                bounds=(
+                    [-np.inf, 0, np.min(x), span * 1e-4, span * 1e-4],
+                    [np.inf, np.inf, np.max(x), span * 5, span * 5]
+                ),
+                maxfev=30000,
+                **fit_kwargs
+            )
+
+            baseline, amplitude, center, sigma_left, sigma_right = popt
+
+            center_error = np.sqrt(
+                max(float(pcov[2, 2]), 0)
+            )
+
+            peak_array[tw - 1] = center
+            peak_errors[tw - 1] = center_error
+
+            if show:
+                x_fit = np.linspace(np.min(x), np.max(x), 500)
+
+                ax.plot(
+                    x_fit,
+                    gaussian(x_fit, *popt),
+                    "--",
+                    color=color,
+                    linewidth=2
+                )
+
+                ax.axvline(
+                    center,
+                    color=color,
+                    alpha=0.2,
+                    linewidth=1
+                )
+
+            # print(
+            #     f"TW {tw:2d} | ROI {roi:2d} | "
+            #     f"Peak = {center:.6f} +/- {center_error:.6f} MHz | "
+            #     f"Left width = {sigma_left:.4f} MHz | "
+            #     f"Right width = {sigma_right:.4f} MHz"
+            # )
+
+        except (RuntimeError, ValueError) as error:
+            print(f"TW {tw}: Gaussian fit failed: {error}")
+
+
+    # =========================================================
+    # PRINT ARRAYS IN 4x4 ORDER
+    # =========================================================
+
+    def numpy_array_string(values):
+        return "np.array([" + ", ".join(
+            f"{v:.8f}" if np.isfinite(v) else "np.nan"
+            for v in values
+        ) + "])"
+
+    print("\n===== 4x4 COOLING PEAK FREQUENCIES =====")
+
+    print("peak_array = " + numpy_array_string(peak_array))
+    print("peak_errors = " + numpy_array_string(peak_errors))
+
+    print("\n4x4 peak frequency grid (MHz):")
+    print(
+        np.array2string(
+            peak_array.reshape(4, 4),
+            precision=6,
+            suppress_small=True
+        )
+    )
+
+    print("=======================================\n")
+
+    ax.set_xlabel("SisyphusImg_Frq_2 (MHz)")
+    ax.set_ylabel("Mean fluorescence ROI integral")
+    ax.set_title(
+        f"4x4 Gaussian cooling fits - Image 2 - {dataset_label}"
+    )
+    ax.grid(alpha=0.25)
+    ax.legend(title="4x4 tweezer", ncol=2, fontsize=9)
+
+    return fig
+
+
 def fit_mj0_loss_gaussian(
     ax, frequencies, n_initial, n_survived,
     tweezer, color, x_min=None, x_max=None,
@@ -2454,7 +2675,7 @@ def plot_survival_vs_scan(df, analyser, dataset_label):
         parameter = parameters[0]
         unit = units[0]
 
-        fig = plt.figure(figure_name, figsize=(10, 6))
+        fig = plt.figure(100, figsize=(10, 8))
         fig.clear()
         ax = fig.add_subplot(111)
 
@@ -2498,7 +2719,7 @@ def plot_survival_vs_scan(df, analyser, dataset_label):
             .sort_index(axis=1)
         )
 
-        fig = plt.figure(figure_name, figsize=(10, 8))
+        fig = plt.figure(100, figsize=(10, 8))
         fig.clear()
         ax = fig.add_subplot(111)
 
@@ -2558,10 +2779,14 @@ def plot_survival_vs_scan(df, analyser, dataset_label):
 
 def main():
     df = lyse.data()
-    print(df["filepath"].iloc[0])
 
     if df.empty:
         raise RuntimeError("Lyse has no loaded shots to analyse.")
+
+    if "filepath" not in df.columns:
+        raise KeyError("Missing filepath column.")
+
+    print(df["filepath"].iloc[0])
 
     if "filepath" not in df.columns:
         raise KeyError("Lyse data does not contain the 'filepath' column.")
@@ -2573,6 +2798,56 @@ def main():
     # =========================================================
     # SURVIVAL ANALYSIS: MJ0, MJ1 OR RELEASE-AND-RECAPTURE
     # =========================================================
+
+    # =========================================================
+    # FILTER INVALID 4x4 REARRANGEMENT SHOTS
+    # =========================================================
+
+    # Lyse stores shot results under the analyser group
+
+    # =========================================================
+    # FILTER INVALID 4x4 REARRANGEMENT SHOTS
+    # =========================================================
+
+    if "rearrangement" in df.columns:
+
+        rearr_enabled = (
+            pd.to_numeric(
+                df["rearrangement"], errors="coerce"
+            ) == 1
+        )
+
+        if rearr_enabled.any():
+
+            analyser = df["FluoAnalyser_tweez"]
+
+            if "rearrangement_valid" not in analyser.columns:
+                raise KeyError(
+                    "Missing rearrangement_valid result. "
+                    "Rerun FluoAnalyser_tweez.py."
+                )
+
+            valid = (
+                pd.to_numeric(
+                    analyser["rearrangement_valid"],
+                    errors="coerce"
+                ) == 1
+            )
+
+            keep = (~rearr_enabled) | valid
+
+            n_before = len(df)
+            df = df.loc[keep].copy()
+
+            print(
+                f"Rearrangement filter: "
+                f"{len(df)}/{n_before} shots retained"
+            )
+
+    if df.empty:
+        raise RuntimeError(
+            "No valid shots remain after rearrangement filtering."
+        )
 
 
     paths = df["filepath"]
@@ -2799,8 +3074,37 @@ def main():
 
     first_shot = load_roi_integrals(analyser, suffix="")
     second_shot = load_roi_integrals(analyser, suffix="_2nd")
-    third_shot = load_roi_integrals(analyser, suffix="_3rd")
+    if "rearrangement" in df.columns and df["rearrangement"].astype(bool).all():
+        second_shot = second_shot.copy()
 
+    # Keep only the 16 final 4x4 ROI positions
+    target_indices = [
+        7, 8, 9, 10,
+        13, 14, 15, 16,
+        19, 20, 21, 22,
+        25, 26, 27, 28
+    ]
+
+    mask = np.zeros(N_TWEEZERS, dtype=bool)
+    mask[target_indices] = True
+
+    second_shot[~mask, :] = np.nan
+    third_shot = load_roi_integrals(analyser, suffix="_3rd")
+    if "rearrangement" in df.columns and df["rearrangement"].astype(bool).all():
+        third_shot = third_shot.copy()
+
+    # Keep only the 16 final 4x4 ROI positions
+    target_indices = [
+        7, 8, 9, 10,
+        13, 14, 15, 16,
+        19, 20, 21, 22,
+        25, 26, 27, 28
+    ]
+
+    mask = np.zeros(N_TWEEZERS, dtype=bool)
+    mask[target_indices] = True
+
+    third_shot[~mask, :] = np.nan
     first_results = aggregate_nd_scan(
         scan_values=scan_values,
         roi_integrals=first_shot,
@@ -2869,7 +3173,21 @@ def main():
     
 
     figures = plot_nd(results, dataset_label)
+    if PLOT_4X4_FLUORESCENCE:
+        
+        if (
+            "rearrangement" in df.columns
+            and df["rearrangement"].astype(bool).all()
+        ):
+            fig = plot_4x4_fluorescence(
+                results,
+                dataset_label
+            )
 
+            if fig is not None:
+                figures.append(
+                    ("4x4_individual_fluorescence", fig)
+                )
     if PLOT_SURV_PROB_SCAN:
 
         survival_scan_figure = plot_survival_vs_scan(

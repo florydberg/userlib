@@ -54,7 +54,7 @@ def import_GLOBALS(settings_path): #init of globals and times
         GLOBALS[str(i)]=eval(i)*units[str(i)]
     return GLOBALS
 
-shot_settings_path='F:\\Experiments\\Sr\\SrParameters.h5'
+shot_settings_path='C:\\Experiments\\Sr\\SrParameters.h5'
 GLOBALS=import_GLOBALS(shot_settings_path) # import GLOBALS from the shot file
 
 if awg: # === AWG Tweezer Embedding ===
@@ -429,6 +429,19 @@ if True: #Envelope of ttl and analog
             PID_blue_HOLD.go_low(tt)
         else:
             PID_blue_HOLD.go_high(tt)
+
+    def Shutter_ImagingBlue_TTL(tt, control=True):
+        if control:
+            Shutter_ImagingBlue.go_high(tt)
+        else:
+            Shutter_ImagingBlue.go_low(tt)
+
+
+    def PID_blue_HOLD_TTL(tt, control=True):
+        if control:
+            PID_blue_HOLD.go_low(tt)
+        else:
+            PID_blue_HOLD.go_high(tt)
     def PID_Tweez_HOLD_TTL(tt, control=True):
         if control:
             PID_Tweez_HOLD.go_low(tt)
@@ -439,7 +452,7 @@ if True: #Envelope of ttl and analog
             Shutter_ImagingBlue.go_high(tt)
         else:
             Shutter_ImagingBlue.go_low(tt)
-
+            
     def COILSmain_Current(tt, value=0):
         BigCoilsI.constant(tt, abs(value))
 

@@ -21,8 +21,8 @@ from lyse import Run, data, path
 NROWS = 6
 NCOLS = 6
 
-X0 = 107
-Y0 = 94
+X0 = 109
+Y0 = 95
 DX = 18
 DY = 18
 
@@ -41,8 +41,8 @@ PLOT_BACKGROUND_MASK = False
 SAVE_PLOT = False
 SAVE_SCRIPT = True
 ATOM_THRESHOLD_FIRST = 300.0
-ATOM_THRESHOLD_SECOND = 300.0
-ATOM_THRESHOLD_THIRD = 300.0
+ATOM_THRESHOLD_SECOND = 200.0
+ATOM_THRESHOLD_THIRD = 200.0
 
 # One common intensity scale for every panel.
 VMIN = 20
@@ -514,8 +514,11 @@ def plot_results(images, roi_sets, labels, centers):
         "xtick.labelsize": 8,
         "ytick.labelsize": 8,
     })
+    # fig = plt.figure(
+    #     FIGURE_NAME,
+    #     figsize=(8 * shot_count + 1, 4.5 * view_count),
+    # )
     fig = plt.figure(
-        FIGURE_NAME,
         figsize=(8 * shot_count + 1, 4.5 * view_count),
     )
     fig.clear()
@@ -718,15 +721,35 @@ with Run(path).open("r+") as shot:
         first_integrals > ATOM_THRESHOLD_FIRST
     ).astype(np.uint8)
 
-    print("First-shot occupancy:")
-    print(first_occupancy)
 
+    # ============================================================
+    # REARRANGEMENT VALIDITY CHECK
+    # ============================================================
 
-    for index, occupied in enumerate(first_occupancy, start=1):
-        shot.save_result(
-            f"tw{index}_occupied",
-            int(occupied),
+    n_atoms_first = int(np.sum(first_occupancy))
+
+    # Read rearrangement setting from the HDF5 shot
+    shot_globals = shot.get_globals()
+    rearrangement_enabled = bool(
+        shot_globals.get("rearrangement", False)
+    )
+
+    # Only require 16 atoms when rearrangement is enabled
+    if rearrangement_enabled:
+        rearrangement_valid = n_atoms_first >= 16
+    else:
+        rearrangement_valid = True
+
+    # Save results for Multi_Analyser_36_tweez.py
+    shot.save_result("n_atoms_first", n_atoms_first)
+    shot.save_result("rearrangement_valid", int(rearrangement_valid))
+
+    if rearrangement_enabled:
+        print(
+            f"Rearrangement valid: {rearrangement_valid} "
+            f"({n_atoms_first}/16 atoms)"
         )
+
 
     for index, integral in enumerate(first_integrals, start=1):
         shot.save_result(f"tw{index}_integral", integral)

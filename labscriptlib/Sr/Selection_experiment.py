@@ -594,8 +594,12 @@ for i in range(0,GLOBALS['n_loop']):
                     tt += delta_imaging
 
                # TABLE_MODE_OFF('Sisyphus', tt)  #solution that turns off Sisyphus beam
-                tt += 2*dt    
+                # End 6x6 cooling immediately after Image 1
+                if GLOBALS["rearrangement"]:
+                    first_sisyphus_off = tt + dt
+                    TABLE_MODE_OFF("Sisyphus", first_sisyphus_off)
 
+                tt += 2*dt
                 # ---------------------------------------------------------
                 # PID relock after image 1
                 # ---------------------------------------------------------
@@ -713,11 +717,52 @@ for i in range(0,GLOBALS['n_loop']):
         # ============================================================
         # REARRANGEMENT AFTER IMAGE 1
         # ============================================================
+        # ============================================================
+        # REARRANGEMENT AFTER IMAGE 1
+        # ============================================================
+
+
+        # ============================================================
+        # REARRANGEMENT AFTER IMAGE 1
+        # ============================================================
+
+
+# ============================================================
+# REARRANGEMENT AFTER IMAGE 1
+# ============================================================
+
 
         if GLOBALS["rearrangement"]:
-            rearrangement_end = t + 200*ms
-            t = rearrangement_end
-        # ============================================================
+
+            # Start after Image 1 and PID relock
+            rearrangement_start = first_image_sequence_end
+
+            # Reserve 400 ms for rearrangement
+            rearrangement_end = rearrangement_start + 5000*ms
+
+            # Timing diagnostics remain unchanged below
+
+            # Timing diagnostics
+            print("\n===== REARRANGEMENT START TIMING =====")
+            print(
+                f"Image 1 cooling OFF: "
+                f"{first_sisyphus_off/ms:.3f} ms"
+            )
+            print(
+                f"First-image sequence end: "
+                f"{first_image_sequence_end/ms:.3f} ms"
+            )
+            print(
+                f"Rearrangement start: "
+                f"{rearrangement_start/ms:.3f} ms"
+            )
+            print(
+                f"Rearrangement end: "
+                f"{rearrangement_end/ms:.3f} ms"
+            )
+            print("====================================\n")
+
+            t = rearrangement_end                                                                                                                       
         # mJ = 0 LOSS SPECTROSCOPY
         #
         # Sequence:
@@ -799,43 +844,57 @@ for i in range(0,GLOBALS['n_loop']):
     # -> Image 2
     # ============================================================
 
+
     if GLOBALS['second_shot']:
-        # main_board.WAIT(t, rack=0)
+
         t += dt
-
-        tt = t - Orca_Camera_fluo_readout - GLOBALS['FluoImaging_duration'] - orca_trigger_delay - Orca_Labscript_delay + 100*ms
-        # Make sure second-shot camera preparation does not
-        # start before the mJ=0 spectroscopy pulse has finished.
-        if GLOBALS["MJ0_Spectroscopy"]:
-            tt = max(
-                tt,
-                mj0_end
-                + shutter_time_open
-                + aom_dark_before_shutter
-                + pid_hold_before_aom_off
-                + 2*dt
-            )
-
-        tt += GLOBALS['holdTime_between_images_1_2']
 
         if GLOBALS["rearrangement"]:
 
+            # Image 2 follows the reserved 200 ms rearrangement window.
             preparation_lead = max(
                 shutter_time_open
                 + aom_dark_before_shutter
                 + pid_hold_before_aom_off,
-
                 orca_trigger_delay
                 + Orca_Labscript_delay
                 - 4*ms,
             )
 
-            tt = max(
-                tt,
-                rearrangement_end + preparation_lead + 2*dt
+            tt = (
+                rearrangement_end
+                + preparation_lead
+                + 2*dt
             )
 
+            # Only add this if you deliberately want extra holding time.
+            # tt += GLOBALS['holdTime_between_images_1_2']
+
+        else:
+            # Original timing: completely unchanged
+            tt = (
+                t
+                - Orca_Camera_fluo_readout
+                - GLOBALS['FluoImaging_duration']
+                - orca_trigger_delay
+                - Orca_Labscript_delay
+                + 100*ms
+            )
+
+            tt += GLOBALS['holdTime_between_images_1_2']
+
+            if GLOBALS["MJ0_Spectroscopy"]:
+                tt = max(
+                    tt,
+                    mj0_end
+                    + shutter_time_open
+                    + aom_dark_before_shutter
+                    + pid_hold_before_aom_off
+                    + 2*dt
+                )
+
         t0 = tt
+
 
         if co:
             # t+=Orca_Camera.expose(tt+5*msec,'second-shot', trigger_duration=10, saving=True)+orca_trigger_delay+Orca_Labscript_delay #+5 for sync with fluo
@@ -857,6 +916,59 @@ for i in range(0,GLOBALS['n_loop']):
         pid_hold_before_aom_off = 100*usec # Conservative time between engaging HOLD and turning off the AOM
 
         second_imaging_start = tt
+        if GLOBALS["rearrangement"]:
+            print("\n===== REARRANGEMENT TIMING =====")
+
+            print(
+                f"Image 1 cooling OFF: "
+                f"{first_sisyphus_off/ms:.3f} ms"
+            )
+
+            print(
+                f"Rearrangement start: "
+                f"{rearrangement_start/ms:.3f} ms"
+            )
+
+            print(
+                f"Rearrangement end: "
+                f"{rearrangement_end/ms:.3f} ms"
+            )
+
+            print(
+                f"Image 2 start: "
+                f"{second_imaging_start/ms:.3f} ms"
+            )
+
+            print(
+                f"Image 1 cooling OFF to Image 2: "
+                f"{(second_imaging_start-first_sisyphus_off)/ms:.3f} ms"
+            )
+
+            print(
+                f"Rearrangement end to Image 2: "
+                f"{(second_imaging_start-rearrangement_end)/ms:.3f} ms"
+            )
+        if GLOBALS["rearrangement"]:
+            
+            second_sisyphus_start = max(
+                rearrangement_end + 2*dt,
+                second_imaging_start - 20*ms
+            )
+
+            if second_sisyphus_start >= second_imaging_start:
+                raise ValueError(
+                    "No time available for post-rearrangement cooling."
+                )
+
+            NEW_TABLE_LINE(
+                "Sisyphus",
+                second_sisyphus_start,
+                (
+                    GLOBALS["Red_MOT_Frq_fin"]
+                    + 0.5 * GLOBALS["SisyphusImg_Frq_2"]
+                ) / 1e6,
+                GLOBALS["SisyphusImg_Pow"]
+            )
         # Hold the settled output before turning off the AOM.
         PID_blue_HOLD_TTL(
             second_imaging_start

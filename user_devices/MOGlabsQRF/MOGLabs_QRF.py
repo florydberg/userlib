@@ -38,7 +38,10 @@ from user_devices.MOGlabsQRF.mogdevice import MOGDevice
 from qtutils import UiLoader
 import os
 from qtutils.qt import QtGui
-from PyQt5.QtWidgets import QWidget, QGridLayout, QCheckBox, QLabel
+from PyQt5.QtWidgets import (
+    QWidget, QGridLayout, QCheckBox, QLabel,
+    QPushButton, QDoubleSpinBox, QHBoxLayout
+)
 from qtutils.qt.QtCore import Qt
 
 if True:
@@ -949,7 +952,51 @@ class MOGLabs_QRF_Tab(DeviceTab):
             for ch in range(4):
                 box_name=str('MOD'+str(ch))
                 self.mod_box[ch] = MOD_boxes(parent=self, name=box_name, channel=ch)
-   
+        # ============================================================
+        # BLUE IMAGING RUNTIME FREQUENCY TEST
+        # ============================================================
+
+        if self.device_name == "QRF_Blue":
+
+            self.runtime_freq = QDoubleSpinBox()
+            self.runtime_freq.setRange(5.0, 250.0)
+            self.runtime_freq.setDecimals(6)
+            self.runtime_freq.setSuffix(" MHz")
+            self.runtime_freq.setValue(75.0)
+
+            self.runtime_freq_button = QPushButton(
+                "Set Imaging Frequency"
+            )
+
+            self.runtime_freq_button.clicked.connect(
+            lambda checked=False: self.test_runtime_frequency()
+            )
+
+            controls = QWidget()
+            layout = QHBoxLayout(controls)
+
+            layout.addWidget(self.runtime_freq)
+            layout.addWidget(self.runtime_freq_button)
+
+            self.get_tab_layout().addWidget(controls)
+    @define_state(MODE_MANUAL | MODE_BUFFERED, True)
+    def test_runtime_frequency(self):
+
+        frequency = float(self.runtime_freq.value())
+
+        self.logger.warning(
+            f"RUNTIME FREQUENCY BUTTON PRESSED: {frequency} MHz"
+        )
+
+        result = yield self.queue_work(
+            self.primary_worker,
+            "set_imaging_frequency_runtime",
+            frequency
+        )
+
+        self.logger.warning(
+            f"RUNTIME FREQUENCY RESULT: {result} MHz"
+        )
     def get_save_data(self):
         # Andi: save user selection on shutdown
         data = {}
@@ -1172,7 +1219,36 @@ class MOGLabs_QRF_Worker(Worker):
             raise TypeError(type)
         # Now that a static update has been done, we'd better invalidate the saved STATIC_DATA:
         self.smart_cache['STATIC_DATA'] = None
+    def set_imaging_frequency_runtime(self, frequency_mhz):
+        
+        if self.device_name != "QRF_Blue":
+            raise RuntimeError("Not the blue imaging QRF")
 
+        if self.dev is None:
+            raise RuntimeError("QRF is not connected")
+
+        frequency_mhz = float(frequency_mhz)
+
+        if not MIN_RF_FREQ <= frequency_mhz <= MAX_RF_FREQ:
+            raise ValueError("Frequency outside QRF limits")
+
+        # Physical channel 3 = Python channel 2
+        self.dev.cmd(
+            f"FREQ,3,{frequency_mhz:.6f}"
+        )
+
+        # Verify frequency actually programmed
+        actual_freq = float(
+            self.dev.ask("FREQ,3").split()[0]
+        )
+
+        print(
+            f"Blue imaging QRF: "
+            f"requested={frequency_mhz:.6f} MHz, "
+            f"actual={actual_freq:.6f} MHz"
+        )
+
+        return actual_freq
     def transition_to_buffered(self, device_name, h5file, initial_values, fresh):
         self.shot_file = h5file
         self._set_qrf_phase('preparing')

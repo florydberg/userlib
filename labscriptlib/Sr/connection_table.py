@@ -2,7 +2,7 @@ from labscript import *
 ######################
 
 p=0 #Pulseblaster
-awg=1 #AWG
+awg=0#AWG
 f=1 #FPGA
 se=0 #secondary FPGA
 mb=1 #MogLabsBlue
